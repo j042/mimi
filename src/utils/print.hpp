@@ -6,9 +6,9 @@
 #include <utility>
 
 #ifndef NDEBUG
-#  define MIMI_FUNC() (std::cout << "*** calling (" << __func__ << ") ***\n";)
+#define MIMI_FUNC() (std::cout << "*** calling (" << __func__ << ") ***\n";)
 #else
-#  define MIMI_F()
+#define MIMI_FUNC()
 #endif
 
 namespace mimi::utils {
@@ -27,9 +27,9 @@ void PrintI(Args&&... args) {
 template<typename... Args>
 void PrintD(Args&&... args) {
 #ifndef NDEBUG
-    std::cout << "MIMI DEBUG - ";
-    ((std::cout << std::forward<Args>(args) << " "), ...);
-    std::cout << "\n";
+  std::cout << "MIMI DEBUG - ";
+  ((std::cout << std::forward<Args>(args) << " "), ...);
+  std::cout << "\n";
 #endif
 }
 
@@ -49,4 +49,4 @@ void PrintE(Args&&... args) {
   throw std::runtime_error(msg.str());
 }
 
-}
+} // namespace mimi::utils
