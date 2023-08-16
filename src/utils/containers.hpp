@@ -60,26 +60,24 @@ using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
 /// @tparam Type
 template<typename Type>
 struct Data {
-  T* data_;
-  const int size_;
-  int stride_;
+  Type* data_;
+  const int size_{0};
+  int stride_{1};
 
-  Data(int n) : data_(new Type[n]), size_(std::move(n)) {}
-  Data(T* data, int n) : data_(data), size_(n) {}
-  Data(int n, int stride) : Data(n), stride_(std::move(stride)) {}
-
+  Data(const int n) : data_(new Type[n]), size_(n) {}
+  Data(int n, const int stride) : Data(n), stride_(stride) {}
   ~Data() { delete[] data_; }
 
   template<typename IndexType>
-  constexpr T& operator[](const IndexType& i) {
+  constexpr Type& operator[](const IndexType& i) {
     return data_[i];
   }
   template<typename IndexType>
-  constexpr const T& operator[](const IndexType& i) const {
+  constexpr const Type& operator[](const IndexType& i) const {
     return data_[i];
   }
   template<typename IndexType>
-  constexpr T& operator[](const IndexType& i, const IndexType& j) {
+  constexpr Type& operator[](const IndexType& i, const IndexType& j) {
     return data_[i * stride_ + j];
   }
   template<typename IndexType>
@@ -88,19 +86,19 @@ struct Data {
   }
 
   template<typename IndexType>
-  constexpr T* Pointer(const IndexType& i) {
+  constexpr Type* Pointer(const IndexType& i) {
     return &data_[i];
   }
   template<typename IndexType>
-  constexpr const T* Pointer(const IndexType& i) const {
+  constexpr const Type* Pointer(const IndexType& i) const {
     return &data_[i];
   }
   template<typename IndexType>
-  constexpr T* Pointer(const IndexType& i, const IndexType& j) {
+  constexpr Type* Pointer(const IndexType& i, const IndexType& j) {
     return &data_[i * stride_ + j];
   }
   template<typename IndexType>
-  constexpr const T* Pointer(const IndexType& i, const IndexType& j) const {
+  constexpr const Type* Pointer(const IndexType& i, const IndexType& j) const {
     return &data_[i * stride_ + j];
   }
 };

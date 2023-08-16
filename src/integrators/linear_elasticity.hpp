@@ -1,53 +1,65 @@
 #pragma once
 
+#include <memory>
+#include <unordered_map>
 #include <utility>
 
 #include <mfem.hpp>
 // #include <mfem/fem/nonlininteg.hpp>
 
-#include "mimi/utils/default_init_vector.hpp"
+#include "mimi/utils/containers.hpp"
+#include "mimi/utils/n_thread_exe.hpp"
+#include "mimi/utils/print.hpp"
 
 namespace mimi::integrators {
-
-/// @brief Young's modulus and poisson's ratio to lambda and mu
-/// @param young
-/// @param poisson
-/// @param lambda
-/// @param mu
-std::pair<double, double> ToLambdaAndMu(const double young,
-                                        const double poisson) {
-  return {young / (3.0 * (1.0 - (2.0 * poisson))), // lambda
-          young / (2.0 * (1.0 + poisson))};        // mu
-}
 
 /// Rewrite of mfem::ElasticityIntegrator
 /// a(u, v) = (lambda div(u), div(v)) + (2 * mu * e(u), e(v)),
 /// where e(v) = (1/2) * (grad(v) * grad(v)^T)
-class LinearElasticity : public mfem::NonlinearFormIntegrator {
+class LinearElasticity : public mfem::BilinearFormIntegrator {
 protected:
-  mfem::Coefficient& lambda_;
-  mfem::Coefficient& mu_;
+  const mfem::Coefficient& lambda_;
+  const mfem::Coefficient& mu_;
+  std::shared_ptr<FiniteElementToId_> fe_to_id_;
 
-  // in case you don't need this to be thread safe, feel free to use the
-  // following values
-  mfem::Vector shape_, div_shape_;
-  mfem::DenseMatrix d_shape_, g_shape_, p_elmat_;
+public:
+  using ElementMatrices_ = mimi::utils::Data<mfem::DenseMatrix>;
+  using FiniteElementToId_ = std::unordered_map<mfem::FiniteElement*, int>;
 
-  mfem::IntegrationRule ir;
-  mimi::utils::Vector<mfem::DenseMatrix> saved_elmat_;
+  /// nthread element holder
+  std::unique_ptr<ElementMatrices_> element_matrices_;
 
-  /// Precompute Element Matrix
-  void PrecomputeElementMatrix(const mfem::FiniteElementSpace& fes,
-                               const int nthreads) {
+  /// map from finite element to its id
+  std::shared_ptr<FiniteElementToId_> fe_to_id_;
+
+  /// ctor
+  LinearElasticity(const mfem::Coefficient& lambda,
+                   const mfem::Coefficient& mu,
+                   const std::shared_ptr<FiniteElementToId_>& fe_to_id_)
+      : lambda_(lambda),
+        mu_(mu),
+        fe_to_id_(fe_to_id_) {}
+
+  /// @brief Precomputes matrix. After writing this, notices MFEM, of course
+  /// has a similar option using OpenMP.
+  /// @param fes
+  /// @param nthreads
+  void ComputeElementMatrices(const mfem::FiniteElementSpace& fes,
+                              const int nthreads) {
+    MIMI_FUNC();
+
     const int n_elem = fes.GetNE();
 
     // allocate
-    saved_elmat_.resize(n_elem);
+    element_matrices_ = std::make_unique<ElementMatrices_>(n_elem);
 
-    auto assemble_element_matrix = [&](int begin, int end) {
+    auto assemble_element_matrices = [&](const int begin,
+                                         const int end,
+                                         const int) {
       // aux mfem containers
       mfem::DenseMatrix d_shape, g_shape, p_elmat;
       mfem::Vector div_shape;
+
       for (int i{begin}; i < end; ++i) {
         // get related objects from fespace
         const mfem::FiniteElement& el = *fes->GetFE(i);
@@ -65,7 +77,7 @@ protected:
         div_shape.SetSize(dim * dof);
 
         // get elmat to save and set size
-        mfem::DenseMatrix& elmat = saved_elmat_[i];
+        mfem::DenseMatrix& elmat = element_matrices_[i];
         elmat.SetSize(n_dof * dim, n_dof * dim);
         elmat = 0.0;
 
@@ -92,22 +104,21 @@ protected:
                      eltrans_stress_free_to_reference.InverseJacobian(),
                      g_shape);
 
-          // get p_elmat - nabla u * nabla vT 
+          // get p_elmat - nabla u * nabla vT
           mfem::MultAAt(g_shape, p_elmat)
 
-        // get div - this is just flat view of g_shape, but useful for VVt
-        g_shape.GradToDiv(div_shape);
+              // get div - this is just flat view of g_shape, but useful for VVt
+              g_shape.GradToDiv(div_shape);
 
           // prepare params
           const double lambda =
               lambda_.Eval(eltrans_stress_free_to_reference, ip);
           const double mu = mu_.Eval(eltrans_stress_free_to_reference, ip);
 
-          // we assume lambda is none zero
+          // add lambda
           mfem::AddMult_a_VVt(lambda * w, div_shape, elmat);
-
-          // mu also
           const double mu_times_weight = mu * weight;
+
           for (int d{}; d < dim; ++d) {
             const int offset = n_dof * d;
             for (int dof_i{}; dof_i < n_dof; ++dof_i) {
@@ -119,29 +130,36 @@ protected:
           }
 
           for (int dim_i{}; dim_i < dim; ++dim_i) {
+            const int offset_i = n_dof * dim_i;
             for (int dim_j{}; dim_j < dim; ++dim_j) {
+              const int offset_j = n_dof * dim_j;
               for (int dof_i{}; dof_i < n_dof; ++dof_i) {
                 for (int dof_j{}; dof_j < n_dof; ++dof_j) {
-                  elmat(n_dof * dim_i + dof_i, n_dof * dim_j + dof_j) +=
+                  elmat(offset_i + dof_i, offset_j + dof_j) +=
                       mu_times_weight * g_shape(dof_i, dim_j)
-                      * gshape(dof_j, dim_i);
+                      * g_shape(dof_j, dim_i);
                 }
               }
             }
           }
-
         } // quad loop
       }
     };
+
+    // exe
+    mimi::utils::NThreadExe(assemble_element_matrices, n_elem, nthreads);
   }
 
-  /// @brief Assembles and saves.
+  /// @brief returns copy of assembled matrices
   /// @param el
   /// @param eltrans
   /// @param elmat
-  void AssembleElementMatrix(const mfem::FiniteElement& el,
-                             ElementTransformation& eltrans,
-                             DenseMatrix& elmat) {}
+  virtual void AssembleElementMatrix(const mfem::FiniteElement& el,
+                                     ElementTransformation& eltrans,
+                                     DenseMatrix& elmat) {
+    // copy return saved values
+    elmat = element_matrices_->operator[](fe_to_id_->operator[](&el));
+  }
 }
 
 } // namespace mimi::integrators

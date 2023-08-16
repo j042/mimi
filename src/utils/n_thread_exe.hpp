@@ -6,13 +6,13 @@
 namespace mimi {
 
 /// @brief multi thread execution helper based on chunked batches
-/// @tparam Func 
-/// @tparam IndexT 
-/// @param f expected to have the following signature 
+/// @tparam Func
+/// @tparam IndexT
+/// @param f expected to have the following signature
 ///          -> f(const int begin, const int end, const int i_thread)
-///          It is your choice to use which variable 
-/// @param total 
-/// @param nthread 
+///          It is your choice to use which variable
+/// @param total
+/// @param nthread
 template<typename Func, typename IndexT>
 void NThreadExe(const Func& f, const IndexT total, const IndexT nthread) {
   // if nthread == 1, don't even bother creating thread
@@ -52,4 +52,4 @@ void NThreadExe(const Func& f, const IndexT total, const IndexT nthread) {
   }
 }
 
-}
+} // namespace mimi

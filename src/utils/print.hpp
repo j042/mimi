@@ -6,7 +6,8 @@
 #include <utility>
 
 #ifndef NDEBUG
-#define MIMI_FUNC() (std::cout << "*** calling (" << __func__ << ") ***\n";)
+#define MIMI_FUNC()                                                            \
+  (std::cout << "*** calling (" << __PRETTY_FUNCTION__ << ") ***\n";)
 #else
 #define MIMI_FUNC()
 #endif
