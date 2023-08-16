@@ -92,11 +92,11 @@ protected:
                      eltrans_stress_free_to_reference.InverseJacobian(),
                      g_shape);
 
-          // get p_elmat - what's this?
+          // get p_elmat - nabla u * nabla vT 
           mfem::MultAAt(g_shape, p_elmat)
 
-              // get div - this is just flat view of g_shape, but useful for VVt
-              g_shape.GradToDiv(div_shape);
+        // get div - this is just flat view of g_shape, but useful for VVt
+        g_shape.GradToDiv(div_shape);
 
           // prepare params
           const double lambda =
@@ -109,9 +109,9 @@ protected:
           // mu also
           const double mu_times_weight = mu * weight;
           for (int d{}; d < dim; ++d) {
+            const int offset = n_dof * d;
             for (int dof_i{}; dof_i < n_dof; ++dof_i) {
               for (int dof_j{}; dof_j < n_dof; ++dof_j) {
-                const int offset = n_dof * d;
                 elmat(offset + dof_i, offset + dof_j) +=
                     mu_times_weight * p_elmat(dof_i, dof_j);
               }
