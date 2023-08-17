@@ -41,7 +41,7 @@ public:
   /// @param fes
   /// @param nthreads
   void ComputeElementMatrices(const mfem::FiniteElementSpace& fes,
-                              const int nthreads) {
+                              const int nthreads const bool invert = false) {
     MIMI_FUNC();
 
     const int n_elem = fes.GetNE();
@@ -80,8 +80,8 @@ public:
                 2 * el.GetOrder() + eltrans_stress_free_to_reference.OrderW());
 
             // quad loop
-            for (int i{}; i < ir.GetNPoints(); ++i) {
-              const mfem::IntegrationPoint& ip = ir.IntPoint(i);
+            for (int q{}; q < ir.GetNPoints(); ++q) {
+              const mfem::IntegrationPoint& ip = ir.IntPoint(q);
 
               // get shape
               el.CalcShape(ip, shape);
@@ -102,10 +102,14 @@ public:
                   weight * coeff_->Eval(eltrans_stress_free_to_reference, ip);
 
               // four for loops
-              for (int j{}; j < dim; ++j) {
-                elmat.AddMatrix(shape_mat, n_dof * j, n_dof * j);
+              for (int d{}; d < dim; ++d) {
+                elmat.AddMatrix(shape_mat, n_dof * d, n_dof * d);
               }
             } // quad loop
+
+            if (invert) {
+              elmat.Invert();
+            }
           }
         };
 
@@ -120,8 +124,9 @@ public:
   virtual void AssembleElementMatrix(const mfem::FiniteElement& el,
                                      ElementTransformation& eltrans,
                                      DenseMatrix& elmat) {
-    // copy return saved values
-    elmat = element_matrices_->operator[](fe_to_id_->operator[](&el));
+    // return saved values
+    auto& saved = element_matrices_->operator[](fe_to_id_->operator[](&el));
+    elmat.UseExternalData(saved.GetData(), saved.Height(), saved.Width());
   }
 }
 

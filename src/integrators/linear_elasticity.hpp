@@ -86,8 +86,8 @@ public:
             mfem::IntRules.Get(el.GetGeomType(), 2 * el.GetOrder() + 3);
 
         // quad loop
-        for (int i{}; i < ir.GetNPoints(); ++i) {
-          const mfem::IntegrationPoint& ip = ir.IntPoint(i);
+        for (int q{}; q < ir.GetNPoints(); ++q) {
+          const mfem::IntegrationPoint& ip = ir.IntPoint(q);
 
           // get first der of basis functions from each support
           el.CalcDShape(ip, d_shape);
@@ -157,8 +157,9 @@ public:
   virtual void AssembleElementMatrix(const mfem::FiniteElement& el,
                                      ElementTransformation& eltrans,
                                      DenseMatrix& elmat) {
-    // copy return saved values
-    elmat = element_matrices_->operator[](fe_to_id_->operator[](&el));
+    // return saved values
+    auto& saved = element_matrices_->operator[](fe_to_id_->operator[](&el));
+    elmat.UseExternalData(saved.GetData(), saved.Height(), saved.Width());
   }
 }
 
