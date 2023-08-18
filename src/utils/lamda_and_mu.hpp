@@ -2,6 +2,7 @@
 
 #include <utility>
 
+namespace mimi::utils {
 /// @brief Young's modulus and poisson's ratio to lambda and mu
 /// @param young
 /// @param poisson
@@ -12,3 +13,5 @@ std::pair<double, double> ToLambdaAndMu(const double young,
   return {young / (3.0 * (1.0 - (2.0 * poisson))), // lambda
           young / (2.0 * (1.0 + poisson))};        // mu
 }
+
+} // namespace mimi::utils
