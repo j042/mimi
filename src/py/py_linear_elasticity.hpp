@@ -16,26 +16,30 @@ namespace mimi::py {
 
 class PyLinearElasticity : PySolid {
 public:
-  double mu_, lambda_, rho_;
+  double mu_, lambda_, rho_, viscosity_{-1.0};
   using Base_ = PySolid;
 
   PyLinearElasticity() = default;
 
-  virtual void
-  SetParameters(const double mu, const double lambda, const double rho) {
+  virtual void SetParameters(const double mu,
+                             const double lambda,
+                             const double rho,
+                             const double viscosity = -1.0) {
     mu_ = mu;
     lambda_ = lambda;
     rho_ = rho;
+    viscosity_ = viscosity;
   }
 
-  virtual void
-  SetParameters_(const double young, const double poisson, const double rho) {
+  virtual void SetParameters_(const double young,
+                              const double poisson,
+                              const double rho,
+                              const double viscosity = -1.0) {
     auto const& [mu, lambda] = mimi::utils::ToLambdaAndMu(young, poisson);
-    mu_ = mu, lambda_ = lambda;
-    rho_ = rho;
+    SetParameters(mu, lambda, rho, viscosity);
   }
 
-  virtual void Setup() {
+  virtual void Setup(const int nthreads = -1) {
     MIMI_FUNC()
     // selected comments from ex10.
     //  Define the vector finite element spaces representing the mesh
@@ -87,11 +91,82 @@ public:
         *disp_fes.fe_space_);
 
     // now, setup the system.
+    // create a dummy
+    mfem::SparseMatrix tmp;
     // 1. mass
+    // create bilinform
     auto mass = std::make_shared<mfem::BilinearForm>(disp_fes.fe_space_.get());
-    auto mass_integ = std::make_unique<mimi::integrators::VectorMass> mass
-                          ->AddDomainIntegrator()
-  }
-};
+    le_oper->AddBilinearForm("mass", mass);
+
+    // create density coeff
+    auto& rho = Base_::coefficients_["rho"];
+    rho = std::make_shared<mfem::ConstantCoefficient>(rho_);
+
+    // create integrator using density
+    // this is owned by bilinear form, so do that first before we forget
+    auto* mass_integ = new mimi::integrators::VectorMass(*rho);
+    mass->AddDomainIntegrator(mass_integ);
+
+    // precompute using nthread
+    mass_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
+
+    // assemble and remove zero bc entries
+    mass->Assemble();
+    mass->FromSystemMatrix(disp_fes.zero_dofs_, tmp);
+
+    // release some memory
+    mass_integ.element_matrices_.reset(); // release saved matrices
+
+    // 2. viscosity
+    if (viscosity > 0.0) {
+      auto visc =
+          std::make_shared<mfem::BilinearForm>(disp_fes.fe_space_.get());
+      le_oper->AddBilinearForm("viscosity", visc);
+
+      // create viscosity coeff
+      auto& visc_coeff = Base_::coefficients_["viscosity"];
+      visc_coeff = std::make_shared<mfem::ConstantCoefficient>(viscosity_);
+
+      // create integrator using viscosity
+      // and add it to bilinear form
+      auto visc_integ = new mimi::integrators::VectorDiffusion(*visc_coeff);
+      visc->AddDomainIntegrator(visc_integ);
+
+      // nthread assemble
+      visc_integ->ComputeElemeentMatrices(*disp_fes.fe_space_, nthreads);
+
+      visc->Assemble();
+      visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
+
+      visc_integ.element_matrices_.reset();
+    }
+
+    // 3. Lin elasitiy stiffness
+    // start with bilin form
+    auto stiffness =
+        std::make_shared<mfem::BilinearForm>(disp_fec.fe_space_.get());
+    le_oper->AddBilinearForm("stiffness", stiffness);
+
+    // create coeffs
+    auto& mu = Base_::coefficients_["mu"];
+    mu = std::make_shared<mfem::ConstantCoefficient>(mu_);
+    auto& lambda = Base_::coefficients_["lambda"];
+    lambda = std::make_shared<mfem::ConstantCoefficient>(lambda_);
+
+    // create integ
+    auto stiffness_integ =
+        new mimi::integrators::LinearElasticity(*lambda, *mu);
+    stifness->AddDomainIntegrator(stiffness_integ);
+
+    // nthread assemble
+    stiffness_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
+
+    stiffness->Assemble();
+    stiffness->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
+
+    stiffness_integ.element_matrices_.reset();
+
+    // 4. linear form
+  };
 
 } // namespace mimi::py
