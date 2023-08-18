@@ -18,7 +18,6 @@ namespace mimi::integrators {
 class VectorDiffusion : public mfem::BilinearFormIntegrator {
 protected:
   const mfem::Coefficient& coeff_;
-  std::shared_ptr<FiniteElementToId_> fe_to_id_;
 
 public:
   using ElementMatrices_ = mimi::utils::Data<mfem::DenseMatrix>;
@@ -27,14 +26,8 @@ public:
   /// nthread element holder
   std::unique_ptr<ElementMatrices_> element_matrices_;
 
-  /// map from finite element to its id
-  std::shared_ptr<FiniteElementToId_> fe_to_id_;
-
   /// ctor
-  VectorMass(const mfem::Coefficient& coeff,
-             const std::shared_ptr<FiniteElementToId_>& fe_to_id_)
-      : coeff_(coeff),
-        fe_to_id_(fe_to_id_) {}
+  VectorMass(const mfem::Coefficient& coeff) : coeff_(coeff) {}
 
   /// @brief Precomputes matrix.
   /// @param fes
@@ -130,7 +123,7 @@ public:
                                      ElementTransformation& eltrans,
                                      DenseMatrix& elmat) {
     // return saved values
-    auto& saved = element_matrices_->operator[](fe_to_id_->operator[](&el));
+    auto& saved = element_matrices_->operator[](eltrans.ElementNo);
     elmat.UseExternalData(saved.GetData(), saved.Height(), saved.Width());
   }
 }

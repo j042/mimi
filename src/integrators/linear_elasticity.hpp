@@ -29,16 +29,10 @@ public:
   /// nthread element holder
   std::unique_ptr<ElementMatrices_> element_matrices_;
 
-  /// map from finite element to its id
-  std::shared_ptr<FiniteElementToId_> fe_to_id_;
-
   /// ctor
-  LinearElasticity(const mfem::Coefficient& lambda,
-                   const mfem::Coefficient& mu,
-                   const std::shared_ptr<FiniteElementToId_>& fe_to_id_)
+  LinearElasticity(const mfem::Coefficient& lambda, const mfem::Coefficient& mu)
       : lambda_(lambda),
-        mu_(mu),
-        fe_to_id_(fe_to_id_) {}
+        mu_(mu) {}
 
   /// @brief Precomputes matrix. After writing this, notices MFEM, of course
   /// has a similar option using OpenMP.
@@ -158,7 +152,7 @@ public:
                                      ElementTransformation& eltrans,
                                      DenseMatrix& elmat) {
     // return saved values
-    auto& saved = element_matrices_->operator[](fe_to_id_->operator[](&el));
+    auto& saved = element_matrices_->operator[](eltrans.ElementNo);
     elmat.UseExternalData(saved.GetData(), saved.Height(), saved.Width());
   }
 }
