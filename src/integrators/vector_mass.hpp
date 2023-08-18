@@ -41,7 +41,7 @@ public:
   /// @param fes
   /// @param nthreads
   void ComputeElementMatrices(const mfem::FiniteElementSpace& fes,
-                              const int nthreads const bool invert = false) {
+                              const int nthreads) {
     MIMI_FUNC();
 
     const int n_elem = fes.GetNE();
@@ -106,10 +106,6 @@ public:
                 elmat.AddMatrix(shape_mat, n_dof * d, n_dof * d);
               }
             } // quad loop
-
-            if (invert) {
-              elmat.Invert();
-            }
           }
         };
 
