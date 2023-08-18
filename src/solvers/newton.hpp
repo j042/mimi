@@ -4,9 +4,12 @@
 
 namespace mimi::solvers {
 
-class NewtonLineSearch : public mfem::NewtonSolver {
+/// @brief alias to mfem's newton solver
+using Newton = mfem::NewtonSolver;
+
+class LineSearchNewton : public Newton {
 public:
-  using Base_ = mfem::NewtonSolver;
+  using Base_ = Newton;
 
   /// @brief implements scaling factor usine line search adapted from
   /// https://github.com/LLNL/ExaConstit/blob/exaconstit-dev/src/mechanics_solver.cpp
