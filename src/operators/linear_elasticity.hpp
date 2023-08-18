@@ -63,7 +63,7 @@ public:
     MIMI_FUNC();
   }
 
-  virtual std::string Name() {return "LinearElasticity";}
+  virtual std::string Name() { return "LinearElasticity"; }
 
   virtual void
   SolverConfig(const double rel_tol, const double abs_tol, const int max_iter) {
@@ -95,8 +95,6 @@ public:
     mass_inv_.SetPreconditioner(mass_inv_prec_);
     mass_inv_.SetOperator(mass_.SpMat());
 
-
-
     // stiffness
     stiffness_ = MimiBase::bilinear_forms_.at("stiffness");
 
@@ -104,7 +102,7 @@ public:
     contact_ = MimiBase::nonlinear_forms_.at("contact");
 
     // following forms are optional
-    // damping 
+    // damping
     damping_ = MimiBase_::biliniear_forms_["damping"];
     if (damping_) {
       mimi::utils::PrintInfo(Name(), "has damping term.");
@@ -211,7 +209,7 @@ public:
     // release;
     if (jacobian_)
       delete jacobian_;
-    
+
     jacobian_ = mfem::Add(1.0 mass_.SpMat(), fac0, stiffness_.SpMat());
 
     if (damping_) {
@@ -219,7 +217,8 @@ public:
     }
 
     if (contact_) {
-      jacobian_->Add(fac0, *dynamic_cast<SparseMatrix*>(&H.GetGradient(temp_x)));
+      jacobian_->Add(fac0,
+                     *dynamic_cast<SparseMatrix*>(&H.GetGradient(temp_x)));
     }
 
     return *jacobian_;
