@@ -25,7 +25,8 @@ template<typename ReturnType, typename MfemContainerType, typename... SizeType>
 py::array_t<ReturnType> NumpyView(MfemContainerType& mfem_container,
                                   SizeType... sizes) {
   return py::array_t<ReturnType>(std::vector{static_cast<size_t>(sizes)...},
-                                 mfem_container.GetData());
+                                 mfem_container.GetData(),
+                                 py::none());
 }
 
 } // namespace mimi::py
