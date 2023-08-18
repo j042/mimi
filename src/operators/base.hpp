@@ -7,8 +7,8 @@
 
 #include <mfem.hpp>
 
-#include "mimi/utils/print.hpp"
 #include "mimi/solvers/newton.hpp"
+#include "mimi/utils/print.hpp"
 
 namespace mimi::operators {
 
@@ -37,37 +37,39 @@ public:
   OperatorBase(mfem::FiniteElementSpace& fe_space) : fe_space_(fe_space) {}
 
   /// @brief adds linear form
-  /// @param key 
-  /// @param lf 
+  /// @param key
+  /// @param lf
 
   virtual void AddLinearForm(std::string const& key,
-                     const LinearFormPointer_& lf) {
+                             const LinearFormPointer_& lf) {
     MIMI_FUNC();
 
     linear_forms_[key] = lf;
   }
 
   /// @brief adds bilinearform
-  /// @param key 
-  /// @param bf 
+  /// @param key
+  /// @param bf
 
-  virtual void AddBilinearForm(std::string const& key, const BilinearFormPointer_& bf) {
+  virtual void AddBilinearForm(std::string const& key,
+                               const BilinearFormPointer_& bf) {
     MIMI_FUNC();
 
     bilinear_forms_[key] = bf;
   }
 
   /// @brief adds nonlinear form
-  /// @param key 
-  /// @param nf 
+  /// @param key
+  /// @param nf
   virtual void AddNonlinearForm(std::string const& key,
-                        const NonlinearFormPointer_& nf) {
+                                const NonlinearFormPointer_& nf) {
     MIMI_FUNC();
 
     nonlinear_forms_[key] = nf;
   }
 
-  virtual void SetNewtonSolver(std::shared_ptr<mimi::solvers::LineSearchNewton> const& newton_solver) {
+  virtual void SetNewtonSolver(
+      std::shared_ptr<mimi::solvers::LineSearchNewton> const& newton_solver) {
     MIMI_FUNC();
 
     newton_solver_ = newton_solver;

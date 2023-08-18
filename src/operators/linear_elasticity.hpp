@@ -23,7 +23,7 @@ protected:
 
   // bilinear forms
   typename MimiBase_::BilinearFormPointer_ mass_;
-  typename MimiBase_::BilinearFormPointer_ damping_;
+  typename MimiBase_::BilinearFormPointer_ viscosity_;
   typename MimiBase_::BilinearFormPointer_ stiffness_;
 
   // non linear forms
@@ -102,10 +102,10 @@ public:
     contact_ = MimiBase::nonlinear_forms_.at("contact");
 
     // following forms are optional
-    // damping
-    damping_ = MimiBase_::biliniear_forms_["damping"];
-    if (damping_) {
-      mimi::utils::PrintInfo(Name(), "has damping term.");
+    // viscosity
+    viscosity_ = MimiBase_::biliniear_forms_["viscosity"];
+    if (viscosity_) {
+      mimi::utils::PrintInfo(Name(), "has viscosity term.");
     }
 
     // rhs linear form
@@ -137,8 +137,8 @@ public:
 
     stiffness_->Mult(x, z);
 
-    if (damping_) {
-      damping_->AddMult(dx_dt, z);
+    if (viscosity_) {
+      viscosity_->AddMult(dx_dt, z);
     }
 
     if (contact_) {
@@ -178,10 +178,10 @@ public:
 
     stiffness_->AddMult(temp_x, y);
 
-    if (damping_) {
+    if (viscosity_) {
       mfem::Vector temp_v(v_->Size());
       mfem::add(*v_, fac1, d2x_dt2, temp_v);
-      damping_->AddMult(temp_v, y);
+      viscosity_->AddMult(temp_v, y);
     }
 
     if (contact_) {
@@ -210,10 +210,10 @@ public:
     if (jacobian_)
       delete jacobian_;
 
-    jacobian_ = mfem::Add(1.0 mass_.SpMat(), fac0, stiffness_.SpMat());
+    jacobian_ = mfem::Add(1.0 mass_->SpMat(), fac0, stiffness_->SpMat());
 
-    if (damping_) {
-      jacobian_->Add(fac1, S.SpMat());
+    if (viscosity_) {
+      jacobian_->Add(fac1, viscosity_->SpMat());
     }
 
     if (contact_) {
