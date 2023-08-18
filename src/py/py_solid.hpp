@@ -1,4 +1,7 @@
+#include <map>
 #include <memory>
+#include <string>
+#include <unordered_map>
 
 /* pybind11 */
 #include <pybind11/numpy.h>
@@ -8,48 +11,57 @@
 #include <splinepy/py/py_spline.hpp>
 
 // mimi
+#include "mimi/utils/boundary_conditions.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::py {
+
 class PySolid {
 protected:
+  // second order time dependent systems
   std::unique_ptr<mimi::SecondOrderODESolver> ode2_solver_ = nullptr;
-  std::unique_ptr<mimi::NonLinearTimeDependentOperator> operator_ = nullptr;
+  std::unique_ptr<mfem::SecondOrderTimeDependentOperator> oper2_ = nullptr;
+
+  // first order time dependent systems
   std::unique_ptr<mimi::FirstOrderODESolver> ode1_solver_ = nullptr;
+  std::unique_ptr<mfem::TimeDependentOperator> oper1_ = nullptr;
+
+  // mesh
   std::unique_ptr<mfem::Mesh> mesh_ = nullptr;
-  std::unique_ptr<mfem::FiniteElementSpace> fe_space_ = nullptr;
-  std::unique_ptr<mfem::LinearForm> rhs_linear_form_ = nullptr;
 
-  // bc manager - currently constant values.
-  std::map<int, std::map<int, bool>> dirichlet_bcs_;
-  // defined on reference -> this will be assembled once
-  std::map<int, double> pressure_bcs_on_reference_;
-  std::map<int, std::map<int, double>> traction_bcs_on_reference_;
-  std::map<int, double> body_force_on_reference_;
-  // will be assembled every time
-  std::map<int, double> pressure_bcs_;
-  std::map<int, std::map<int, double>> traction_bcs_;
-  std::map<int, double> body_force_;
+  struct FESpace {
+    std::string name_{"None"};
+    std::unique_ptr<mfem::FiniteElementSpace> fe_space_{nullptr};
+    std::map<int, std::map<int, mfem::Array<int>>> boundary_dof_ids_;
+    std::unordered_map<std::string, mfem::GridFunction> grid_functions_;
+    mfem::Array<int> zero_dofs_;
+  };
 
-  // info saved locally
-  std::map<int std::map<int, mfem::Array<int>>> boundary_dof_ids_;
-  mfem::Array<int> ess_tdof_list_;
+  // there can be multiple fe spaces
+  std::unordered_map<std::string, FESpace> fe_spaces_{};
+
+  // bc manager
+  std::shared_ptr<mimi::utils::BoundaryCondition> boundary_conditions_ =
+      nullptr;
 
   // fsi coupling
-  mfem::Vector rhs_forces_;
+  // a raw rhs vector for fsi loads
+  std::shared_ptr<mfem::Vector> rhs_vector_ = nullptr;
   mfem::Vector intermediate_x_;
-  mfem::Vector intermediate_displacement_;
-  mfem::Vector w_; // internal vector for computing
 
-  // current state
+  // holder for coefficients
+  std::map<std::string, std::shared_ptr<mfem::Coefficients>> coefficients_;
+
+  // current time, CET
   double t_{0.0};
 
 public:
   PySolid() = default;
+  virtual ~PySolid() = default;
 
   /// @brief sets mesh
   /// @param fname
-  void SetMesh(const std::string fname) {
+  virtual void SetMesh(const std::string fname) {
     MIMI_FUNC()
 
     const char* fname_char = fname.c_str();
@@ -67,7 +79,7 @@ public:
 
   /// @brief returns mesh. If it's missing, it will raise.
   /// @return
-  constexpr auto& Mesh() {
+  virtual auto& Mesh() {
     MIMI_FUNC()
 
     if (!mesh_) {
@@ -79,7 +91,7 @@ public:
 
   /// @brief returns mesh. If it's missing, it will raise.
   /// @return
-  constexpr const auto& Mesh() const {
+  virtual const auto& Mesh() const {
     MIMI_FUNC()
 
     if (!mesh_) {
@@ -91,7 +103,7 @@ public:
 
   /// @brief returns mesh dim (geometry dim)
   /// @return
-  int MeshDim() const {
+  virtual int MeshDim() const {
     MIMI_FUNC()
 
     return Mesh()->Dimension();
@@ -99,7 +111,7 @@ public:
 
   /// @brief degrees of mesh.
   /// @return std::vector<int>, but will be casted fo py::list
-  std::vector<int> MeshDegrees() const {
+  virtual std::vector<int> MeshDegrees() const {
     MIMI_FUNC()
 
     std::vector<int> degrees;
@@ -114,28 +126,28 @@ public:
 
   /// @brief n_vertices
   /// @return
-  int NumberOfVertices() const {
+  virtual int NumberOfVertices() const {
     MIMI_FUNC()
     return Mesh()->GetNV();
   }
 
   /// @brief n_elem
   /// @return
-  int NumberOfElements() const {
+  virtual int NumberOfElements() const {
     MIMI_FUNC()
     return Mesh()->GetNE();
   }
 
   /// @brief n_b_elem
   /// @return
-  int NumberOfBoundaryElements() const {
+  virtual int NumberOfBoundaryElements() const {
     MIMI_FUNC()
     return Mesh()->GetNBE();
   }
 
   /// @brief n_sub_elem
   /// @return
-  int NumberOfSubelements() const {
+  virtual int NumberOfSubelements() const {
     MIMI_FUNC()
     return Mesh()->GetNumFaces();
   }
@@ -143,7 +155,7 @@ public:
   /// @brief elevates degrees. can set max_degrees for upper bound.
   /// @param degrees relative degrees to elevate
   /// @param max_degrees upper bound
-  void ElevateDegrees(const int degrees, const int max_degrees = 50) {
+  virtual void ElevateDegrees(const int degrees, const int max_degrees = 50) {
     MIMI_FUNC()
 
     mimi::utils::PrintD("degrees input:", degrees);
@@ -163,7 +175,7 @@ public:
     }
   }
 
-  void Subdivide(const int n_subdivision) {
+  virtual void Subdivide(const int n_subdivision) {
     MIMI_FUNC()
 
     mimi::utils::PrintD("n_subdivision:", n_subdivision);
@@ -180,44 +192,65 @@ public:
                         NumberOfElements());
   }
 
-  void AddDirichletBC(int boundary_id, int dof_id) {
+  /// @brief Sets boundary condition
+  /// @param boundary_conditions
+  virtual void
+  SetBoundaryCondition(const std::shared_ptr<mimi::utils::BoundaryCondition>&
+                           boundary_conditions) {
     MIMI_FUNC()
 
-    dirichlet_bcs_[boundary_id][dof_id] = true;
+    boundary_condition_ = boundary_condition;
   }
 
-  void AddPressureBC(const int boundary_id,
-                     const double value,
-                     const bool on_reference) {
+  /// @brief finds true dof ids for each boundary this also finds zero_dofs_
+  virtual void FindBoundaryDofIds() {
     MIMI_FUNC()
 
-    if (on_reference) {
-      pressure_bcs_on_reference_[boundary_id] = value;
-    } else {
-      pressure_bcs_[boundary_id] = value;
+    // find all true dof ids
+    for (auto const& [key, fes] : *fe_spaces_) {
+      mimi::utils::PrintDebug("Finding boundary dofs for", key, "FE Space.");
+
+      const int max_bdr_id = fes.fe_space_->GetMesh()->bdr_attributes.Max();
+
+      // loop each bdr.
+      for (int i{}; i < max_bdr_id; ++i) {
+        // fespace's dim
+        for (int j{}; j < fes.fe_space_->GetVDim(); ++j) {
+          // mark only bdr id for this loop
+          mfem::Array<int> bdr_id_query(max_bdr_id);
+          bdr_id_query = 0;    // clear
+          bdr_id_query[i] = 1; // mark
+
+          // query
+          fes.fe_space_->GetEssentialTrueDofs(bdr_id_query,
+                                              fes.boundary_dof_ids_[i][j],
+                                              j);
+        }
+      }
+    }
+
+    // find dirichlet bcs
+    for (auto const& [name, fes] : *fe_spaces_) {
+      for (auto const& [bid, dim] :
+           boundary_conditions_->InitialConfiguration().Dirichlet()) {
+
+        mimi::utils::PrintDebug(
+            "For FE Space",
+            name,
+            "- finding boundary dofs for initial configuration dirichlet bcs.",
+            "bid:",
+            bid,
+            "dim:",
+            dim);
+
+        // append saved dofs
+        // may have duplicating dofs, harmless.
+        fes.zero_dofs_.Append(fes.boundary_dof_ids_[bid][dim]);
+      }
     }
   }
 
-  void AddTractionBC(const int boundary_id,
-                     const int dof_id,
-                     const double value,
-                     const bool on_reference) {
-    MIMI_FUNC()
-
-    if (on_reference) {
-      traction_bcs_on_reference_[boundary_id][dof_id] = value;
-    } else {
-      traction_bcs_[boundary_id][dof_id] = value;
-    }
-  }
-
-  void AddConstantBodyForce(const int dof_id, const double value) {
-    MIMI_FUNC()
-
-    body_forces_[dof_id] = value;
-  }
-
-  void SetUp() {}
+  virtual void Setup() = 0;
 };
 
 } // namespace mimi::py
