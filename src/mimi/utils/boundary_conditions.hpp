@@ -10,13 +10,13 @@ namespace mimi::utils {
 
 /// @brief class to hold boundary conditions
 class BoundaryConditions {
-
+public:
   /// @brief boundary condition marker
   struct BCMarker {
     std::map<int, int> dirichlet_;
     std::map<int, double> pressure_;
     std::map<int, std::map<int, double>> traction_;
-    std::map<int, std::map<int, double>> body_force_;
+    std::map<int, double> body_force_;
 
     /// @brief dirichlet bc, currently only applies 0.
     /// @param bid
@@ -91,21 +91,19 @@ class BoundaryConditions {
     /// @param dim
     /// @param value
     /// @return
-    BCMarker& BodyForce(const int bid, const int dim, const double value) {
+    BCMarker& BodyForce(const int dim, const double value) {
       MIMI_FUNC()
 
-      body_force_[bid][dim] = value;
+      body_force_[dim] = value;
       return *this;
     }
 
     BCMarker& PrintBodyForce() {
       MIMI_FUNC()
 
-      mimi::utils::PrintInfo("body force (bid | dim | value):");
-      for (auto const& [bid, dim_value] : body_force_)
-        for (auto const& [dim, value] : dim_value) {
-          mimi::utils::PrintInfo("  ", bid, "|", dim, "|", value);
-        }
+      mimi::utils::PrintInfo("body force ( dim | value):");
+      for (auto const& [dim, value] : body_force_)
+          mimi::utils::PrintInfo("  ", dim, "|", value);
 
       return *this;
     }

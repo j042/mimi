@@ -1,3 +1,5 @@
+#pragma once
+
 #include <map>
 #include <memory>
 #include <string>
@@ -7,11 +9,9 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
-// splinepy
-#include <splinepy/py/py_spline.hpp>
-
 // mimi
 #include "mimi/utils/boundary_conditions.hpp"
+#include "mimi/solvers/ode.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::py {
@@ -19,11 +19,11 @@ namespace mimi::py {
 class PySolid {
 protected:
   // second order time dependent systems
-  std::unique_ptr<mimi::SecondOrderODESolver> ode2_solver_ = nullptr;
+  std::unique_ptr<mimi::solvers::OdeBase> ode2_solver_ = nullptr;
   std::unique_ptr<mfem::SecondOrderTimeDependentOperator> oper2_ = nullptr;
 
   // first order time dependent systems
-  std::unique_ptr<mimi::FirstOrderODESolver> ode1_solver_ = nullptr;
+  std::unique_ptr<mimi::solvers::OdeBase> ode1_solver_ = nullptr;
   std::unique_ptr<mfem::TimeDependentOperator> oper1_ = nullptr;
 
   // mesh
@@ -52,6 +52,10 @@ protected:
   // holder for coefficients
   std::map<std::string, std::shared_ptr<mfem::Coefficients>> coefficients_;
 
+  // holder for vector coefficients
+  std::map<std::string, std::shared_ptr<mfem::VectorCoefficients>>
+      vector_coefficients_;
+
   // current time, CET
   double t_{0.0};
 
@@ -61,7 +65,7 @@ public:
 
   /// @brief sets mesh
   /// @param fname
-  virtual void SetMesh(const std::string fname) {
+  virtual void ReadMesh(const std::string fname) {
     MIMI_FUNC()
 
     const char* fname_char = fname.c_str();
@@ -202,6 +206,12 @@ public:
     boundary_condition_ = boundary_condition;
   }
 
+  virtual std::shared_ptr<mimi::utils::BoundaryCondition>
+  GetBoundaryCondition() {
+    MIMI_FUNC()
+    return boundary_condition_;
+  }
+
   /// @brief finds true dof ids for each boundary this also finds zero_dofs_
   virtual void FindBoundaryDofIds() {
     MIMI_FUNC()
@@ -250,7 +260,23 @@ public:
     }
   }
 
-  virtual void Setup() = 0;
+  virtual void Setup() {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("Derived class need to implement Setup().");
+  };
+
+  /// @brief sets second order system with given ptr and takes ownership.
+  /// @param oper2
+  /// @param ode2
+  virtual void SetDynamicSystem2(mfem::SecondOrderTimeDependentOperator* oper2,
+                                 mimi::solvers::OdeBase* ode2) {
+
+    MIMI_FUNC()
+
+    oper2_ = std::unique_ptr<mfem::SecondOrderTimeDependentOperator>(oper2);
+    ode2_ = std::unique_ptr<mimi::solvers::OdeBase>(ode2);
+  }
 };
 
 } // namespace mimi::py

@@ -15,7 +15,7 @@
 namespace mimi::utils {
 
 template<typename... Args>
-void PrintI(Args&&... args) {
+void PrintInfo(Args&&... args) {
   std::cout << "MIMI INFO - ";
   ((std::cout << std::forward<Args>(args) << " "), ...);
   std::cout << "\n";
@@ -26,7 +26,7 @@ void PrintI(Args&&... args) {
  * so <on, off> is switchable
  */
 template<typename... Args>
-void PrintD(Args&&... args) {
+void PrintDebug(Args&&... args) {
 #ifndef NDEBUG
   std::cout << "MIMI DEBUG - ";
   ((std::cout << std::forward<Args>(args) << " "), ...);
@@ -35,14 +35,14 @@ void PrintD(Args&&... args) {
 }
 
 template<typename... Args>
-void PrintW(Args&&... args) {
+void PrintWarning(Args&&... args) {
   std::cout << "MIMI WARNING - ";
   ((std::cout << std::forward<Args>(args) << " "), ...);
   std::cout << "\n";
 }
 
 template<typename... Args>
-void PrintE(Args&&... args) {
+void PrintAndThrowError(Args&&... args) {
   std::stringstream msg{};
   msg << "MIMI ERROR - ";
   ((msg << std::forward<Args>(args) << " "), ...);
