@@ -10,6 +10,7 @@ namespace mimi::solvers {
 
 class OdeBase {
 public:
+  virtual ~OdeBase() = default;
   virtual std::string Name() = 0;
   virtual void PrintInfo() {
     mimi::utils::PrintInfo("No detailed info for", Name());
@@ -92,9 +93,9 @@ public:
     }
 
     // Predict alpha levels
-    mfem::add(dxdt, fac0_ * dt, d2xdt2, va);
-    mfem::add(x, fac1_ * dt, va, xa);
-    mfem::add(dxdt, fac2_ * dt, d2xdt2, va);
+    add(dxdt, fac0_ * dt, d2xdt2, va);
+    add(x, fac1_ * dt, va, xa);
+    add(dxdt, fac2_ * dt, d2xdt2, va);
 
     // Solve alpha levels
     f->SetTime(t + dt);
@@ -114,9 +115,9 @@ public:
 
     // Correct alpha levels
     // xa.Add(fac3_ * dt * dt, aa); // <- do this
-    mfem::add(xa, fac3_ * dt * dt, Base_::aa, tmp_xa);
+    add(xa, fac3_ * dt * dt, Base_::aa, tmp_xa);
     // va.Add(fac4_ * dt, aa); // <- do this
-    mfem::add(va, fac4_ * dt, Base_::aa, tmp_va);
+    add(va, fac4_ * dt, Base_::aa, tmp_va);
 
     // extrapolate using temp vectors
     x *= 1.0 - 1.0 / fac1_;

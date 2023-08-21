@@ -181,43 +181,47 @@ public:
           std::make_shared<mfem::VectorArrayCoefficient>(Base_::MeshDim());
       Base_::vector_coefficients_["body_force"] = b_force_coeff;
       for (auto const& [dim, value] : body_force) {
-          b_force_coeff->Set(dim, new mfem::ConstantCoefficient(value));
+        b_force_coeff->Set(dim, new mfem::ConstantCoefficient(value));
       }
 
       // TODO write this integrator
-      rhs->AddDomainIntegrator(new mfem::VectorDomainLFIntegrator(b_force_coeff));
+      rhs->AddDomainIntegrator(
+          new mfem::VectorDomainLFIntegrator(b_force_coeff));
     }
 
-    if (const auto& traction = Base_::boundary_conditions_->InitialConfiguration().traction_;
+    if (const auto& traction =
+            Base_::boundary_conditions_->InitialConfiguration().traction_;
         traction.size() != 0) {
 
-        rhs_set = true;
+      rhs_set = true;
 
-        // create coeff
-        auto traction_coeff = std::make_shared<mfem::VectorArrayCoefficient>(Base_::MeshDim());
-        Base_::vector_coefficients_["traction"] = traction_coeff;
-        // we need a temporary container to hold mfem::Vectors per dim
-        std::vector<mfem::Vector> traction_per_dim(Base_::MeshDim());
-        for (auto& tpd : traction_per_dim) {
-          tpd.SetSize(Base_::Mesh()->bdr_attributes.Max());
-          tpd = 0.0;
+      // create coeff
+      auto traction_coeff =
+          std::make_shared<mfem::VectorArrayCoefficient>(Base_::MeshDim());
+      Base_::vector_coefficients_["traction"] = traction_coeff;
+      // we need a temporary container to hold mfem::Vectors per dim
+      std::vector<mfem::Vector> traction_per_dim(Base_::MeshDim());
+      for (auto& tpd : traction_per_dim) {
+        tpd.SetSize(Base_::Mesh()->bdr_attributes.Max());
+        tpd = 0.0;
+      }
+
+      // apply values at an appropriate location
+      for (auto const& [bid, dim_value] : traction) {
+        for (auto const& [dim, value] : dim_value) {
+          auto tpd = traction_per_dim[dim];
+          tpd(bid) = value;
         }
+      }
 
-        // apply values at an appropriate location
-        for (auto const& [bid, dim_value] : traction) {
-          for (auto const& [dim, value] : dim_value) {
-            auto tpd = traction_per_dim[dim];
-            tpd(bid) = value;
-          }
-        }
+      // set
+      for (int i{}; i < traction_per_dim.size(); ++i) {
+        traction_coeff.Set(i, traction_per_dim[i]);
+      }
 
-        // set
-        for (int i{}; i < traction_per_dim.size(); ++i) {
-          traction_coeff.Set(i, traction_per_dim[i]);
-        }
-
-        // add to linear form
-        rhs->AddBoundaryIntegrator(new mfem::VectorBoundaryLFIntegrator(traction_coeff));
+      // add to linear form
+      rhs->AddBoundaryIntegrator(
+          new mfem::VectorBoundaryLFIntegrator(traction_coeff));
     }
 
     if (rhs_set) {
@@ -225,9 +229,9 @@ public:
       Base_::AddLinearForm("rhs", rhs);
     }
 
-
     // ode
-    auto gen_alpha = std::make_unique<mimi::solvers::GeneralizedAlpha2>(*le_oper);
+    auto gen_alpha =
+        std::make_unique<mimi::solvers::GeneralizedAlpha2>(*le_oper);
     gen_alpha->PrintInfo();
 
     // set dynamic system -> transfer ownership

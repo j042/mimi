@@ -10,8 +10,8 @@
 #include <pybind11/pybind11.h>
 
 // mimi
-#include "mimi/utils/boundary_conditions.hpp"
 #include "mimi/solvers/ode.hpp"
+#include "mimi/utils/boundary_conditions.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::py {
@@ -41,7 +41,7 @@ protected:
   std::unordered_map<std::string, FESpace> fe_spaces_{};
 
   // bc manager
-  std::shared_ptr<mimi::utils::BoundaryCondition> boundary_conditions_ =
+  std::shared_ptr<mimi::utils::BoundaryConditions> boundary_conditions_ =
       nullptr;
 
   // fsi coupling
@@ -50,10 +50,10 @@ protected:
   mfem::Vector intermediate_x_;
 
   // holder for coefficients
-  std::map<std::string, std::shared_ptr<mfem::Coefficients>> coefficients_;
+  std::map<std::string, std::shared_ptr<mfem::Coefficient>> coefficients_;
 
   // holder for vector coefficients
-  std::map<std::string, std::shared_ptr<mfem::VectorCoefficients>>
+  std::map<std::string, std::shared_ptr<mfem::VectorCoefficient>>
       vector_coefficients_;
 
   // current time, CET
@@ -75,19 +75,19 @@ public:
 
     // nurbs check
     if (mesh_->NURBSext) {
-      mimi::utils::PrintD("read NURBS mesh");
+      mimi::utils::PrintDebug("read NURBS mesh");
     } else {
-      mimi::utils::PrintE(fname, "Does not contain NURBS mesh.");
+      mimi::utils::PrintAndThrowError(fname, "Does not contain NURBS mesh.");
     }
   }
 
   /// @brief returns mesh. If it's missing, it will raise.
   /// @return
-  virtual auto& Mesh() {
+  virtual std::unique_ptr<mfem::Mesh>& Mesh() {
     MIMI_FUNC()
 
     if (!mesh_) {
-      mimi::utils::PrintE("Mesh not set.");
+      mimi::utils::PrintAndThrowError("Mesh not set.");
     }
 
     return mesh_;
@@ -95,11 +95,11 @@ public:
 
   /// @brief returns mesh. If it's missing, it will raise.
   /// @return
-  virtual const auto& Mesh() const {
+  virtual const std::unique_ptr<mfem::Mesh>& Mesh() const {
     MIMI_FUNC()
 
     if (!mesh_) {
-      mimi::utils::PrintE("Mesh not set.");
+      mimi::utils::PrintAndThrowError("Mesh not set.");
     }
 
     return mesh_;
@@ -162,54 +162,54 @@ public:
   virtual void ElevateDegrees(const int degrees, const int max_degrees = 50) {
     MIMI_FUNC()
 
-    mimi::utils::PrintD("degrees input:", degrees);
-    mimi::utils::PrintD("max_degrees set to", max_degrees);
+    mimi::utils::PrintDebug("degrees input:", degrees);
+    mimi::utils::PrintDebug("max_degrees set to", max_degrees);
 
     if (degrees > 0) {
       Mesh()->DegreeElevate(degrees, max_degrees);
     } else {
-      mimi::utils::PrintW(degrees, "is invalid input. Skipping.");
+      mimi::utils::PrintWarning(degrees, "is invalid input. Skipping.");
     }
 
     // FYI
     auto ds = MeshDegrees();
-    mimi::utils::PrintD("current degrees:");
+    mimi::utils::PrintDebug("current degrees:");
     for (int i{}; i < MeshDim(); ++i) {
-      mimi::utils::PrintD("dim", i, ":", ds[i]);
+      mimi::utils::PrintDebug("dim", i, ":", ds[i]);
     }
   }
 
   virtual void Subdivide(const int n_subdivision) {
     MIMI_FUNC()
 
-    mimi::utils::PrintD("n_subdivision:", n_subdivision);
-    mimi::utils::PrintD("Number of elements before subdivision: ",
-                        NumberOfElements());
+    mimi::utils::PrintDebug("n_subdivision:", n_subdivision);
+    mimi::utils::PrintDebug("Number of elements before subdivision: ",
+                            NumberOfElements());
 
     if (n_subdivision > 0) {
-      for (i{}; i < n_subdivision; ++i) {
-        Mesh()->UniformRefinements();
+      for (int i{}; i < n_subdivision; ++i) {
+        Mesh()->UniformRefinement();
       }
     }
 
-    mimi::utils::PrintD("Number of elements after subdivision: ",
-                        NumberOfElements());
+    mimi::utils::PrintDebug("Number of elements after subdivision: ",
+                            NumberOfElements());
   }
 
   /// @brief Sets boundary condition
   /// @param boundary_conditions
   virtual void
-  SetBoundaryCondition(const std::shared_ptr<mimi::utils::BoundaryCondition>&
-                           boundary_conditions) {
+  SetBoundaryConditions(const std::shared_ptr<mimi::utils::BoundaryConditions>&
+                            boundary_conditions) {
     MIMI_FUNC()
 
-    boundary_condition_ = boundary_condition;
+    boundary_conditions_ = boundary_conditions;
   }
 
-  virtual std::shared_ptr<mimi::utils::BoundaryCondition>
-  GetBoundaryCondition() {
+  virtual std::shared_ptr<mimi::utils::BoundaryConditions>
+  GetBoundaryConditions() {
     MIMI_FUNC()
-    return boundary_condition_;
+    return boundary_conditions_;
   }
 
   /// @brief finds true dof ids for each boundary this also finds zero_dofs_
@@ -217,7 +217,7 @@ public:
     MIMI_FUNC()
 
     // find all true dof ids
-    for (auto const& [key, fes] : *fe_spaces_) {
+    for (auto& [key, fes] : fe_spaces_) {
       mimi::utils::PrintDebug("Finding boundary dofs for", key, "FE Space.");
 
       const int max_bdr_id = fes.fe_space_->GetMesh()->bdr_attributes.Max();
@@ -240,9 +240,9 @@ public:
     }
 
     // find dirichlet bcs
-    for (auto const& [name, fes] : *fe_spaces_) {
+    for (auto& [name, fes] : fe_spaces_) {
       for (auto const& [bid, dim] :
-           boundary_conditions_->InitialConfiguration().Dirichlet()) {
+           boundary_conditions_->InitialConfiguration().dirichlet_) {
 
         mimi::utils::PrintDebug(
             "For FE Space",
@@ -275,7 +275,7 @@ public:
     MIMI_FUNC()
 
     oper2_ = std::unique_ptr<mfem::SecondOrderTimeDependentOperator>(oper2);
-    ode2_ = std::unique_ptr<mimi::solvers::OdeBase>(ode2);
+    ode2_solver_ = std::unique_ptr<mimi::solvers::OdeBase>(ode2);
   }
 };
 

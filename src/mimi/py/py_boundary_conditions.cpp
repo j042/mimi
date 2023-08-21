@@ -12,7 +12,7 @@ namespace py = pybind11;
 void init_py_boundary_conditions(py::module_& m) {
   using BC = mimi::utils::BoundaryConditions;
   using BCM = typename BC::BCMarker;
-  py::class_<BCM> marker;
+  py::class_<BCM> marker(m, "BoundaryMarker");
   marker
       .def("dirichlet",
            &BCM::Dirichlet,
@@ -28,16 +28,17 @@ void init_py_boundary_conditions(py::module_& m) {
            &BCM::Traction,
            py::arg("bid"),
            py::arg("dim"),
-           py::arg("value") py::return_value_policy::reference_internal)
+           py::arg("value"),
+           py::return_value_policy::reference_internal)
       .def("body_force",
            &BCM::BodyForce,
            py::arg("dim"),
            py::arg("value"),
            py::return_value_policy::reference_internal);
 
-  py::class_<BC, std::shared_ptr<BC>> bc;
+  py::class_<BC, std::shared_ptr<BC>> bc(m, "BoundaryConditions");
   bc.def(py::init<>())
-      .def("__repr__", [](const BC& bc) { bc.Print(); })
+      .def("__repr__", [](BC& bc) { bc.Print(); })
       .def("initial",
            &BC::InitialConfiguration,
            py::return_value_policy::reference_internal)
@@ -46,4 +47,4 @@ void init_py_boundary_conditions(py::module_& m) {
            py::return_value_policy::reference_internal);
 }
 
-} // namespace mimi::utils
+} // namespace mimi::py

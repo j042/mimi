@@ -103,7 +103,7 @@ public:
 
       mimi::utils::PrintInfo("body force ( dim | value):");
       for (auto const& [dim, value] : body_force_)
-          mimi::utils::PrintInfo("  ", dim, "|", value);
+        mimi::utils::PrintInfo("  ", dim, "|", value);
 
       return *this;
     }
