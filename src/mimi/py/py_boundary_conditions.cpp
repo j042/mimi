@@ -38,13 +38,13 @@ void init_py_boundary_conditions(py::module_& m) {
 
   py::class_<BC, std::shared_ptr<BC>> bc(m, "BoundaryConditions");
   bc.def(py::init<>())
-      .def("__repr__", [](BC& bc) { bc.Print(); })
-      .def("initial",
-           &BC::InitialConfiguration,
-           py::return_value_policy::reference_internal)
-      .def("current",
-           &BC::CurrentConfiguration,
-           py::return_value_policy::reference_internal);
+      .def("print", [](BC& bc) { bc.Print(); })
+      .def_property_readonly("initial",
+                             &BC::InitialConfiguration,
+                             py::return_value_policy::reference_internal)
+      .def_property_readonly("current",
+                             &BC::CurrentConfiguration,
+                             py::return_value_policy::reference_internal);
 }
 
 } // namespace mimi::py

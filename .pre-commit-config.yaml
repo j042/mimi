@@ -26,6 +26,12 @@ repos:
   - id: requirements-txt-fixer
   - id: trailing-whitespace
 
+- repo: https://github.com/psf/black
+  rev: "23.3.0"
+  hooks:
+  - id: black
+    args: [--line-length=79]
+
 - repo: https://github.com/pre-commit/mirrors-clang-format
   rev: v16.0.4
   hooks:

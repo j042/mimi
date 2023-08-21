@@ -1,5 +1,6 @@
 import mimi
 
+
 def test_read_2d_mesh():
     s = mimi.PySolid()
     s.read_mesh("tests/data/square-nurbs.mesh")
@@ -20,7 +21,7 @@ def test_read_2d_mesh():
     assert s.n_boundary_elements() == 4
     assert s.n_subelements() == 4
     assert s.mesh_degrees() == [3, 3]
-   
+
 
 def test_read_3d_mesh():
     s = mimi.PySolid()
@@ -56,7 +57,6 @@ def test_subdivide():
     assert s.n_subelements() == 12
     assert s.mesh_degrees() == [1, 1]
 
-
     s.read_mesh("tests/data/cube-nurbs.mesh")
 
     s.subdivide(1)
@@ -67,6 +67,7 @@ def test_subdivide():
     assert s.n_boundary_elements() == 24
     assert s.n_subelements() == 36
     assert s.mesh_degrees() == [1, 1, 1]
+
 
 def test_elevate_degrees():
     s0 = mimi.PySolid()

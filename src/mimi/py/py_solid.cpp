@@ -1,3 +1,5 @@
+#include "pybind11/stl.h"
+
 // mimi
 #include "mimi/py/py_solid.hpp"
 
@@ -9,6 +11,7 @@ void init_py_solid(py::module_& m) {
 
   klasse.def(py::init<>())
       .def("read_mesh", &PySolid::ReadMesh, py::arg("fname"))
+      .def("save_mesh", &PySolid::SaveMesh, py::arg("fname"))
       .def("mesh_dim", &PySolid::MeshDim)
       .def("mesh_degrees", &PySolid::MeshDegrees)
       .def("n_vertices", &PySolid::NumberOfVertices)

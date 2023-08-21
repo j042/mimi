@@ -81,6 +81,14 @@ public:
     }
   }
 
+  virtual void SaveMesh(const std::string fname) const {
+    MIMI_FUNC()
+
+    std::ofstream mesh_ofs(fname);
+    mesh_ofs.precision(12);
+    mesh_->Print(mesh_ofs);
+  }
+
   /// @brief returns mesh. If it's missing, it will raise.
   /// @return
   virtual std::unique_ptr<mfem::Mesh>& Mesh() {
@@ -132,7 +140,8 @@ public:
   /// @return
   virtual int NumberOfVertices() const {
     MIMI_FUNC()
-    return Mesh()->GetNV();
+    // return Mesh()->GetNV(); // <-this is only n corner vertices.
+    return Mesh()->GetNodes()->Size() / MeshDim();
   }
 
   /// @brief n_elem
@@ -241,21 +250,23 @@ public:
 
     // find dirichlet bcs
     for (auto& [name, fes] : fe_spaces_) {
-      for (auto const& [bid, dim] :
+      for (auto const& [bid, dims] :
            boundary_conditions_->InitialConfiguration().dirichlet_) {
+        for (auto const& dim : dims) {
 
-        mimi::utils::PrintDebug(
-            "For FE Space",
-            name,
-            "- finding boundary dofs for initial configuration dirichlet bcs.",
-            "bid:",
-            bid,
-            "dim:",
-            dim);
+          mimi::utils::PrintDebug("For FE Space",
+                                  name,
+                                  "- finding boundary dofs for initial "
+                                  "configuration dirichlet bcs.",
+                                  "bid:",
+                                  bid,
+                                  "dim:",
+                                  dim);
 
-        // append saved dofs
-        // may have duplicating dofs, harmless.
-        fes.zero_dofs_.Append(fes.boundary_dof_ids_[bid][dim]);
+          // append saved dofs
+          // may have duplicating dofs, harmless.
+          fes.zero_dofs_.Append(fes.boundary_dof_ids_[bid][dim]);
+        }
       }
     }
   }

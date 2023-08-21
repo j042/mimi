@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 
 // mimi
 #include "mimi/utils/print.hpp"
@@ -13,7 +14,7 @@ class BoundaryConditions {
 public:
   /// @brief boundary condition marker
   struct BCMarker {
-    std::map<int, int> dirichlet_;
+    std::map<int, std::set<int>> dirichlet_;
     std::map<int, double> pressure_;
     std::map<int, std::map<int, double>> traction_;
     std::map<int, double> body_force_;
@@ -25,7 +26,7 @@ public:
     BCMarker& Dirichlet(const int bid, const int dim) {
       MIMI_FUNC()
 
-      dirichlet_[bid] = dim;
+      dirichlet_[bid].insert(dim);
       return *this;
     }
 
@@ -33,8 +34,10 @@ public:
       MIMI_FUNC()
 
       mimi::utils::PrintInfo("dirichlet bc (bid | dim):");
-      for (auto const& [key, value] : dirichlet_) {
-        mimi::utils::PrintInfo("  ", key, "|", value);
+      for (auto const& [bid, dims] : dirichlet_) {
+        for (auto const& dim : dims) {
+          mimi::utils::PrintInfo("  ", bid, "|", dim);
+        }
       }
 
       return *this;
@@ -122,13 +125,13 @@ public:
 
     mimi::utils::PrintInfo("Boundary Condition Info");
     mimi::utils::PrintInfo("=======================");
-    mimi::utils::PrintInfo("To be applied on initial configuration:");
+    mimi::utils::PrintInfo("\nTo be applied on initial configuration:");
     InitialConfiguration()
         .PrintDirichlet()
         .PrintPressure()
         .PrintTraction()
         .PrintBodyForce();
-    mimi::utils::PrintInfo("To be applied on current configuration:");
+    mimi::utils::PrintInfo("\nTo be applied on current configuration:");
     CurrentConfiguration()
         .PrintDirichlet()
         .PrintPressure()

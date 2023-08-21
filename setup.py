@@ -70,7 +70,10 @@ class CMakeBuild(build_ext):
         ]
 
         # MFEM args
-        cmake_args += ["-DMFEM_USE_SUITESPARSE=ON", "-DMFEM_USE_OPENMP=ON",]
+        cmake_args += [
+            "-DMFEM_USE_SUITESPARSE=ON",
+            "-DMFEM_USE_OPENMP=ON",
+        ]
 
         build_args = []
         # Adding CMake arguments set as environment variable
@@ -123,8 +126,6 @@ class CMakeBuild(build_ext):
                 ]
                 build_args += ["--config", cfg]
 
-
-
         if sys.platform.startswith("darwin"):
             # Cross-compile support for macOS - respect ARCHFLAGS if set
             archs = re.findall(r"-arch (\S+)", os.environ.get("ARCHFLAGS", ""))
@@ -155,17 +156,18 @@ class CMakeBuild(build_ext):
         )
         print()  # Add an empty line for cleaner output
 
+
 setup(
-    name='mimi',
-    version='0.0.0',
-    author='Jaewook Lee',
-    author_email='jlee@ilsb.tuwien.ac.at',
-    description='Collection of mfem based IGA computations.',
-    long_description='',
-    #packages=["mfemiga"],
-    #packages=find_packages("src"),
-    #package_dir={"":"src"},
-    ext_modules=[CMakeExtension('mimi')],
+    name="mimi",
+    version="0.0.0",
+    author="Jaewook Lee",
+    author_email="jlee@ilsb.tuwien.ac.at",
+    description="Collection of mfem based IGA computations.",
+    long_description="",
+    # packages=["mfemiga"],
+    # packages=find_packages("src"),
+    # package_dir={"":"src"},
+    ext_modules=[CMakeExtension("mimi")],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )
