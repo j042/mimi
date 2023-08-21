@@ -1,3 +1,5 @@
+#pragma once
+
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -7,10 +9,11 @@
 #include <pybind11/pybind11.h>
 
 // splinepy
-#include <splinepy/py/py_spline.hpp>
+// #include <splinepy/py/py_spline.hpp>
 
 // mimi
 #include "mimi/py/py_solid.hpp"
+#include "mimi/solvers/newton.hpp"
 
 namespace mimi::py {
 
@@ -228,6 +231,24 @@ public:
       rhs->Assemble();
       Base_::AddLinearForm("rhs", rhs);
     }
+
+    // setup linear solver
+    auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
+    Base_::linear_solvers_["linear_elasticity"] = lin_solver;
+
+    // setup a newton solver
+    auto newton = std::shared_ptr<mimi::solvers::LinearSearchNewton>();
+    Base_::newton_solvers_["linear_elasticity"] = newton;
+    le_oper->SetNewtonSolver(newton);
+
+    // basic config. you can change this using ConfigureNewton()
+    newton->iterative_mode = false;
+    newton->SetSolver(*lin_solver);
+    newton->SetPrintLevel(
+        mfem::IterativeSolver::PrintLevel().Warnings().Errors().Summary());
+    newton->SetRelTol(1e-8);
+    newton->SetAbsTol(1e-12);
+    newton->SetMaxIter(MeshDim() * 10);
 
     // ode
     auto gen_alpha =

@@ -26,6 +26,10 @@ protected:
   std::unique_ptr<mimi::solvers::OdeBase> ode1_solver_ = nullptr;
   std::unique_ptr<mfem::TimeDependentOperator> oper1_ = nullptr;
 
+  // solvers
+  std::map<std::string, std::shared_ptr<mimi::solvers::Newton>> newton_solvers_;
+  std::map<std::string, std::shared_ptr<mfem::Solvers>> linear_solvers_;
+
   // mesh
   std::unique_ptr<mfem::Mesh> mesh_ = nullptr;
 
@@ -276,6 +280,18 @@ public:
 
     mimi::utils::PrintAndThrowError("Derived class need to implement Setup().");
   };
+
+  virtual void ConfigureNewton(const std::string name,
+                               const double rel_tol,
+                               const double abs_tol,
+                               const double max_iter,
+                               const bool iterative_mode) {
+    auto& newton = newton_solvers_.at(name);
+    newton->SetRelTol(rel_tol);
+    newton->SetAbsTol(abs_tol);
+    newton->SetMaxIter(max_iter);
+    newton.iterative_mode = iterative_mode;
+  }
 
   /// @brief sets second order system with given ptr and takes ownership.
   /// @param oper2
