@@ -18,9 +18,8 @@ namespace mimi::integrators {
 /// where e(v) = (1/2) * (grad(v) * grad(v)^T)
 class LinearElasticity : public mfem::BilinearFormIntegrator {
 protected:
-  const mfem::Coefficient& lambda_;
-  const mfem::Coefficient& mu_;
-  std::shared_ptr<FiniteElementToId_> fe_to_id_;
+  std::shared_ptr<mfem::Coefficient> lambda_;
+  std::shared_ptr<mfem::Coefficient> mu_;
 
 public:
   using ElementMatrices_ = mimi::utils::Data<mfem::DenseMatrix>;
@@ -30,7 +29,8 @@ public:
   std::unique_ptr<ElementMatrices_> element_matrices_;
 
   /// ctor
-  LinearElasticity(const mfem::Coefficient& lambda, const mfem::Coefficient& mu)
+  LinearElasticity(const std::shared_ptr<mfem::Coefficient>& lambda,
+                   const std::shared_ptr<mfem::Coefficient>& mu)
       : lambda_(lambda),
         mu_(mu) {}
 
@@ -47,98 +47,97 @@ public:
     // allocate
     element_matrices_ = std::make_unique<ElementMatrices_>(n_elem);
 
-    auto assemble_element_matrices = [&](const int begin,
-                                         const int end,
-                                         const int) {
-      // aux mfem containers
-      mfem::DenseMatrix d_shape, g_shape, p_elmat;
-      mfem::Vector div_shape;
+    auto assemble_element_matrices =
+        [&](const int begin, const int end, const int) {
+          // aux mfem containers
+          mfem::DenseMatrix d_shape, g_shape, p_elmat;
+          mfem::Vector div_shape;
 
-      for (int i{begin}; i < end; ++i) {
-        // get related objects from fespace
-        const mfem::FiniteElement& el = *fes->GetFE(i);
-        mfem::ElementTransformation& eltrans_stress_free_to_reference =
-            *fes.GetElementTransformation(i);
+          for (int i{begin}; i < end; ++i) {
+            // get related objects from fespace
+            const mfem::FiniteElement& el = *fes.GetFE(i);
+            mfem::ElementTransformation& eltrans_stress_free_to_reference =
+                *fes.GetElementTransformation(i);
 
-        // basic infos for this elem
-        const int n_dof = el.GetDof();
-        const int dim = el.GetDim();
+            // basic infos for this elem
+            const int n_dof = el.GetDof();
+            const int dim = el.GetDim();
 
-        // set size for aux containers
-        d_shape.SetSize(n_dof, dim);
-        g_shape.SetSize(n_dof, dim);
-        p_elmat.SetSize(n_dof, n_dof); // same as p_elmat.SetSize(n_dof);
-        div_shape.SetSize(dim * dof);
+            // set size for aux containers
+            d_shape.SetSize(n_dof, dim);
+            g_shape.SetSize(n_dof, dim);
+            p_elmat.SetSize(n_dof, n_dof); // same as p_elmat.SetSize(n_dof);
+            div_shape.SetSize(dim * n_dof);
 
-        // get elmat to save and set size
-        mfem::DenseMatrix& elmat = element_matrices_[i];
-        elmat.SetSize(n_dof * dim, n_dof * dim);
-        elmat = 0.0;
+            // get elmat to save and set size
+            mfem::DenseMatrix& elmat = element_matrices_->operator[](i);
+            elmat.SetSize(n_dof * dim, n_dof * dim);
+            elmat = 0.0;
 
-        // prepare quad loop;
-        const mfem::IntegrationRule& ir =
-            mfem::IntRules.Get(el.GetGeomType(), 2 * el.GetOrder() + 3);
+            // prepare quad loop;
+            const mfem::IntegrationRule& ir =
+                mfem::IntRules.Get(el.GetGeomType(), 2 * el.GetOrder() + 3);
 
-        // quad loop
-        for (int q{}; q < ir.GetNPoints(); ++q) {
-          const mfem::IntegrationPoint& ip = ir.IntPoint(q);
+            // quad loop
+            for (int q{}; q < ir.GetNPoints(); ++q) {
+              const mfem::IntegrationPoint& ip = ir.IntPoint(q);
 
-          // get first der of basis functions from each support
-          el.CalcDShape(ip, d_shape);
+              // get first der of basis functions from each support
+              el.CalcDShape(ip, d_shape);
 
-          // prepare transformation
-          eltrans_stress_free_to_reference.SetIntPoint(&ip);
+              // prepare transformation
+              eltrans_stress_free_to_reference.SetIntPoint(&ip);
 
-          // save a weight for integration
-          const double weight{ip.weight
-                              * eltrans_stress_free_to_reference.Weight()}
+              // save a weight for integration
+              const double weight{ip.weight
+                                  * eltrans_stress_free_to_reference.Weight()};
 
-          // get geometric d shape
-          mfem::Mult(d_shape,
-                     eltrans_stress_free_to_reference.InverseJacobian(),
-                     g_shape);
+              // get geometric d shape
+              mfem::Mult(d_shape,
+                         eltrans_stress_free_to_reference.InverseJacobian(),
+                         g_shape);
 
-          // get p_elmat - nabla u * nabla vT
-          mfem::MultAAt(g_shape, p_elmat)
+              // get p_elmat - nabla u * nabla vT
+              mfem::MultAAt(g_shape, p_elmat);
 
               // get div - this is just flat view of g_shape, but useful for VVt
               g_shape.GradToDiv(div_shape);
 
-          // prepare params
-          const double lambda =
-              lambda_.Eval(eltrans_stress_free_to_reference, ip);
-          const double mu = mu_.Eval(eltrans_stress_free_to_reference, ip);
+              // prepare params
+              const double lambda =
+                  lambda_->Eval(eltrans_stress_free_to_reference, ip);
+              const double mu = mu_->Eval(eltrans_stress_free_to_reference, ip);
 
-          // add lambda
-          mfem::AddMult_a_VVt(lambda * w, div_shape, elmat);
-          const double mu_times_weight = mu * weight;
+              // add lambda
+              mfem::AddMult_a_VVt(lambda * weight, div_shape, elmat);
+              const double mu_times_weight = mu * weight;
 
-          for (int d{}; d < dim; ++d) {
-            const int offset = n_dof * d;
-            for (int dof_i{}; dof_i < n_dof; ++dof_i) {
-              for (int dof_j{}; dof_j < n_dof; ++dof_j) {
-                elmat(offset + dof_i, offset + dof_j) +=
-                    mu_times_weight * p_elmat(dof_i, dof_j);
-              }
-            }
-          }
-
-          for (int dim_i{}; dim_i < dim; ++dim_i) {
-            const int offset_i = n_dof * dim_i;
-            for (int dim_j{}; dim_j < dim; ++dim_j) {
-              const int offset_j = n_dof * dim_j;
-              for (int dof_i{}; dof_i < n_dof; ++dof_i) {
-                for (int dof_j{}; dof_j < n_dof; ++dof_j) {
-                  elmat(offset_i + dof_i, offset_j + dof_j) +=
-                      mu_times_weight * g_shape(dof_i, dim_j)
-                      * g_shape(dof_j, dim_i);
+              for (int d{}; d < dim; ++d) {
+                const int offset = n_dof * d;
+                for (int dof_i{}; dof_i < n_dof; ++dof_i) {
+                  for (int dof_j{}; dof_j < n_dof; ++dof_j) {
+                    elmat(offset + dof_i, offset + dof_j) +=
+                        mu_times_weight * p_elmat(dof_i, dof_j);
+                  }
                 }
               }
-            }
+
+              for (int dim_i{}; dim_i < dim; ++dim_i) {
+                const int offset_i = n_dof * dim_i;
+                for (int dim_j{}; dim_j < dim; ++dim_j) {
+                  const int offset_j = n_dof * dim_j;
+                  for (int dof_i{}; dof_i < n_dof; ++dof_i) {
+                    for (int dof_j{}; dof_j < n_dof; ++dof_j) {
+                      elmat(offset_i + dof_i, offset_j + dof_j) +=
+                          mu_times_weight * g_shape(dof_i, dim_j)
+                          * g_shape(dof_j, dim_i);
+                    }
+                  }
+                }
+              }
+            } // quad loop
           }
-        } // quad loop
-      }
-    };
+        };
 
     // exe
     mimi::utils::NThreadExe(assemble_element_matrices, n_elem, nthreads);
@@ -149,12 +148,12 @@ public:
   /// @param eltrans
   /// @param elmat
   virtual void AssembleElementMatrix(const mfem::FiniteElement& el,
-                                     ElementTransformation& eltrans,
-                                     DenseMatrix& elmat) {
+                                     mfem::ElementTransformation& eltrans,
+                                     mfem::DenseMatrix& elmat) {
     // return saved values
     auto& saved = element_matrices_->operator[](eltrans.ElementNo);
     elmat.UseExternalData(saved.GetData(), saved.Height(), saved.Width());
   }
-}
+};
 
 } // namespace mimi::integrators

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <thread>
 
-namespace mimi {
+namespace mimi::utils {
 
 /// @brief multi thread execution helper based on chunked batches
 /// @tparam Func
@@ -52,4 +52,4 @@ void NThreadExe(const Func& f, const IndexT total, const IndexT nthread) {
   }
 }
 
-} // namespace mimi
+} // namespace mimi::utils

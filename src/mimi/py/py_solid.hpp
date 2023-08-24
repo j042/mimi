@@ -10,6 +10,7 @@
 #include <pybind11/pybind11.h>
 
 // mimi
+#include "mimi/solvers/newton.hpp"
 #include "mimi/solvers/ode.hpp"
 #include "mimi/utils/boundary_conditions.hpp"
 #include "mimi/utils/print.hpp"
@@ -28,7 +29,7 @@ protected:
 
   // solvers
   std::map<std::string, std::shared_ptr<mimi::solvers::Newton>> newton_solvers_;
-  std::map<std::string, std::shared_ptr<mfem::Solvers>> linear_solvers_;
+  std::map<std::string, std::shared_ptr<mfem::Solver>> linear_solvers_;
 
   // mesh
   std::unique_ptr<mfem::Mesh> mesh_ = nullptr;
@@ -290,7 +291,7 @@ public:
     newton->SetRelTol(rel_tol);
     newton->SetAbsTol(abs_tol);
     newton->SetMaxIter(max_iter);
-    newton.iterative_mode = iterative_mode;
+    newton->iterative_mode = iterative_mode;
   }
 
   /// @brief sets second order system with given ptr and takes ownership.

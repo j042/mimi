@@ -93,23 +93,26 @@ public:
     mass_inv_.SetPrintLevel(
         mfem::IterativeSolver::PrintLevel().Warnings().Errors().Summary());
     mass_inv_.SetPreconditioner(mass_inv_prec_);
-    mass_inv_.SetOperator(mass_.SpMat());
+    mass_inv_.SetOperator(mass_->SpMat());
 
     // stiffness
-    stiffness_ = MimiBase::bilinear_forms_.at("stiffness");
+    stiffness_ = MimiBase_::bilinear_forms_.at("stiffness");
 
     // contact
-    contact_ = MimiBase::nonlinear_forms_.at("contact");
+    contact_ = MimiBase_::nonlinear_forms_["contact"];
+    if (contact_) {
+      mimi::utils::PrintInfo(Name(), "has contact term.");
+    }
 
     // following forms are optional
     // viscosity
-    viscosity_ = MimiBase_::biliniear_forms_["viscosity"];
+    viscosity_ = MimiBase_::bilinear_forms_["viscosity"];
     if (viscosity_) {
       mimi::utils::PrintInfo(Name(), "has viscosity term.");
     }
 
     // rhs linear form
-    rhs_ = MimiBase::linear_forms_["rhs"];
+    rhs_ = MimiBase_::linear_forms_["rhs"];
     if (rhs_) {
       mimi::utils::PrintInfo(Name(), "has rhs linear form term");
     }
@@ -162,7 +165,7 @@ public:
     mfem::Vector zero;
     MimiBase_::newton_solver_->Mult(zero, d2x_dt2);
 
-    if (!newton_solver->GetConverged()) {
+    if (!newton_solver_->GetConverged()) {
       mimi::utils::PrintWarning(
           "operators::LinearElasticity - newton solver did not converge");
     }
@@ -172,7 +175,7 @@ public:
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
     mfem::Vector temp_x(x_->Size());
-    mfem::add(*x_, fac0_, d2x_dt2, temp_x);
+    add(*x_, fac0_, d2x_dt2, temp_x);
 
     mass_->Mult(d2x_dt2, y);
 
@@ -180,7 +183,7 @@ public:
 
     if (viscosity_) {
       mfem::Vector temp_v(v_->Size());
-      mfem::add(*v_, fac1, d2x_dt2, temp_v);
+      add(*v_, fac1_, d2x_dt2, temp_v);
       viscosity_->AddMult(temp_v, y);
     }
 
@@ -190,12 +193,12 @@ public:
 
     // substract rhs linear forms
     if (rhs_) {
-      y.Add(-1.0, rhs_);
+      y.Add(-1.0, *rhs_);
     }
 
     // this is usually just for fsi
     if (rhs_vector_) {
-      y.Add(-1.0, rhs_vector_);
+      y.Add(-1.0, *rhs_vector_);
     }
   }
 
@@ -204,21 +207,22 @@ public:
     MIMI_FUNC()
 
     mfem::Vector temp_x(d2x_dt2.Size());
-    mfem::add(*x_, fac0_, d2x_dt2, temp_x);
+    add(*x_, fac0_, d2x_dt2, temp_x);
 
     // release;
     if (jacobian_)
       delete jacobian_;
 
-    jacobian_ = mfem::Add(1.0 mass_->SpMat(), fac0, stiffness_->SpMat());
+    jacobian_ = mfem::Add(1.0, mass_->SpMat(), fac0_, stiffness_->SpMat());
 
     if (viscosity_) {
-      jacobian_->Add(fac1, viscosity_->SpMat());
+      jacobian_->Add(fac1_, viscosity_->SpMat());
     }
 
     if (contact_) {
-      jacobian_->Add(fac0,
-                     *dynamic_cast<SparseMatrix*>(&H.GetGradient(temp_x)));
+      jacobian_->Add(
+          fac0_,
+          *dynamic_cast<mfem::SparseMatrix*>(&contact_->GetGradient(temp_x)));
     }
 
     return *jacobian_;

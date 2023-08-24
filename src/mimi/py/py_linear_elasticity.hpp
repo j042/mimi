@@ -12,12 +12,17 @@
 // #include <splinepy/py/py_spline.hpp>
 
 // mimi
+#include "mimi/integrators/linear_elasticity.hpp"
+#include "mimi/integrators/vector_diffusion.hpp"
+#include "mimi/integrators/vector_mass.hpp"
+#include "mimi/operators/linear_elasticity.hpp"
 #include "mimi/py/py_solid.hpp"
 #include "mimi/solvers/newton.hpp"
+#include "mimi/utils/lambda_and_mu.hpp"
 
 namespace mimi::py {
 
-class PyLinearElasticity : PySolid {
+class PyLinearElasticity : public PySolid {
 public:
   double mu_, lambda_, rho_, viscosity_{-1.0};
   using Base_ = PySolid;
@@ -72,7 +77,7 @@ public:
     x.SetSpace(disp_fes.fe_space_.get());
 
     // and velocity
-    mfem::GridFunctio& v = disp_fes.grid_functions_["v"];
+    mfem::GridFunction& v = disp_fes.grid_functions_["v"];
     v.SetSpace(disp_fes.fe_space_.get());
 
     // and reference / initial reference. initialize with fe space then
@@ -107,7 +112,7 @@ public:
 
     // create integrator using density
     // this is owned by bilinear form, so do that first before we forget
-    auto* mass_integ = new mimi::integrators::VectorMass(*rho);
+    auto* mass_integ = new mimi::integrators::VectorMass(rho);
     mass->AddDomainIntegrator(mass_integ);
 
     // precompute using nthread
@@ -115,13 +120,13 @@ public:
 
     // assemble and remove zero bc entries
     mass->Assemble();
-    mass->FromSystemMatrix(disp_fes.zero_dofs_, tmp);
+    mass->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
 
     // release some memory
-    mass_integ.element_matrices_.reset(); // release saved matrices
+    mass_integ->element_matrices_.reset(); // release saved matrices
 
     // 2. viscosity
-    if (viscosity > 0.0) {
+    if (viscosity_ > 0.0) {
       auto visc =
           std::make_shared<mfem::BilinearForm>(disp_fes.fe_space_.get());
       le_oper->AddBilinearForm("viscosity", visc);
@@ -132,22 +137,22 @@ public:
 
       // create integrator using viscosity
       // and add it to bilinear form
-      auto visc_integ = new mimi::integrators::VectorDiffusion(*visc_coeff);
+      auto visc_integ = new mimi::integrators::VectorDiffusion(visc_coeff);
       visc->AddDomainIntegrator(visc_integ);
 
       // nthread assemble
-      visc_integ->ComputeElemeentMatrices(*disp_fes.fe_space_, nthreads);
+      visc_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
 
       visc->Assemble();
       visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
 
-      visc_integ.element_matrices_.reset();
+      visc_integ->element_matrices_.reset();
     }
 
     // 3. Lin elasitiy stiffness
     // start with bilin form
     auto stiffness =
-        std::make_shared<mfem::BilinearForm>(disp_fec.fe_space_.get());
+        std::make_shared<mfem::BilinearForm>(disp_fes.fe_space_.get());
     le_oper->AddBilinearForm("stiffness", stiffness);
 
     // create coeffs
@@ -157,9 +162,8 @@ public:
     lambda = std::make_shared<mfem::ConstantCoefficient>(lambda_);
 
     // create integ
-    auto stiffness_integ =
-        new mimi::integrators::LinearElasticity(*lambda, *mu);
-    stifness->AddDomainIntegrator(stiffness_integ);
+    auto stiffness_integ = new mimi::integrators::LinearElasticity(lambda, mu);
+    stiffness->AddDomainIntegrator(stiffness_integ);
 
     // nthread assemble
     stiffness_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
@@ -167,7 +171,7 @@ public:
     stiffness->Assemble();
     stiffness->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
 
-    stiffness_integ.element_matrices_.reset();
+    stiffness_integ->element_matrices_.reset();
 
     // 4. linear form
     auto rhs = std::make_shared<mfem::LinearForm>(disp_fes.fe_space_.get());
@@ -189,7 +193,7 @@ public:
 
       // TODO write this integrator
       rhs->AddDomainIntegrator(
-          new mfem::VectorDomainLFIntegrator(b_force_coeff));
+          new mfem::VectorDomainLFIntegrator(*b_force_coeff));
     }
 
     if (const auto& traction =
@@ -219,17 +223,18 @@ public:
 
       // set
       for (int i{}; i < traction_per_dim.size(); ++i) {
-        traction_coeff.Set(i, traction_per_dim[i]);
+        traction_coeff->Set(i,
+                            new mfem::PWConstCoefficient(traction_per_dim[i]));
       }
 
       // add to linear form
       rhs->AddBoundaryIntegrator(
-          new mfem::VectorBoundaryLFIntegrator(traction_coeff));
+          new mfem::VectorBoundaryLFIntegrator(*traction_coeff));
     }
 
     if (rhs_set) {
       rhs->Assemble();
-      Base_::AddLinearForm("rhs", rhs);
+      le_oper->AddLinearForm("rhs", rhs);
     }
 
     // setup linear solver
@@ -237,7 +242,7 @@ public:
     Base_::linear_solvers_["linear_elasticity"] = lin_solver;
 
     // setup a newton solver
-    auto newton = std::shared_ptr<mimi::solvers::LinearSearchNewton>();
+    auto newton = std::shared_ptr<mimi::solvers::LineSearchNewton>();
     Base_::newton_solvers_["linear_elasticity"] = newton;
     le_oper->SetNewtonSolver(newton);
 

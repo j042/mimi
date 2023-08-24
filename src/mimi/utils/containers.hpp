@@ -77,11 +77,12 @@ struct Data {
     return data_[i];
   }
   template<typename IndexType>
-  constexpr Type& operator[](const IndexType& i, const IndexType& j) {
+  constexpr Type& operator()(const IndexType& i, const IndexType& j) {
     return data_[i * stride_ + j];
   }
   template<typename IndexType>
-  constexpr const T& operator[](const IndexType& i, const IndexType& j) const {
+  constexpr const Type& operator()(const IndexType& i,
+                                   const IndexType& j) const {
     return data_[i * stride_ + j];
   }
 

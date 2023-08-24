@@ -17,7 +17,7 @@ namespace mimi::integrators {
 /// a(u, v) = (Q u, v)
 class VectorMass : public mfem::BilinearFormIntegrator {
 protected:
-  const mfem::Coefficient& coeff_;
+  std::shared_ptr<mfem::Coefficient> coeff_;
 
 public:
   using ElementMatrices_ = mimi::utils::Data<mfem::DenseMatrix>;
@@ -27,7 +27,7 @@ public:
   std::unique_ptr<ElementMatrices_> element_matrices_;
 
   /// ctor
-  VectorMass(const mfem::Coefficient& coeff) : coeff_(coeff) {}
+  VectorMass(const std::shared_ptr<mfem::Coefficient>& coeff) : coeff_(coeff) {}
 
   /// @brief Precomputes matrix. After writing this, notices MFEM, of course
   /// has a similar option using OpenMP.
@@ -50,7 +50,7 @@ public:
 
           for (int i{begin}; i < end; ++i) {
             // get related objects from fespace
-            const mfem::FiniteElement& el = *fes->GetFE(i);
+            const mfem::FiniteElement& el = *fes.GetFE(i);
             mfem::ElementTransformation& eltrans_stress_free_to_reference =
                 *fes.GetElementTransformation(i);
 
@@ -63,7 +63,7 @@ public:
             shape_mat.SetSize(n_dof, n_dof);
 
             // get elmat to save and set size
-            mfem::DenseMatrix& elmat = element_matrices_[i];
+            mfem::DenseMatrix& elmat = element_matrices_->operator[](i);
             elmat.SetSize(n_dof * dim, n_dof * dim);
             elmat = 0.0;
 
@@ -84,7 +84,7 @@ public:
 
               // save a weight for integration
               const double weight{ip.weight
-                                  * eltrans_stress_free_to_reference.Weight()}
+                                  * eltrans_stress_free_to_reference.Weight()};
 
               // VVt
               mfem::MultVVt(shape, shape_mat);
@@ -111,12 +111,12 @@ public:
   /// @param eltrans
   /// @param elmat
   virtual void AssembleElementMatrix(const mfem::FiniteElement& el,
-                                     ElementTransformation& eltrans,
-                                     DenseMatrix& elmat) {
+                                     mfem::ElementTransformation& eltrans,
+                                     mfem::DenseMatrix& elmat) {
     // return saved values
     auto& saved = element_matrices_->operator[](eltrans.ElementNo);
     elmat.UseExternalData(saved.GetData(), saved.Height(), saved.Width());
   }
-}
+};
 
 } // namespace mimi::integrators

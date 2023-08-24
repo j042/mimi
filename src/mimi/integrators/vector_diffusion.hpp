@@ -17,7 +17,7 @@ namespace mimi::integrators {
 /// (Q grad u, grad v) = sum_i (Q grad u_i, grad v_i) e_i e_i^T
 class VectorDiffusion : public mfem::BilinearFormIntegrator {
 protected:
-  const mfem::Coefficient& coeff_;
+  std::shared_ptr<mfem::Coefficient> coeff_;
 
 public:
   using ElementMatrices_ = mimi::utils::Data<mfem::DenseMatrix>;
@@ -27,7 +27,8 @@ public:
   std::unique_ptr<ElementMatrices_> element_matrices_;
 
   /// ctor
-  VectorMass(const mfem::Coefficient& coeff) : coeff_(coeff) {}
+  VectorDiffusion(const std::shared_ptr<mfem::Coefficient>& coeff)
+      : coeff_(coeff) {}
 
   /// @brief Precomputes matrix.
   /// @param fes
@@ -51,7 +52,7 @@ public:
 
           for (int i{begin}; i < end; ++i) {
             // get related objects from fespace
-            const mfem::FiniteElement& el = *fes->GetFE(i);
+            const mfem::FiniteElement& el = *fes.GetFE(i);
             mfem::ElementTransformation& eltrans_stress_free_to_reference =
                 *fes.GetElementTransformation(i);
 
@@ -65,7 +66,7 @@ public:
             p_elmat.SetSize(n_dof, n_dof);
 
             // get elmat to save and set size
-            mfem::DenseMatrix& elmat = element_matrices_[i];
+            mfem::DenseMatrix& elmat = element_matrices_->operator[](i);
             elmat.SetSize(n_dof * dim, n_dof * dim);
             elmat = 0.0;
 
@@ -84,15 +85,14 @@ public:
               // get d_shape_dxt
               mfem::Mult(d_shape,
                          eltrans_stress_free_to_reference.AdjugateJacobian(),
-                         d_shape_ext);
+                         d_shape_dxt);
 
               // prepare transformation
               eltrans_stress_free_to_reference.SetIntPoint(&ip);
 
               // save a weight for integration
-              const double weight {
-                ip.weight / eltrans_stress_free_to_reference.Weight()
-              }
+              const double weight{ip.weight
+                                  / eltrans_stress_free_to_reference.Weight()};
 
               // aux variable factor is weight times coeff
               // again, this only supports scalar coeff. for vector/matrix
@@ -105,7 +105,7 @@ public:
 
               // four for loops
               for (int d{}; d < dim; ++d) {
-                elmat.AddMatrix(shape_mat, n_dof * d, n_dof * d);
+                elmat.AddMatrix(p_elmat, n_dof * d, n_dof * d);
               }
             } // quad loop
           }
@@ -120,12 +120,12 @@ public:
   /// @param eltrans
   /// @param elmat
   virtual void AssembleElementMatrix(const mfem::FiniteElement& el,
-                                     ElementTransformation& eltrans,
-                                     DenseMatrix& elmat) {
+                                     mfem::ElementTransformation& eltrans,
+                                     mfem::DenseMatrix& elmat) {
     // return saved values
     auto& saved = element_matrices_->operator[](eltrans.ElementNo);
     elmat.UseExternalData(saved.GetData(), saved.Height(), saved.Width());
   }
-}
+};
 
 } // namespace mimi::integrators
