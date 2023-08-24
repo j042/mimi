@@ -2,6 +2,8 @@
 
 #include <mfem.hpp>
 
+#include "mimi/utils/print.hpp"
+
 namespace mimi::solvers {
 
 /// @brief alias to mfem's newton solver
@@ -10,6 +12,8 @@ using Newton = mfem::NewtonSolver;
 class LineSearchNewton : public Newton {
 public:
   using Base_ = Newton;
+
+  using Base_::Base_;
 
   /// @brief implements scaling factor usine line search adapted from
   /// https://github.com/LLNL/ExaConstit/blob/exaconstit-dev/src/mechanics_solver.cpp

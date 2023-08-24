@@ -66,11 +66,12 @@ public:
 
     // create displacement
     auto& disp_fes = Base_::fe_spaces_["displacement"];
-    disp_fes.fe_space_ =
-        std::make_unique<mfem::FiniteElementSpace>(Base_::Mesh().get(),
-                                                   Base_::Mesh()->NURBSext,
-                                                   fe_collection,
-                                                   MeshDim());
+    // here, if we pass NURBSext, it will steal the ownership, causing segfault.
+    disp_fes.fe_space_ = std::make_unique<mfem::FiniteElementSpace>(
+        Base_::Mesh().get(),
+        nullptr, // Base_::Mesh()->NURBSext,
+        fe_collection,
+        MeshDim());
 
     // create solution fieds for displacements
     mfem::GridFunction& x = disp_fes.grid_functions_["x"];
@@ -84,7 +85,10 @@ public:
     // copy from mesh
     mfem::GridFunction& x_ref = disp_fes.grid_functions_["x_ref"];
     x_ref.SetSpace(disp_fes.fe_space_.get());
-    Base_::Mesh()->GetNodes(x_ref);
+    x_ref = *Base_::Mesh()->GetNodes();
+    // Base_::Mesh()->GetNodes(x_ref);
+
+    mimi::utils::PrintInfo("Setting initial conditions");
 
     // set initial condition
     x = x_ref;
@@ -97,6 +101,7 @@ public:
     // at first, this is empty
     auto le_oper = std::make_unique<mimi::operators::LinearElasticity>(
         *disp_fes.fe_space_);
+    mimi::utils::PrintInfo("Created LE oper");
 
     // now, setup the system.
     // create a dummy
@@ -241,10 +246,13 @@ public:
     auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
     Base_::linear_solvers_["linear_elasticity"] = lin_solver;
 
+    mimi::utils::PrintInfo("Set Linear Solver");
+
     // setup a newton solver
-    auto newton = std::shared_ptr<mimi::solvers::LineSearchNewton>();
+    auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
     Base_::newton_solvers_["linear_elasticity"] = newton;
     le_oper->SetNewtonSolver(newton);
+    mimi::utils::PrintInfo("create newton");
 
     // basic config. you can change this using ConfigureNewton()
     newton->iterative_mode = false;
@@ -262,6 +270,8 @@ public:
 
     // set dynamic system -> transfer ownership
     Base_::SetDynamicSystem2(le_oper.release(), gen_alpha.release());
+
+    // disp_fes.fe_space_.release();
   }
 };
 

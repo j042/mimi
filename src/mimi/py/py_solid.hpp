@@ -276,7 +276,7 @@ public:
     }
   }
 
-  virtual void Setup() {
+  virtual void Setup(const int nthreads = -1) {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("Derived class need to implement Setup().");

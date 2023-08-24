@@ -37,8 +37,8 @@ public:
                               const int nthreads) {
     MIMI_FUNC();
     // this integrator does not support embedded problems. mfem's does
-    assert(fes->GetFE(0)->GetDim()
-           == fes->GetElementTransformation(0)->GetSpaceDim());
+    assert(fes.GetFE(0)->GetDim()
+           == fes.GetElementTransformation(0)->GetSpaceDim());
 
     const int n_elem = fes.GetNE();
 
@@ -62,7 +62,7 @@ public:
 
             // alloc shape and shape_mat
             d_shape.SetSize(n_dof, dim);
-            d_shape_dxt.SetSize(n_dof, n_dof);
+            d_shape_dxt.SetSize(n_dof, dim);
             p_elmat.SetSize(n_dof, n_dof);
 
             // get elmat to save and set size
