@@ -10,6 +10,8 @@
 #include <pybind11/pybind11.h>
 
 // mimi
+#include "mimi/operators/base.hpp"
+#include "mimi/py/py_utils.hpp"
 #include "mimi/solvers/newton.hpp"
 #include "mimi/solvers/ode.hpp"
 #include "mimi/utils/boundary_conditions.hpp"
@@ -17,19 +19,31 @@
 
 namespace mimi::py {
 
+namespace py = pybind11;
+
 class PySolid {
 protected:
   // second order time dependent systems
   std::unique_ptr<mimi::solvers::OdeBase> ode2_solver_ = nullptr;
   std::unique_ptr<mfem::SecondOrderTimeDependentOperator> oper2_ = nullptr;
+  // non-owning ptr to solution vectors.
+  // you don't need to set this if you plan to implement time stepping yourself.
+  // used in PySolid's base time stepping methods
+  mfem::GridFunction* x2_;
+  mfem::GridFunction* x2_dot_;
 
   // first order time dependent systems
   std::unique_ptr<mimi::solvers::OdeBase> ode1_solver_ = nullptr;
   std::unique_ptr<mfem::TimeDependentOperator> oper1_ = nullptr;
+  // non-owning ptr to solution vectors.
+  // you don't need to set this if you plan to implement time stepping yourself.
+  // used in PySolid's base time stepping methods
+  mfem::GridFunction* x1_;
 
   // solvers
   std::map<std::string, std::shared_ptr<mimi::solvers::Newton>> newton_solvers_;
   std::map<std::string, std::shared_ptr<mfem::Solver>> linear_solvers_;
+  std::string fes_name1_; // key used to get grid functions
 
   // mesh
   std::unique_ptr<mfem::Mesh> mesh_ = nullptr;
@@ -63,6 +77,7 @@ protected:
 
   // current time, CET
   double t_{0.0};
+  double dt_{0.0};
 
 public:
   PySolid() = default;
@@ -287,6 +302,8 @@ public:
                                const double abs_tol,
                                const double max_iter,
                                const bool iterative_mode) {
+    MIMI_FUNC()
+
     auto& newton = newton_solvers_.at(name);
     newton->SetRelTol(rel_tol);
     newton->SetAbsTol(abs_tol);
@@ -304,6 +321,97 @@ public:
 
     oper2_ = std::unique_ptr<mfem::SecondOrderTimeDependentOperator>(oper2);
     ode2_solver_ = std::unique_ptr<mimi::solvers::OdeBase>(ode2);
+  }
+
+  virtual double CurrentTime() const { MIMI_FUNC() return t_; }
+
+  virtual double GetTimeStepSize() const { MIMI_FUNC() return dt_; }
+
+  virtual void SetTimeStepSize(const double dt) {
+    MIMI_FUNC()
+
+    dt_ = dt;
+  }
+
+  virtual py::array_t<double> LinearFormView2(const std::string lf_name) {
+    auto& lf = *dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get())
+                    ->linear_forms_.at(lf_name);
+    return mimi::py::NumpyView<double>(lf, lf.Size());
+  }
+
+  virtual py::array_t<double> SolutionView(const std::string& fes_name,
+                                           const std::string& component_name) {
+    MIMI_FUNC()
+
+    auto& fes = fe_spaces_.at(fes_name);
+    auto& grid_func = fes.grid_functions_.at(component_name);
+
+    return mimi::py::NumpyView<double>(grid_func,
+                                       grid_func.Size()); // will be raveled.
+  }
+
+  virtual py::array_t<int>
+  BoundaryDofIds(const std::string& fes_name, const int& bid, const int& dim) {
+    MIMI_FUNC()
+
+    auto& fes = fe_spaces_.at(fes_name);
+    auto& mfem_array = fes.boundary_dof_ids_.at(bid).at(dim);
+
+    return mimi::py::NumpyCopy<int>(mfem_array, mfem_array.Size());
+  }
+
+  virtual py::array_t<int> ZeroDofIds(const std::string& fes_name) {
+    MIMI_FUNC()
+
+    auto& fes = fe_spaces_.at(fes_name);
+
+    return mimi::py::NumpyCopy<int>(fes.zero_dofs_, fes.zero_dofs_.Size());
+  }
+
+  virtual void StepTime2() {
+    MIMI_FUNC()
+
+    assert(x2_);
+    assert(x2_dot_);
+
+    ode2_solver_->StepTime2(*x2_, *x2_dot_, t_, dt_);
+  }
+
+  virtual void FixedPointSolve2() {
+    MIMI_FUNC()
+
+    assert(x2_);
+    assert(x2_dot_);
+
+    ode2_solver_->FixedPointSolve2(*x2_, *x2_dot_, t_, dt_);
+  }
+
+  virtual void FixedPointAdvance2(py::array_t<double>& x,
+                                  py::array_t<double>& x_dot) {
+    MIMI_FUNC()
+
+    const int x_size = x.size();
+    double* x_ptr = static_cast<double*>(x.request().ptr);
+    const int x_dot_size = x_dot.size();
+    double* x_dot_ptr = static_cast<double*>(x_dot.request().ptr);
+
+    assert(x2_->Size() == x_size);
+    assert(x2_dot_->Size() == x_dot_size);
+
+    // wrap those ptrs
+    mfem::Vector x_vec(x_ptr, x_size);
+    mfem::Vector x_dot_vec(x_dot_ptr, x_dot_size);
+
+    ode2_solver_->FixedPointAdvance2(x_vec, x_dot_vec, t_, dt_);
+  }
+
+  virtual void AdvanceTime2() {
+    MIMI_FUNC()
+
+    assert(x2_);
+    assert(x2_dot_);
+
+    ode2_solver_->AdvanceTime2(*x2_, *x2_dot_, t_, dt_);
   }
 };
 

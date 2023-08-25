@@ -64,29 +64,34 @@ public:
       mimi::utils::PrintAndThrowError("FE collection does not exist in mesh");
     }
 
-    // create displacement
+    // create displacement fe space
     auto& disp_fes = Base_::fe_spaces_["displacement"];
     // here, if we pass NURBSext, it will steal the ownership, causing segfault.
     disp_fes.fe_space_ = std::make_unique<mfem::FiniteElementSpace>(
         Base_::Mesh().get(),
         nullptr, // Base_::Mesh()->NURBSext,
         fe_collection,
-        MeshDim());
+        MeshDim(),
+        // this is how mesh provides its nodes, so solutions should match them
+        // else, dofs does not match
+        mfem::Ordering::byVDIM);
 
     // create solution fieds for displacements
     mfem::GridFunction& x = disp_fes.grid_functions_["x"];
     x.SetSpace(disp_fes.fe_space_.get());
+    // let's register this ptr to use base class' time stepping
+    Base_::x2_ = &x;
 
     // and velocity
-    mfem::GridFunction& v = disp_fes.grid_functions_["v"];
+    mfem::GridFunction& v = disp_fes.grid_functions_["x_dot"];
     v.SetSpace(disp_fes.fe_space_.get());
+    Base_::x2_dot_ = &v;
 
     // and reference / initial reference. initialize with fe space then
     // copy from mesh
     mfem::GridFunction& x_ref = disp_fes.grid_functions_["x_ref"];
     x_ref.SetSpace(disp_fes.fe_space_.get());
     x_ref = *Base_::Mesh()->GetNodes();
-    // Base_::Mesh()->GetNodes(x_ref);
 
     mimi::utils::PrintInfo("Setting initial conditions");
 
@@ -99,8 +104,9 @@ public:
 
     // create a linear elasticity operator
     // at first, this is empty
-    auto le_oper = std::make_unique<mimi::operators::LinearElasticity>(
-        *disp_fes.fe_space_);
+    auto le_oper =
+        std::make_unique<mimi::operators::LinearElasticity>(*disp_fes.fe_space_,
+                                                            &x_ref);
     mimi::utils::PrintInfo("Created LE oper");
 
     // now, setup the system.
@@ -124,8 +130,10 @@ public:
     mass_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
 
     // assemble and remove zero bc entries
-    mass->Assemble();
+    mass->Assemble(1);
     mass->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
+
+    mimi::utils::PrintInfo(disp_fes.zero_dofs_);
 
     // release some memory
     mass_integ->element_matrices_.reset(); // release saved matrices
@@ -148,7 +156,7 @@ public:
       // nthread assemble
       visc_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
 
-      visc->Assemble();
+      visc->Assemble(1);
       visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
 
       visc_integ->element_matrices_.reset();
@@ -168,12 +176,13 @@ public:
 
     // create integ
     auto stiffness_integ = new mimi::integrators::LinearElasticity(lambda, mu);
+    // auto stiffness_integ = new mfem::ElasticityIntegrator(*lambda, *mu);
     stiffness->AddDomainIntegrator(stiffness_integ);
 
     // nthread assemble
     stiffness_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
 
-    stiffness->Assemble();
+    stiffness->Assemble(1);
     stiffness->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
 
     stiffness_integ->element_matrices_.reset();
@@ -221,7 +230,7 @@ public:
       // apply values at an appropriate location
       for (auto const& [bid, dim_value] : traction) {
         for (auto const& [dim, value] : dim_value) {
-          auto tpd = traction_per_dim[dim];
+          auto& tpd = traction_per_dim[dim];
           tpd(bid) = value;
         }
       }
@@ -239,6 +248,8 @@ public:
 
     if (rhs_set) {
       rhs->Assemble();
+      // remove dirichlet nodes
+      rhs->SetSubVector(disp_fes.zero_dofs_, 0.0);
       le_oper->AddLinearForm("rhs", rhs);
     }
 
@@ -246,19 +257,21 @@ public:
     auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
     Base_::linear_solvers_["linear_elasticity"] = lin_solver;
 
-    mimi::utils::PrintInfo("Set Linear Solver");
-
     // setup a newton solver
     auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
+    // auto newton = std::make_shared<mimi::solvers::Newton>();
     Base_::newton_solvers_["linear_elasticity"] = newton;
     le_oper->SetNewtonSolver(newton);
-    mimi::utils::PrintInfo("create newton");
 
     // basic config. you can change this using ConfigureNewton()
     newton->iterative_mode = false;
+    newton->SetOperator(*le_oper);
     newton->SetSolver(*lin_solver);
-    newton->SetPrintLevel(
-        mfem::IterativeSolver::PrintLevel().Warnings().Errors().Summary());
+    newton->SetPrintLevel(mfem::IterativeSolver::PrintLevel()
+                              .Warnings()
+                              .Errors()
+                              .Summary()
+                              .FirstAndLast());
     newton->SetRelTol(1e-8);
     newton->SetAbsTol(1e-12);
     newton->SetMaxIter(MeshDim() * 10);
@@ -268,10 +281,11 @@ public:
         std::make_unique<mimi::solvers::GeneralizedAlpha2>(*le_oper);
     gen_alpha->PrintInfo();
 
+    // finally call setup for the operator
+    le_oper->Setup();
+
     // set dynamic system -> transfer ownership
     Base_::SetDynamicSystem2(le_oper.release(), gen_alpha.release());
-
-    // disp_fes.fe_space_.release();
   }
 };
 

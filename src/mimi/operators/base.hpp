@@ -18,7 +18,6 @@ public:
   using BilinearFormPointer_ = std::shared_ptr<mfem::BilinearForm>;
   using NonlinearFormPointer_ = std::shared_ptr<mfem::NonlinearForm>;
 
-protected:
   mfem::FiniteElementSpace& fe_space_;
 
   /// @brief container to hold any necessary / related linear forms
@@ -31,7 +30,6 @@ protected:
   /// @brief newton solver should be configured outside of this class
   std::shared_ptr<mimi::solvers::Newton> newton_solver_{nullptr};
 
-public:
   /// @brief ctor
   /// @param fe_space
   OperatorBase(mfem::FiniteElementSpace& fe_space) : fe_space_(fe_space) {}
@@ -39,7 +37,6 @@ public:
   /// @brief adds linear form
   /// @param key
   /// @param lf
-
   virtual void AddLinearForm(std::string const& key,
                              const LinearFormPointer_& lf) {
     MIMI_FUNC();
@@ -50,7 +47,6 @@ public:
   /// @brief adds bilinearform
   /// @param key
   /// @param bf
-
   virtual void AddBilinearForm(std::string const& key,
                                const BilinearFormPointer_& bf) {
     MIMI_FUNC();
@@ -68,8 +64,10 @@ public:
     nonlinear_forms_[key] = nf;
   }
 
-  virtual void SetNewtonSolver(
-      std::shared_ptr<mimi::solvers::LineSearchNewton> const& newton_solver) {
+  /// @brief sets newton solver for the operator
+  /// @param newton_solver
+  virtual void
+  SetNewtonSolver(std::shared_ptr<mimi::solvers::Newton> const& newton_solver) {
     MIMI_FUNC();
 
     newton_solver_ = newton_solver;

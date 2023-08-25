@@ -26,7 +26,36 @@ void init_py_solid(py::module_& m) {
       .def_property("boundary_condition",
                     &PySolid::GetBoundaryConditions,
                     &PySolid::SetBoundaryConditions)
-      .def("setup", &PySolid::Setup);
+      .def("setup", &PySolid::Setup)
+      .def_property_readonly("current_time", &PySolid::CurrentTime)
+      .def_property("time_step_size",
+                    &PySolid::GetTimeStepSize,
+                    &PySolid::SetTimeStepSize)
+      .def("linear_form_view2", &PySolid::LinearFormView2, py::arg("lf_name"))
+      .def("solution_view",
+           &PySolid::SolutionView,
+           py::arg("fe_space_name"),
+           py::arg("component_name"))
+      .def("boundary_dof_ids",
+           &PySolid::BoundaryDofIds,
+           py::arg("fe_space_name"),
+           py::arg("bid"),
+           py::arg("dim"))
+      .def("zero_dof_ids", &PySolid::ZeroDofIds, py::arg("fe_space_name"))
+      .def("step_time2", &PySolid::StepTime2)
+      .def("configure_newton",
+           &PySolid::ConfigureNewton,
+           py::arg("name"),
+           py::arg("rel_tol"),
+           py::arg("abs_tol"),
+           py::arg("max_iter"),
+           py::arg("iterative_mode"))
+      .def("fixed_point_solve2", &PySolid::FixedPointSolve2)
+      .def("fixed_point_advance2",
+           &PySolid::FixedPointAdvance2,
+           py::arg("x"),
+           py::arg("x_dot"))
+      .def("advance_time2", &PySolid::AdvanceTime2);
 }
 
 } // namespace mimi::py

@@ -39,6 +39,12 @@ protected:
   double abs_tol_{1e-12};
   int max_iter_{1000};
 
+  // As stiffness  in linear elasticity expects pure difference,
+  // we want to keep a pointer to initial condition and
+  // temporary vector to hold difference before calling mult
+  mfem::GridFunction* x_ref_;
+  mutable mfem::Vector pure_diff_;
+
   // internal values - to set params for each implicit term
   const mfem::Vector* x_;
   const mfem::Vector* v_;
@@ -47,7 +53,9 @@ protected:
 
   // holder for jacobian. Add() creates a new jacobian and we need to be able to
   // destroy it afterwards
-  mfem::SparseMatrix* jacobian_;
+  // mutable so that it can be altered within const func that we have to
+  // implement
+  mutable mfem::SparseMatrix* jacobian_ = nullptr;
 
 public:
   /// @brief ctor
@@ -57,10 +65,14 @@ public:
   /// S is viscosity/damping matrix, E is elasticity stiffness matrix, and M is
   /// mass matrix
   /// @param fe_space
-  LinearElasticity(mfem::FiniteElementSpace& fe_space)
+  LinearElasticity(mfem::FiniteElementSpace& fe_space,
+                   mfem::GridFunction* x_ref)
       : MimiBase_(fe_space),
-        MfemBase_(fe_space.GetTrueVSize(), 0.0) {
+        MfemBase_(fe_space.GetTrueVSize(), 0.0),
+        x_ref_(x_ref) {
     MIMI_FUNC();
+
+    pure_diff_.SetSize(x_ref->Size());
   }
 
   virtual std::string Name() { return "LinearElasticity"; }
@@ -85,13 +97,17 @@ public:
     MIMI_FUNC()
 
     // setup mass matrix and inverter
+    // this is used once at the very beginning of implicit ode step
     mass_ = MimiBase_::bilinear_forms_.at("mass");
     mass_inv_.iterative_mode = false;
     mass_inv_.SetRelTol(rel_tol_);
     mass_inv_.SetAbsTol(abs_tol_);
     mass_inv_.SetMaxIter(max_iter_);
-    mass_inv_.SetPrintLevel(
-        mfem::IterativeSolver::PrintLevel().Warnings().Errors().Summary());
+    mass_inv_.SetPrintLevel(mfem::IterativeSolver::PrintLevel()
+                                .Warnings()
+                                .Errors()
+                                .Summary()
+                                .FirstAndLast());
     mass_inv_.SetPreconditioner(mass_inv_prec_);
     mass_inv_.SetOperator(mass_->SpMat());
 
@@ -132,13 +148,16 @@ public:
   /// @brief computes right hand side of ODE (explicit solve)
   virtual void Mult(const mfem::Vector& x,
                     const mfem::Vector& dx_dt,
-                    mfem::Vector& d2x_dt2) {
+                    mfem::Vector& d2x_dt2) const {
     MIMI_FUNC()
 
     // Temp vector
     mfem::Vector z(x.Size());
 
-    stiffness_->Mult(x, z);
+    // get pure diff
+    add(x, -1.0, *x_ref_, pure_diff_);
+
+    stiffness_->Mult(pure_diff_, z);
 
     if (viscosity_) {
       viscosity_->AddMult(dx_dt, z);
@@ -149,6 +168,7 @@ public:
     }
 
     z.Neg(); // flips sign inplace
+
     mass_inv_.Mult(z, d2x_dt2);
   }
 
@@ -179,7 +199,10 @@ public:
 
     mass_->Mult(d2x_dt2, y);
 
-    stiffness_->AddMult(temp_x, y);
+    // get pure diff
+    add(temp_x, -1.0, *x_ref_, pure_diff_);
+
+    stiffness_->AddMult(pure_diff_, y);
 
     if (viscosity_) {
       mfem::Vector temp_v(v_->Size());
@@ -203,7 +226,7 @@ public:
   }
 
   /// Compute J = M + dt S + dt^2 E(x + dt (v + dt k)).
-  mfem::Operator& GetGradient(const mfem::Vector& d2x_dt2) {
+  virtual mfem::Operator& GetGradient(const mfem::Vector& d2x_dt2) const {
     MIMI_FUNC()
 
     mfem::Vector temp_x(d2x_dt2.Size());
