@@ -291,6 +291,61 @@ public:
     }
   }
 
+  virtual py::dict GetNurbs(const bool splinepy) {
+    MIMI_FUNC()
+
+    py::dict nurbs;
+    // degrees
+    nurbs["degrees"] = py::cast(MeshDegrees());
+
+    // knot vectors
+    py::list kvs;
+    for (int i{}; i < MeshDim(); ++i) {
+      const auto& mfem_kv = *Mesh()->NURBSext->GetKnotVector(i);
+
+      py::list kv;
+      for (int j{}; j < mfem_kv.Size(); ++j) {
+        kv.append(mfem_kv[j]);
+      }
+
+      kvs.append(kv);
+    }
+    nurbs["knot_vectors"] = kvs;
+
+    // control points
+    mfem::Vector cps;
+    Mesh()->GetNodes(cps);
+    nurbs["control_points"] = mimi::py::NumpyCopy<double>(cps, cps.Size() / MeshDim(), MeshDim());
+
+    /*
+    mimi::utils::PrintInfo("num patch:",Mesh()->NURBSext->GetNP());
+
+    mfem::NURBSPatchMap pm(Mesh()->NURBSext);
+    std::vector<const mfem::KnotVector*> kv(2);
+    kv[0] = Mesh()->NURBSext->GetKnotVector(0);
+    kv[1] = Mesh()->NURBSext->GetKnotVector(1);
+    pm.SetPatchDofMap(0, kv.data());
+
+    for (int i{}; i < kv[0]->GetNCP(); ++i) {
+      for (int j{}; j < kv[1]->GetNCP(); ++j) {
+        mimi::utils::PrintInfo(" ", i, j, pm(i, j));
+      }
+    }
+
+    for (int i{}; i < kv[0]->GetNCP(); ++i) {
+      for (int j{}; j < kv[1]->GetNCP(); ++j) {
+        mimi::utils::PrintInfo(" ", j, i, pm(j, i));
+      }
+    }
+    */
+
+    // weights
+    mfem::Vector& ws = Mesh()->NURBSext->GetWeights();
+    nurbs["weights"] = mimi::py::NumpyCopy<double>(ws, ws.Size(), 1);
+
+    return nurbs;
+  }
+
   virtual void Setup(const int nthreads = -1) {
     MIMI_FUNC()
 

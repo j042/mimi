@@ -26,6 +26,7 @@ void init_py_solid(py::module_& m) {
       .def_property("boundary_condition",
                     &PySolid::GetBoundaryConditions,
                     &PySolid::SetBoundaryConditions)
+      .def("nurbs", &PySolid::GetNurbs)
       .def("setup", &PySolid::Setup)
       .def_property_readonly("current_time", &PySolid::CurrentTime)
       .def_property("time_step_size",
