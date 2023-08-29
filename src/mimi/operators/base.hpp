@@ -39,7 +39,7 @@ public:
   /// @param lf
   virtual void AddLinearForm(std::string const& key,
                              const LinearFormPointer_& lf) {
-    MIMI_FUNC();
+    MIMI_FUNC()
 
     linear_forms_[key] = lf;
   }
@@ -59,7 +59,7 @@ public:
   /// @param nf
   virtual void AddNonlinearForm(std::string const& key,
                                 const NonlinearFormPointer_& nf) {
-    MIMI_FUNC();
+    MIMI_FUNC()
 
     nonlinear_forms_[key] = nf;
   }

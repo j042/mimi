@@ -3,6 +3,8 @@
 #include <memory>
 #include <type_traits>
 
+#include "mimi/utils/print.hpp"
+
 namespace mimi::utils {
 
 /// Adapted from a post from Casey
@@ -60,11 +62,23 @@ using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
 /// @tparam Type
 template<typename Type>
 struct Data {
-  Type* data_;
-  const int size_{0};
+  Type* data_{nullptr};
+  int size_{0};
   int stride_{1};
 
-  Data(const int n) : data_(new Type[n]), size_(n) {}
+  /// @brief can't set size twice
+  /// @param n
+  void SetSize(int const& n) {
+    if (data_) {
+      mimi::utils::PrintAndThrowError(
+          "data is not empty and can't assign new size.");
+    }
+    data_ = new Type[n];
+    size_ = n;
+  }
+
+  Data() = default;
+  Data(const int n) { SetSize(n); }
   Data(int n, const int stride) : Data(n), stride_(stride) {}
   ~Data() { delete[] data_; }
 

@@ -15,6 +15,7 @@
 #include "mimi/solvers/newton.hpp"
 #include "mimi/solvers/ode.hpp"
 #include "mimi/utils/boundary_conditions.hpp"
+#include "mimi/utils/precomputed.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::py {
@@ -43,7 +44,6 @@ protected:
   // solvers
   std::map<std::string, std::shared_ptr<mimi::solvers::Newton>> newton_solvers_;
   std::map<std::string, std::shared_ptr<mfem::Solver>> linear_solvers_;
-  std::string fes_name1_; // key used to get grid functions
 
   // mesh
   std::unique_ptr<mfem::Mesh> mesh_ = nullptr;
@@ -54,6 +54,7 @@ protected:
     std::map<int, std::map<int, mfem::Array<int>>> boundary_dof_ids_;
     std::unordered_map<std::string, mfem::GridFunction> grid_functions_;
     mfem::Array<int> zero_dofs_;
+    std::unique_ptr<mimi::utils::PrecomputedElementData> precomputed_;
   };
 
   // there can be multiple fe spaces
@@ -291,7 +292,7 @@ public:
     }
   }
 
-  virtual py::dict GetNurbs(const bool splinepy) {
+  virtual py::dict GetNurbs() {
     MIMI_FUNC()
 
     py::dict nurbs;
@@ -313,9 +314,12 @@ public:
     nurbs["knot_vectors"] = kvs;
 
     // control points
-    mfem::Vector cps;
+    mfem::Vector cps(NumberOfVertices() * MeshDim());
+    // mimi::utils::PrintInfo("num patch:",Mesh()->NURBSext->GetNP());
     Mesh()->GetNodes(cps);
-    nurbs["control_points"] = mimi::py::NumpyCopy<double>(cps, cps.Size() / MeshDim(), MeshDim());
+    // Mesh()->NURBSext->SetCoordsFromPatches(cps);
+    nurbs["control_points"] =
+        mimi::py::NumpyCopy<double>(cps, cps.Size() / MeshDim(), MeshDim());
 
     /*
     mimi::utils::PrintInfo("num patch:",Mesh()->NURBSext->GetNP());

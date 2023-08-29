@@ -9,6 +9,7 @@
 
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/n_thread_exe.hpp"
+#include "mimi/utils/precomputed.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::integrators {
@@ -38,26 +39,26 @@ public:
   /// has a similar option using OpenMP.
   /// @param fes
   /// @param nthreads
-  void ComputeElementMatrices(const mfem::FiniteElementSpace& fes,
-                              const int nthreads) {
-    MIMI_FUNC();
+  void
+  ComputeElementMatrices(mimi::utils::PrecomputedElementData& precomputed) {
+    MIMI_FUNC()
 
-    const int n_elem = fes.GetNE();
-
+    const int n_elem = precomputed.fe_spaces_[0]->GetNE();
+    const int nthreads = precomputed.fe_spaces_.size();
     // allocate
     element_matrices_ = std::make_unique<ElementMatrices_>(n_elem);
 
     auto assemble_element_matrices =
-        [&](const int begin, const int end, const int) {
+        [&](const int begin, const int end, const int i_thread) {
           // aux mfem containers
           mfem::DenseMatrix d_shape, g_shape, p_elmat;
           mfem::Vector div_shape;
 
           for (int i{begin}; i < end; ++i) {
-            // get related objects from fespace
-            const mfem::FiniteElement& el = *fes.GetFE(i);
-            mfem::ElementTransformation& eltrans_stress_free_to_reference =
-                *fes.GetElementTransformation(i);
+            auto& int_rules = precomputed.int_rules_[i_thread];
+            auto& el = *precomputed.elements_[i];
+            auto& eltrans_stress_free_to_reference =
+                *precomputed.target_to_reference_[i];
 
             // basic infos for this elem
             const int n_dof = el.GetDof();
@@ -76,7 +77,7 @@ public:
 
             // prepare quad loop;
             const mfem::IntegrationRule& ir =
-                mfem::IntRules.Get(el.GetGeomType(), 2 * el.GetOrder() + 3);
+                int_rules.Get(el.GetGeomType(), 2 * el.GetOrder() + 3);
 
             // quad loop
             for (int q{}; q < ir.GetNPoints(); ++q) {
@@ -150,6 +151,8 @@ public:
   virtual void AssembleElementMatrix(const mfem::FiniteElement& el,
                                      mfem::ElementTransformation& eltrans,
                                      mfem::DenseMatrix& elmat) {
+    MIMI_FUNC()
+
     // return saved values
     auto& saved = element_matrices_->operator[](eltrans.ElementNo);
     elmat.UseExternalData(saved.GetData(), saved.Height(), saved.Width());

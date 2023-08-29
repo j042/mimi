@@ -73,7 +73,9 @@ class CMakeBuild(build_ext):
         # MFEM args
         cmake_args += [
             "-DMFEM_USE_SUITESPARSE=ON",
-            "-DMFEM_USE_OPENMP=ON",
+            # "-DMFEM_USE_OPENMP=ON",
+            # "-DMFEM_THREAD_SAFE=ON",
+            "-DMFEM_USE_LAPACK=ON",
         ]
 
         build_args = []

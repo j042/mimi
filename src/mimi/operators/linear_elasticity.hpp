@@ -139,6 +139,7 @@ public:
                              const mfem::Vector* x,
                              const mfem::Vector* v) {
     MIMI_FUNC()
+
     fac0_ = fac0;
     fac1_ = fac1;
     x_ = x;
@@ -194,6 +195,7 @@ public:
   /// computes residual y = E(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
+
     mfem::Vector temp_x(x_->Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 

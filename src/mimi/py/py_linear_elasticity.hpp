@@ -76,6 +76,11 @@ public:
         // else, dofs does not match
         mfem::Ordering::byVDIM);
 
+    // create precomputed data
+    disp_fes.precomputed_ =
+        std::make_unique<mimi::utils::PrecomputedElementData>();
+    disp_fes.precomputed_->Setup(*disp_fes.fe_space_, nthreads);
+
     // create solution fieds for displacements
     mfem::GridFunction& x = disp_fes.grid_functions_["x"];
     x.SetSpace(disp_fes.fe_space_.get());
@@ -127,13 +132,11 @@ public:
     mass->AddDomainIntegrator(mass_integ);
 
     // precompute using nthread
-    mass_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
+    mass_integ->ComputeElementMatrices(*disp_fes.precomputed_);
 
     // assemble and remove zero bc entries
     mass->Assemble(1);
     mass->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
-
-    mimi::utils::PrintInfo(disp_fes.zero_dofs_);
 
     // release some memory
     mass_integ->element_matrices_.reset(); // release saved matrices
@@ -154,7 +157,7 @@ public:
       visc->AddDomainIntegrator(visc_integ);
 
       // nthread assemble
-      visc_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
+      visc_integ->ComputeElementMatrices(*disp_fes.precomputed_);
 
       visc->Assemble(1);
       visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
@@ -180,7 +183,7 @@ public:
     stiffness->AddDomainIntegrator(stiffness_integ);
 
     // nthread assemble
-    stiffness_integ->ComputeElementMatrices(*disp_fes.fe_space_, nthreads);
+    stiffness_integ->ComputeElementMatrices(*disp_fes.precomputed_);
 
     stiffness->Assemble(1);
     stiffness->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
@@ -258,7 +261,8 @@ public:
     Base_::linear_solvers_["linear_elasticity"] = lin_solver;
 
     // setup a newton solver
-    auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
+    // auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
+    auto newton = std::make_shared<mimi::solvers::Newton>();
     // auto newton = std::make_shared<mimi::solvers::Newton>();
     Base_::newton_solvers_["linear_elasticity"] = newton;
     le_oper->SetNewtonSolver(newton);
