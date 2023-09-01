@@ -58,7 +58,7 @@ public:
             auto& int_rules = precomputed.int_rules_[i_thread];
             auto& el = *precomputed.elements_[i];
             auto& eltrans_stress_free_to_reference =
-                *precomputed.target_to_reference_[i];
+                *precomputed.target_to_reference_element_trans_[i];
 
             // basic infos for this elem
             const int n_dof = el.GetDof();

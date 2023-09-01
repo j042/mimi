@@ -25,6 +25,7 @@ namespace mimi::py {
 class PyLinearElasticity : public PySolid {
 public:
   double mu_, lambda_, rho_, viscosity_{-1.0};
+
   using Base_ = PySolid;
 
   PyLinearElasticity() = default;
@@ -49,6 +50,7 @@ public:
 
   virtual void Setup(const int nthreads = -1) {
     MIMI_FUNC()
+
     // selected comments from ex10.
     //  Define the vector finite element spaces representing the mesh
     //  deformation x, the velocity v, and the initial configuration, x_ref.

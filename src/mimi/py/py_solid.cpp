@@ -27,6 +27,10 @@ void init_py_solid(py::module_& m) {
                     &PySolid::GetBoundaryConditions,
                     &PySolid::SetBoundaryConditions)
       .def("nurbs", &PySolid::GetNurbs)
+      .def("add_spline",
+           &PySolid::AddSpline,
+           py::arg("spline_name"),
+           py::arg("spline"))
       .def("setup", &PySolid::Setup)
       .def_property_readonly("current_time", &PySolid::CurrentTime)
       .def_property("time_step_size",

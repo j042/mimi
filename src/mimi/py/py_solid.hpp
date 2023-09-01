@@ -9,6 +9,9 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+// splinepy
+#include <splinepy/py/py_spline.hpp>
+
 // mimi
 #include "mimi/operators/base.hpp"
 #include "mimi/py/py_utils.hpp"
@@ -75,6 +78,10 @@ protected:
   // holder for vector coefficients
   std::map<std::string, std::shared_ptr<mfem::VectorCoefficient>>
       vector_coefficients_;
+
+  // holder for splines
+  std::unordered_map<std::string, std::shared_ptr<splinepy::py::PySpline>>
+      splines_;
 
   // current time, CET
   double t_{0.0};
@@ -348,6 +355,14 @@ public:
     nurbs["weights"] = mimi::py::NumpyCopy<double>(ws, ws.Size(), 1);
 
     return nurbs;
+  }
+
+  virtual void AddSpline(std::string const& s_name,
+                         std::shared_ptr<splinepy::py::PySpline> spline) {
+    MIMI_FUNC()
+
+    splines_[s_name] = spline;
+    mimi::utils::PrintInfo("I got a spline", spline->WhatAmI());
   }
 
   virtual void Setup(const int nthreads = -1) {
