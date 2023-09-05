@@ -109,7 +109,7 @@ public:
       // half step
       tmp_x = x;
       add(tmp_x, -0.5, Base_::c, tmp_x);
-      Base_::oper->Mult(x, Base_::r);
+      Base_::oper->Mult(tmp_x, Base_::r);
       if (have_b) {
         Base_::r -= b;
       }
@@ -146,7 +146,7 @@ public:
       }
 
       // current norm
-      norm = Base_::Norm(r);
+      norm = Base_::Norm(Base_::r);
     }
 
     Base_::final_iter = it;

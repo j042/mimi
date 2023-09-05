@@ -6,6 +6,7 @@
 #include <mfem.hpp>
 
 #include "mimi/utils/containers.hpp"
+#include "mimi/utils/mfem_ext.hpp"
 #include "mimi/utils/n_thread_exe.hpp"
 #include "mimi/utils/print.hpp"
 
@@ -44,11 +45,11 @@ CreateTransformation() {
   return std::make_shared<mfem::IsoparametricTransformation>();
 }
 
-inline std::shared_ptr<mfem::FaceElementTransformations>
+inline std::shared_ptr<mimi::utils::FaceElementTransformationsExt>
 CreateFaceTransformation() {
   MIMI_FUNC()
 
-  return std::make_shared<mfem::FaceElementTransformations>();
+  return std::make_shared<mimi::utils::FaceElementTransformationsExt>();
 }
 
 /// base class for precomputed data
@@ -62,24 +63,25 @@ public:
   mimi::utils::Vector<mfem::IntegrationRules> int_rules_;
 
   /// @brief size == nthreads -- each object should have its own
-  mimi::utils::Vector<mfem::IntegrationRule*> int_rule_;
+  mimi::utils::Vector<const mfem::IntegrationRule*> int_rule_;
 
   // following can be shared as long as one thread is using it at a time
 
   /// @brief size == nthreads, can share as long as v_dim are the same
   mimi::utils::Vector<std::shared_ptr<mfem::FiniteElementSpace>> fe_spaces_;
 
-  /// @brief size == nthreads, can share
-  mimi::utils::Vector<std::shared_ptr<mfem::Mesh>> meshes_;
+  /// @brief size == nthreads, can share - just for boundary, we use mesh
+  /// extention
+  mimi::utils::Vector<std::shared_ptr<mimi::utils::MeshExt>> meshes_;
 
   /// @brief size == nthreads, can share as long as they are same geometry
   mimi::utils::Vector<std::shared_ptr<mfem::NURBSFECollection>> fe_collections_;
 
-  /// @brief size == n_elem
-  mimi::utils::Vector<std::shared_ptr<mfem::DofTransformation>> dof_trans_;
-
   /// @brief size == n_elem, harmless share
   mimi::utils::Vector<std::shared_ptr<mfem::Array<int>>> v_dofs_;
+
+  /// @brief size == n_elem, harmless share
+  mimi::utils::Vector<std::shared_ptr<mfem::Array<int>>> boundary_v_dofs_;
 
   /// @brief size == n_elem, harmless share. boundary elements will also refer
   /// to this elem.
@@ -87,7 +89,8 @@ public:
 
   /// @brief size == n_b_elem, harmless share. boundary elements will also refer
   /// to this elem.
-  mimi::utils::Vector<std::shared_ptr<mfem::NURBSFiniteElement>> boundary_elements_;
+  mimi::utils::Vector<std::shared_ptr<mfem::NURBSFiniteElement>>
+      boundary_elements_;
 
   /// @brief size == n_elem, can share as long as each are separately accessed
   /// wording:
@@ -98,7 +101,8 @@ public:
       target_to_reference_element_trans_;
 
   /// @brief size == n_elem, can share as long as each are separately accessed
-  mimi::utils::Vector<std::shared_ptr<mfem::FaceElementTransformations>>
+  mimi::utils::Vector<
+      std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>
       target_to_reference_boundary_trans_;
 
   /// @brief
@@ -108,17 +112,20 @@ public:
 
   /// @brief size == {n_elem; n_patch} x n_quad. each integrator can have its
   /// own.
-  std::unordered_map < std::string,
-      mimi::utils::Vector < mimi::utils::Vector <mfem::Vector >>> vectors_;
+  std::unordered_map<std::string,
+                     mimi::utils::Vector<mimi::utils::Vector<mfem::Vector>>>
+      vectors_;
 
   /// @brief meant to hold jacobians per whatever
-  std::unordered_map < std::string,
-      mimi::utils::Vector < mimi::utils::Vector <mfem::DenseMatrix
-          >>> matrices_;
+  std::unordered_map<
+      std::string,
+      mimi::utils::Vector<mimi::utils::Vector<mfem::DenseMatrix>>>
+      matrices_;
 
   /// @brief relevant markers for nonlinear boundary integrations
   /// this is integrator dependant
-  std::unordered_map <std::string, std::shared_ptr<mfem::Array<int>>> boundary_attr_markers_;
+  std::unordered_map<std::string, std::shared_ptr<mfem::Array<int>>>
+      boundary_attr_markers_;
 
   PrecomputedData() = default;
   virtual ~PrecomputedData() = default;
@@ -129,7 +136,6 @@ public:
     fe_spaces_.clear();
     meshes_.clear();
     fe_collections_.clear();
-    dof_trans_.clear();
     v_dofs_.clear();
     elements_.clear();
     target_to_reference_element_trans_.clear();
@@ -144,7 +150,25 @@ public:
     n_threads_ = -1;
   }
 
-  virtual void PasteCommonTo(std::shared_ptr<PrecomputedData>& other) {}
+  /// @brief pastes shareable properties
+  virtual void PasteCommonTo(std::shared_ptr<PrecomputedData>& other) {
+    MIMI_FUNC()
+
+    other->int_rules_ =
+        mimi::utils::Vector<mfem::IntegrationRules>(int_rules_.size(),
+                                                    mfem::IntegrationRules());
+    other->fe_spaces_ = fe_spaces_;
+    other->meshes_ = meshes_;
+    other->fe_collections_ = fe_collections_;
+    other->v_dofs_ = v_dofs_;
+    other->boundary_v_dofs_ = boundary_v_dofs_;
+    other->elements_ = elements_;
+    other->boundary_elements_ = boundary_elements_;
+    other->target_to_reference_element_trans_ =
+        target_to_reference_element_trans_;
+    other->target_to_reference_boundary_trans_ =
+        target_to_reference_boundary_trans_;
+  }
 
   virtual void Setup(const mfem::FiniteElementSpace& fe_space,
                      const int nthreads) {
@@ -166,7 +190,8 @@ public:
       int_rules_.emplace_back(mfem::IntegrationRules{});
 
       // deep copy mesh
-      meshes_.emplace_back(std::make_shared<mfem::Mesh>(*fe_space.GetMesh()));
+      meshes_.emplace_back(
+          std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(), true));
 
       // create fe_collection - TODO - what do they really do?
       fe_collections_.emplace_back(
@@ -185,8 +210,8 @@ public:
     const int dim = fe_space.GetMesh()->Dimension();
 
     // allocate vectors
-    dof_trans_.resize(n_elem);
     v_dofs_.resize(n_elem);
+    boundary_v_dofs_.resize(n_b_elem);
     elements_.resize(n_elem);
     boundary_elements_.resize(n_b_elem);
     target_to_reference_element_trans_.resize(n_elem);
@@ -225,58 +250,59 @@ public:
 
             if (doftrans) {
               mimi::utils::PrintAndThrowError(
-                  "there's doftrans. please implement this.");
+                  "There's doftrans. There shouldn't be one according to the "
+                  "documentations.");
             }
           }
         };
 
-    auto process_boundary_elems =
-        [&](const int begin, const int end, const int i_thread) {
-          auto& mesh = *meshes_[i_thread];
-          auto& fes = *fe_spaces_[i_thread];
+    auto process_boundary_elems = [&](const int begin,
+                                      const int end,
+                                      const int i_thread) {
+      auto& mesh = *meshes_[i_thread];
+      auto& fes = *fe_spaces_[i_thread];
 
-          for (int i{begin}; i < end; ++i) {
-            // create element, 
-            auto& b_el = boundary_elements_[i];
-            b_el = CreatFiniteFaceElement(dim);
-            auto& b_tr = target_to_reference_boundary_trans_[i];
-            b_tr = CreateFaceTransformation();
+      for (int i{begin}; i < end; ++i) {
+        // create element,
+        auto& b_el = boundary_elements_[i];
+        b_el = CreatFiniteFaceElement(dim);
+        // get bdr element
+        fes.GetNURBSext()->LoadBE(i, b_el.get());
 
+        auto& b_tr = target_to_reference_boundary_trans_[i];
+        b_tr = CreateFaceTransformation();
 
+        // this is extended function mainly to
+        mesh.GetBdrFaceTransformations(i, b_tr.get());
 
-          /* under construction 
-            // this is a direct copy of 
-            // GetBdrFaceTransformations(i);
-            // we need to be careful as this is only valid for "registered" boundaries
+        // we overwrite some pointers to our own copies
+        // this is mask 1 - related elem
+        // set
+        b_tr->Elem1 = target_to_reference_element_trans_[b_tr->Elem1No].get();
 
-            // 1. get face number
-            int face_id = mesh.GetBdrFace(i);
+        // this is mask 16 - related face elem
+        // we need to create b_elem of our own
+        fes.GetNURBSext()->LoadBE(i, b_el.get());
+        b_tr->SetFE(b_el.get());
 
-            // ... mesh.GetBdrFaceTransformations(i, 21);
-            // some information comes from protected member, so we should call this
-            fes.GetBdrElementTransformation(i);
-            //mesh.GetBdrFaceTransformations(i, *b_tr); 
+        // is there a dof trans? I am pretty sure not
+        // if so, we can extend here
+        auto& boundary_v_dof = boundary_v_dofs_[i];
+        boundary_v_dof = std::make_shared<mfem::Array<int>>();
+        mfem::DofTransformation* doftrans =
+            fes.GetBdrElementVDofs(i, *boundary_v_dof);
 
-            // we overwrite some pointers to our own copies
-            // this is mask 1 - related elem
-            // set 
-            b_tr->Elem1 = target_to_reference_element_trans_[b_tr->Elem1No].get();
-
-            // this is mask 16 - related face elem
-            // we need to create b_elem of our own
-            fes.GetNURBSext()->LoadBE(face_id, b_el.get());
-            b_tr->SetFE(b_el.get());
-
-            // this is mask 4 - which should be fine...
-          */
-
-          }
-        };
+        if (doftrans) {
+          mimi::utils::PrintAndThrowError(
+              "There's doftrans. There shouldn't be one according to the "
+              "documentations.");
+        }
+      }
+    };
 
     mimi::utils::NThreadExe(process_elems, n_elem, nthreads);
 
-    // we don't call this yet until we have a test case...
-    //mimi::utils::NThreadExe(process_boundary_elems, b_n_elem, nthreads);
+    mimi::utils::NThreadExe(process_boundary_elems, n_b_elem, nthreads);
   }
 };
 

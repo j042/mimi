@@ -5,6 +5,7 @@
 #include <set>
 
 // mimi
+#include "mimi/coefficients/nearest_distance.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::utils {
@@ -18,6 +19,8 @@ public:
     std::map<int, double> pressure_;
     std::map<int, std::map<int, double>> traction_;
     std::map<int, double> body_force_;
+    std::map<int, std::shared_ptr<mimi::coefficients::NearestDistanceBase>>
+        contact_;
 
     /// @brief dirichlet bc, currently only applies 0.
     /// @param bid
@@ -104,9 +107,31 @@ public:
     BCMarker& PrintBodyForce() {
       MIMI_FUNC()
 
-      mimi::utils::PrintInfo("body force ( dim | value):");
+      mimi::utils::PrintInfo("body force (dim | value):");
       for (auto const& [dim, value] : body_force_)
         mimi::utils::PrintInfo("  ", dim, "|", value);
+
+      return *this;
+    }
+
+    BCMarker&
+    Contact(const int bid,
+            const std::shared_ptr<mimi::coefficients::NearestDistanceBase>&
+                nearest_distance_coeff) {
+      MIMI_FUNC()
+
+      contact_[bid] = nearest_distance_coeff;
+
+      return *this;
+    }
+
+    BCMarker& PrintContact() {
+      MIMI_FUNC()
+
+      mimi::utils::PrintInfo("contact (bid | number of related objects):");
+      for (auto const& [bid, nd_coeff] : contact_) {
+        mimi::utils::PrintInfo("  ", bid, "|", nd_coeff->Size());
+      }
 
       return *this;
     }
@@ -130,14 +155,15 @@ public:
         .PrintDirichlet()
         .PrintPressure()
         .PrintTraction()
-        .PrintBodyForce();
+        .PrintBodyForce()
+        .PrintContact();
     mimi::utils::PrintInfo("\nTo be applied on current configuration:");
     CurrentConfiguration()
         .PrintDirichlet()
         .PrintPressure()
         .PrintTraction()
-        .PrintBodyForce();
-
+        .PrintBodyForce()
+        .PrintContact();
     mimi::utils::PrintInfo("************************************************");
   }
 };

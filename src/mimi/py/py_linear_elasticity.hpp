@@ -13,12 +13,14 @@
 
 // mimi
 #include "mimi/integrators/linear_elasticity.hpp"
+#include "mimi/integrators/penalty_contact.hpp"
 #include "mimi/integrators/vector_diffusion.hpp"
 #include "mimi/integrators/vector_mass.hpp"
 #include "mimi/operators/linear_elasticity.hpp"
 #include "mimi/py/py_solid.hpp"
 #include "mimi/solvers/newton.hpp"
 #include "mimi/utils/lambda_and_mu.hpp"
+#include "mimi/utils/precomputed.hpp"
 
 namespace mimi::py {
 
@@ -79,9 +81,9 @@ public:
         mfem::Ordering::byVDIM);
 
     // create precomputed data
-    disp_fes.precomputed_ =
-        std::make_unique<mimi::utils::PrecomputedElementData>();
-    disp_fes.precomputed_->Setup(*disp_fes.fe_space_, nthreads);
+    auto& bilinear_precomputed = disp_fes.precomputed_["bilinear_forms"];
+    bilinear_precomputed = std::make_shared<mimi::utils::PrecomputedData>();
+    bilinear_precomputed->Setup(*disp_fes.fe_space_, nthreads);
 
     // create solution fieds for displacements
     mfem::GridFunction& x = disp_fes.grid_functions_["x"];
@@ -134,7 +136,7 @@ public:
     mass->AddDomainIntegrator(mass_integ);
 
     // precompute using nthread
-    mass_integ->ComputeElementMatrices(*disp_fes.precomputed_);
+    mass_integ->ComputeElementMatrices(*bilinear_precomputed);
 
     // assemble and remove zero bc entries
     mass->Assemble(1);
@@ -159,7 +161,7 @@ public:
       visc->AddDomainIntegrator(visc_integ);
 
       // nthread assemble
-      visc_integ->ComputeElementMatrices(*disp_fes.precomputed_);
+      visc_integ->ComputeElementMatrices(*bilinear_precomputed);
 
       visc->Assemble(1);
       visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
@@ -185,7 +187,7 @@ public:
     stiffness->AddDomainIntegrator(stiffness_integ);
 
     // nthread assemble
-    stiffness_integ->ComputeElementMatrices(*disp_fes.precomputed_);
+    stiffness_integ->ComputeElementMatrices(*bilinear_precomputed);
 
     stiffness->Assemble(1);
     stiffness->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
@@ -256,6 +258,27 @@ public:
       // remove dirichlet nodes
       rhs->SetSubVector(disp_fes.zero_dofs_, 0.0);
       le_oper->AddLinearForm("rhs", rhs);
+    }
+
+    // check contact
+    if (const auto& contact =
+            Base_::boundary_conditions_->CurrentConfiguration().contact_;
+        contact.size() != 0) {
+
+      auto contact_precomputed =
+          std::make_shared<mimi::utils::PrecomputedData>();
+      bilinear_precomputed->PasteCommonTo(contact_precomputed);
+
+      auto nl_form =
+          std::make_shared<mfem::NonlinearForm>(disp_fes.fe_space_.get());
+      le_oper->AddNonlinearForm("contact", nl_form);
+      for (const auto& [bid, nd_coeff] : contact) {
+        nl_form->AddBdrFaceIntegrator(
+            new mimi::integrators::PenaltyContact(nd_coeff,
+                                                  std::to_string(bid),
+                                                  contact_precomputed),
+            Base_::boundary_markers_[bid]);
+      }
     }
 
     // setup linear solver

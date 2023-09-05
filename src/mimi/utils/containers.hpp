@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <type_traits>
 
@@ -58,9 +59,13 @@ using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
 
 /// @brief array memory. intended for fast (temporary) use with
 /// contiguous memory layout.
-/// for 2d-like access, set `stride_`
+/// for 2d-like access, set `stride_` and `is_2d` true
+///
+/// for non-owning data, use default init and set data and size yourself.
+/// size is only used to check bounds in debug mode.
+///
 /// @tparam Type
-template<typename Type>
+template<typename Type, bool is_2d = false>
 struct Data {
   Type* data_{nullptr};
   int size_{0};
@@ -79,41 +84,104 @@ struct Data {
 
   Data() = default;
   Data(const int n) { SetSize(n); }
-  Data(int n, const int stride) : Data(n), stride_(stride) {}
+
+  /// n is size. n * stride is size * stride, don't be confused.
+  Data(int n, const int stride) : Data(n), stride_(stride) {
+    assert(n % stride == 0);
+  }
   ~Data() { delete[] data_; }
+
+  constexpr Type* data() {
+    assert(data_);
+
+    return data_;
+  }
+  constexpr const Type* data() const {
+    assert(data_);
+
+    return data_;
+  }
+  constexpr int size() { return size_; }
+  constexpr int stride() { return stride_; }
+
+  constexpr Type* begin() {
+    assert(data_);
+
+    return data_;
+  }
+
+  constexpr Type* end() {
+    assert(data_);
+
+    return data_ + size_;
+  }
+
+  constexpr void fill(Type const& value) {
+    MIMI_FUNC()
+
+    std::fill(data_, data_ + size_, value);
+  }
 
   template<typename IndexType>
   constexpr Type& operator[](const IndexType& i) {
+    assert(i < size_);
+    assert(data_);
+
     return data_[i];
   }
   template<typename IndexType>
   constexpr const Type& operator[](const IndexType& i) const {
+    assert(i < size_);
+    assert(data_);
+
     return data_[i];
   }
   template<typename IndexType>
   constexpr Type& operator()(const IndexType& i, const IndexType& j) {
+    static_assert(is_2d);
+    assert(i * stride_ + j < size_);
+    assert(data_);
+
     return data_[i * stride_ + j];
   }
   template<typename IndexType>
   constexpr const Type& operator()(const IndexType& i,
                                    const IndexType& j) const {
+    static_assert(is_2d);
+    assert(i * stride_ + j < size_);
+    assert(data_);
+
     return data_[i * stride_ + j];
   }
 
   template<typename IndexType>
   constexpr Type* Pointer(const IndexType& i) {
+    assert(i < size_);
+    assert(data_);
+
     return &data_[i];
   }
   template<typename IndexType>
   constexpr const Type* Pointer(const IndexType& i) const {
+    assert(i < size_);
+    assert(data_);
+
     return &data_[i];
   }
   template<typename IndexType>
   constexpr Type* Pointer(const IndexType& i, const IndexType& j) {
+    static_assert(is_2d);
+    assert(i * stride_ + j < size_);
+    assert(data_);
+
     return &data_[i * stride_ + j];
   }
   template<typename IndexType>
   constexpr const Type* Pointer(const IndexType& i, const IndexType& j) const {
+    static_assert(is_2d);
+    assert(i * stride_ + j < size_);
+    assert(data_);
+
     return &data_[i * stride_ + j];
   }
 };

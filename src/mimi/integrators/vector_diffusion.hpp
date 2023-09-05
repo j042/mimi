@@ -33,8 +33,7 @@ public:
   /// @brief Precomputes matrix.
   /// @param fes
   /// @param nthreads
-  void
-  ComputeElementMatrices(mimi::utils::PrecomputedElementData& precomputed) {
+  void ComputeElementMatrices(mimi::utils::PrecomputedData& precomputed) {
     MIMI_FUNC()
 
     auto& fes = *precomputed.fe_spaces_[0];

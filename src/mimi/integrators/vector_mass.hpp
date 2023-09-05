@@ -33,8 +33,7 @@ public:
   /// has a similar option using OpenMP.
   /// @param fes
   /// @param nthreads
-  void
-  ComputeElementMatrices(mimi::utils::PrecomputedElementData& precomputed) {
+  void ComputeElementMatrices(mimi::utils::PrecomputedData& precomputed) {
     MIMI_FUNC()
 
     const int n_elem = precomputed.fe_spaces_[0]->GetNE();

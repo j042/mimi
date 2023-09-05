@@ -34,6 +34,11 @@ void init_py_boundary_conditions(py::module_& m) {
            &BCM::BodyForce,
            py::arg("dim"),
            py::arg("value"),
+           py::return_value_policy::reference_internal)
+      .def("contact",
+           &BCM::Contact,
+           py::arg("bid"),
+           py::arg("nearest_distance"),
            py::return_value_policy::reference_internal);
 
   py::class_<BC, std::shared_ptr<BC>> bc(m, "BoundaryConditions");

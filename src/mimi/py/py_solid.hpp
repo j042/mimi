@@ -51,13 +51,19 @@ protected:
   // mesh
   std::unique_ptr<mfem::Mesh> mesh_ = nullptr;
 
+  // boundary markers. nothing more than array filled with zeros except the
+  // marker
+  mimi::utils::Vector<mfem::Array<int>> boundary_markers_;
+
   struct FESpace {
     std::string name_{"None"};
     std::unique_ptr<mfem::FiniteElementSpace> fe_space_{nullptr};
     std::map<int, std::map<int, mfem::Array<int>>> boundary_dof_ids_;
     std::unordered_map<std::string, mfem::GridFunction> grid_functions_;
     mfem::Array<int> zero_dofs_;
-    std::unique_ptr<mimi::utils::PrecomputedElementData> precomputed_;
+    std::unordered_map<std::string,
+                       std::shared_ptr<mimi::utils::PrecomputedData>>
+        precomputed_;
   };
 
   // there can be multiple fe spaces
@@ -106,6 +112,17 @@ public:
       mimi::utils::PrintDebug("read NURBS mesh");
     } else {
       mimi::utils::PrintAndThrowError(fname, "Does not contain NURBS mesh.");
+    }
+
+    // generate boundary markers
+    const int max_bdr_id = mesh_->bdr_attributes.Max();
+    mimi::utils::PrintInfo("Maximum boundary id for this mesh is:", max_bdr_id);
+    boundary_markers_.resize(max_bdr_id);
+    for (int i{}; i < max_bdr_id; ++i) {
+      auto& marker = boundary_markers_[i];
+      marker.SetSize(max_bdr_id);
+      marker = 0;
+      marker[i] = 1;
     }
   }
 
@@ -408,9 +425,19 @@ public:
   }
 
   virtual py::array_t<double> LinearFormView2(const std::string lf_name) {
-    auto& lf = *dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get())
-                    ->linear_forms_.at(lf_name);
-    return mimi::py::NumpyView<double>(lf, lf.Size());
+    MIMI_FUNC()
+
+    auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    assert(op_base);
+
+    auto& lf = op_base->linear_forms_.at(lf_name); // seems to not raise
+    if (!lf) {
+      mimi::utils::PrintAndThrowError("Requested linear form -",
+                                      lf_name,
+                                      "- does not exist.");
+    }
+
+    return mimi::py::NumpyView<double>(*lf, lf->Size());
   }
 
   virtual py::array_t<double> SolutionView(const std::string& fes_name,
