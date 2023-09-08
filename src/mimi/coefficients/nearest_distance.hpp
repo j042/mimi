@@ -25,23 +25,31 @@ public:
   struct Results {
     mimi::utils::Data<double> parametric_;
     mimi::utils::Data<double> physical_;
-    mimi::utils::Data<double> difference_;
-    double distance_;
-    double convergence_;
-    mimi::utils::Data<double> first_derivatives_;
-    mimi::utils::Data<double> second_derivatives_;
+    mimi::utils::Data<double> physical_minus_query_;
+    double distance_{};
+    double convergence_{};
+    mimi::utils::Data<double, is_2d = true> first_derivatives_;
+    mimi::utils::Data<double, is_3d = true> second_derivatives_;
+    int para_dim_{};
+    int dim_{};
 
     /// given spline's para_dim and dim, allocates result's size.
     /// set give biggest acceptable size.
     void SetSize(const int& para_dim, const int& dim) {
+      MIMI_FUNC()
+
+      para_dim_ = para_dim;
+      dim_ = dim;
+
       parametric_.SetSize(para_dim);
       physical_.SetSize(dim);
-      difference_.SetSize(dim);
+      physical_minus_query_.SetSize(dim);
       first_derivatives_.SetSize(para_dim * dim);
+      first_derivatives_.stride0_ = dim;
       second_derivatives_.SetSize(para_dim * para_dim * dim);
+      second_derivatives_.stride0_ = para_dim * dim;
+      second_derivatives_.stride1_ = dim;
     }
-
-    void Normal
   };
 
   NearestDistanceBase() = default;
@@ -61,13 +69,11 @@ public:
 
     return -1;
   };
-
 };
 
 class NearestDistanceToSplines : public NearestDistanceBase {
 protected:
   std::vector<std::shared_ptr<splinepy::py::PySpline>> splines_;
-
 
 public:
   void Clear() {
@@ -79,9 +85,10 @@ public:
   void AddSpline(std::shared_ptr<splinepy::py::PySpline>& spline) {
     MIMI_FUNC()
 
-    // technically, you can use any combination of splines as long as 
+    // technically, you can use any combination of splines as long as
     // physical dimension matches.
-    // however, for implementation purposes, we will only accept boundary splines
+    // however, for implementation purposes, we will only accept boundary
+    // splines
     const int para_dim = spline->Core()->SplinepyParaDim();
     const int dim = spline->Core()->SplinepyDim();
 
@@ -122,7 +129,7 @@ public:
           false, /* aggressive_bounds */
           results.parametric_.data(),
           results.physical_.data(),
-          results.difference_.data(),
+          results.physical_minus_query_.data(),
           results.distance_,
           results.convergence_,
           results.first_derivatives_.data(),

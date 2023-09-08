@@ -12,6 +12,81 @@
 
 namespace mimi::integrators {
 
+/// normal - we define a rule here, and it'd be your job to prepare
+/// the foreign spline in a correct orientation
+template<int dim, bool unit_normal = true, typename ArrayType>
+inline void Normal(const mimi::utils::Data<double, is_2d = true>& first_dir,
+                   ArrayType& normal) {
+  assert(first_dir.size() == 2 || first_dir.size() == 6);
+
+  if constexpr (dim == 2) {
+    const double& d0 = first_dir[0];
+    const double& d1 = first_dir[1];
+
+    if constexpr (unit_normal) {
+      const double inv_norm2 = 1. / std::sqrt(d0 * d0 + d1 * d1);
+
+      normal[0] = d1 * inv_norm2;
+      normal[1] = -d0 * inv_norm2;
+    } else {
+      normal[0] = d1;
+      normal[1] = -d0;
+    }
+
+  } else if constexpr (dim == 3) {
+    const double& d0 = first_dir[0];
+    const double& d1 = first_dir[1];
+    const double& d2 = first_dir[2];
+    const double& d3 = first_dir[3];
+    const double& d4 = first_dir[4];
+    const double& d5 = first_dir[5];
+
+    if constexpr (unit_normal) {
+      const double n0 = d1 * d5 - d2 * d4;
+      const double n1 = d2 * d3 - d0 * d5;
+      const double n2 = d0 * d4 - d1 * d3;
+
+      const double inv_norm2 = 1. / std::sqrt(n0 * n0 + n1 * n1 + n2 * n2);
+
+      normal[0] = n0 * inv_norm2;
+      normal[1] = n1 * inv_norm2;
+      normal[2] = n2 * inv_norm2;
+
+    } else {
+
+      normal[0] = d1 * d5 - d2 * d4;
+      normal[1] = d2 * d3 - d0 * d5;
+      normal[2] = d0 * d4 - d1 * d3;
+    }
+  } else {
+    static_assert(false, "unsupported dim");
+  }
+}
+
+template<typename ArrayType>
+inline double
+NormalGap(const mimi::coefficients::NearestDistanceBase::Results& result,
+          ArrayType& normal) {
+
+  double normal_gap{};
+  const int& dim = result.dim_;
+
+  // let's get normal
+  if (dim == 2) {
+    Normal<2, unit_normal = true>(result.first_derivatives_, normal);
+  } else {
+    Normal<3, unit_normal = true>(result.first_derivatives_, normal);
+  }
+
+  for (int i{}; i < dim; ++i) {
+    // here, we apply negative sign to physical_minus_query
+    // normal gap is formulated as query minus physical
+    normal_gap += normal[i] * -result.physical_minus_query_[i];
+  }
+
+  return normal_gap;
+}
+
 class PenaltyContact : public NonlinearBase {
 protected:
   /// scene
@@ -38,6 +113,9 @@ protected:
   /// the geometry type all the time, we save this just once.
   mfem::Geometry::Type boundary_geometry_type_;
 
+  /// convenient constants
+  int dim_;
+
 public:
   using Base_ = NonlinearBase;
 
@@ -61,6 +139,9 @@ public:
         precomputed_->meshes_[0]->NURBSext->GetNBE();
     const int n_threads =
         precomputed_->meshes_.size(); // size of mesh is nthread from Setup()
+
+    // get dimension
+    dim_ = precomputed_->meshes_[0]->Dimension();
 
     // get marked boundary elements: this reduces size of the loop
     if (!boundary_marker_) {
@@ -186,7 +267,7 @@ public:
           weights[j] = b_trans.Weight();
 
           // alloate each members of results
-          results[j].SetSize(b_trans.GetSpaceDim() - 1, b_trans.GetSpaceDim());
+          results[j].SetSize(dim_ - 1, dim_);
         }
       }
     };
@@ -221,6 +302,10 @@ public:
 
       auto& int_rules = precomputed_->int_rules_[i_thread];
 
+      // temp arrays
+      mimi::utils::Data<double> normal(dim_);
+      mimi::utils::Data<double> traction_n(dim_);
+
       // this loops marked boundary elements
       for (int i{begin}; i < end; ++i) {
         // get this loop's objects
@@ -231,8 +316,10 @@ public:
         auto& i_results = nearest_distance_results_[i_mbe];
 
         // sizes
-        const int n_dim = i_b_el->GetDim();
+        const int n_dim = dim_;
         const int n_dof = i_b_el->GetDof();
+
+        assert(n_dim == i_results[0].dim_);
 
         // copy current solution
         mfem::Vector i_current_solution_vec;
@@ -249,6 +336,11 @@ public:
         for (int q{}; q < int_rule.GetNPoints(); ++q) {
           auto& q_shape = i_shapes[q];
           auto& q_result = i_results[q];
+
+          // mark this result inactive first so that we don't have to set this
+          // at each early exit check
+          q_result.active_ = false;
+
           // formulate query
           query.query_.fill(0.0);
           for (int j{}; j < n_dof; ++j) {
@@ -259,6 +351,43 @@ public:
 
           // query nearest distance
           nearest_distance_coeff_->NearestDistance(query, q_result);
+
+          // get normal gap
+          const double normal_gap = NormalGap(q_result, normal);
+
+          // active checks
+          //
+          // 1. exact zero check. we put hold on this one
+          // if (q_result.distance_ < nearest_distance_coeff_->tolerance_)
+
+          // 2. normal gap orientation - we can probably merge condition (1)
+          // here
+          if (normal_gap > 0.) {
+            continue;
+          }
+
+          // 3. angle check
+          constexpr const double angle_tolerance = 1.0e-5;
+          if (std::acos(std::min(1., std::abs(normal_gap) / q_result.distance_))
+              > angle_tolerance) {
+            continue;
+          }
+
+          // set true to active
+          q_result.active_ = true;
+
+          // set traction
+          const double t_factor =
+              -nearest_distance_coeff_->coefficient_ * normal_gap;
+          for (int j{}; j < dim_; ++j) {
+            traction[j] = t_factor * normal[j];
+          }
+
+          // set residual
+          for (int j{}; j < n_dof; ++j) {
+            for (int k {} l k < n_dim; ++k) {
+            }
+          }
         }
       }
     }
@@ -281,75 +410,6 @@ public:
 
     residual.SetSize(n_dim * n_dof);
     residual = 0.;
-
-    mfem::Vector el_shape(n_dof);
-
-    mfem::IntegrationRules& int_rules = precomputed_->int_rules_[0]; // i_thread
-
-    mimi::utils::PrintInfo("GeomTrype",
-                           face_trans.GetGeometryType(),
-                           face_trans.GetFE()->GetGeomType());
-
-    const mfem::IntegrationRule& ir =
-        /// int_rules.Get(face_trans.GetGeometryType(), 3);
-        int_rules.Get(face_trans.GetFE()->GetGeomType(), 3);
-    const mfem::IntegrationPoint& ip = ir.IntPoint(0);
-    face_trans.SetIntPoint(&ip);
-    const mfem::IntegrationPoint& eip = face_trans.GetElement1IntPoint();
-
-    element.CalcShape(eip, el_shape);
-
-    auto& bel = *face_trans.GetFE();
-    mfem::Vector bel_shape(bel.GetDof());
-
-    bel.CalcShape(ip, bel_shape);
-
-    mimi::utils::PrintInfo("element ndof", n_dof);
-    for (int i{}; i < n_dof; ++i) {
-      std::cout << el_shape[i] << " ";
-    }
-    auto& jac = face_trans.Elem1->Jacobian();
-    // std::cout << "\n jacobian det " << face_trans.Face->Weight() << "\n";
-    std::cout << "\n jacobian det " << jac.Weight() << "\n";
-    for (int i{}; i < jac.Height(); ++i) {
-      for (int j{}; j < jac.Width(); ++j) {
-        std::cout << jac(i, j) << " ";
-      }
-      std::cout << "\n";
-    }
-    std::cout << "element_no: " << face_trans.Elem1No << "patch_no: "
-              << precomputed_->elements_[face_trans.Elem1No]->GetPatch()
-              << "\n";
-    std::cout << "element_vdof\n";
-    for (int i{}; i < precomputed_->v_dofs_[face_trans.Elem1No]->Size(); ++i) {
-      std::cout << (*precomputed_->v_dofs_[face_trans.Elem1No])[i] << " ";
-    }
-    std::cout << "\n";
-
-    mimi::utils::PrintInfo("b element ndof", bel.GetDof());
-    for (int i{}; i < bel.GetDof(); ++i) {
-      std::cout << bel_shape[i] << " ";
-    }
-    std::cout << "\n jacobian det " << face_trans.Weight() << "\n";
-    auto& jac2 = face_trans.Face->Jacobian();
-    for (int i{}; i < jac2.Height(); ++i) {
-      for (int j{}; j < jac2.Width(); ++j) {
-        std::cout << jac2(i, j) << " ";
-      }
-      std::cout << "\n";
-    }
-    std::cout
-        << "bdr element_no: " << face_trans.ElementNo << "patch_no: "
-        << precomputed_->boundary_elements_[face_trans.ElementNo]->GetPatch()
-        << "\n";
-    std::cout << "bdr element_vdof\n";
-    for (int i{};
-         i < precomputed_->boundary_v_dofs_[face_trans.ElementNo]->Size();
-         ++i) {
-      std::cout << (*precomputed_->boundary_v_dofs_[face_trans.ElementNo])[i]
-                << " ";
-    }
-    std::cout << "\n";
 
     mimi::utils::PrintInfo("ndof",
                            n_dof,
