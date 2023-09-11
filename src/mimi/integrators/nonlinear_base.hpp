@@ -15,7 +15,10 @@ class NonlinearBase : public mfem::NonlinearFormIntegrator {
 protected:
   std::shared_ptr<mimi::utils::PrecomputedData> precomputed_;
   std::unique_ptr<mimi::utils::Data<mfem::Vector>> element_vectors_;
+  std::unique_ptr<mimi::utils::Data<mfem::Vector>> boundary_element_vectors_;
   std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>> element_matrices_;
+  std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>>
+      boundary_element_matrices_;
 
 public:
   std::string name_;

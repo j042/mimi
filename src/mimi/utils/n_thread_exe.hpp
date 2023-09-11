@@ -21,7 +21,7 @@ void NThreadExe(const Func& f, const IndexT total, const IndexT nthread) {
     return;
   }
 
-  int n_usable_threads{nthread};
+  IndexT n_usable_threads{nthread};
 
   // negative input looks for hardware_concurrency
   if (nthread < 0) {

@@ -23,15 +23,25 @@ public:
   };
 
   struct Results {
+    // query
     mimi::utils::Data<double> parametric_;
     mimi::utils::Data<double> physical_;
     mimi::utils::Data<double> physical_minus_query_;
     double distance_{};
     double convergence_{};
-    mimi::utils::Data<double, is_2d = true> first_derivatives_;
-    mimi::utils::Data<double, is_3d = true> second_derivatives_;
+    mimi::utils::Data<double, 2> first_derivatives_;
+    mimi::utils::Data<double, 3> second_derivatives_;
+
+    // locally save dim infos
     int para_dim_{};
     int dim_{};
+
+    // we save some information about the query result
+    // so that we can avoid recomputing these values for J(R(u))
+    // it makes the most sense as query and result pair, but
+    // we retrieve results with ids, so we do it this way.
+    bool active_{};
+    double query_metric_tensor_weight_{};
 
     /// given spline's para_dim and dim, allocates result's size.
     /// set give biggest acceptable size.

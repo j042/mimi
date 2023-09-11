@@ -61,11 +61,11 @@ using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
 /// contiguous memory layout.
 /// for 2d-like access, set `stride_` and `is_2d` true
 ///
-/// for non-owning data, use default init and set data and size yourself.
+/// for non-owing data, use default init and set data and size yourself.
 /// size is only used to check bounds in debug mode.
 ///
 /// @tparam Type
-template<typename Type, bool is_2d = false, bool is_3d = false>
+template<typename Type, int dim = -1>
 struct Data {
   Type* data_{nullptr};
   int size_{0};
@@ -102,7 +102,7 @@ struct Data {
 
     return data_;
   }
-  constexpr int size() { return size_; }
+  constexpr int size() const { return size_; }
 
   constexpr Type* begin() {
     assert(data_);
@@ -138,7 +138,7 @@ struct Data {
   }
   template<typename IndexType>
   constexpr Type& operator()(const IndexType& i, const IndexType& j) {
-    static_assert(is_2d);
+    static_assert(dim == 2);
     assert(i * stride0_ + j < size_);
     assert(data_);
 
@@ -147,7 +147,7 @@ struct Data {
   template<typename IndexType>
   constexpr const Type& operator()(const IndexType& i,
                                    const IndexType& j) const {
-    static_assert(is_2d);
+    static_assert(dim == 2);
     assert(i * stride0_ + j < size_);
     assert(data_);
 
@@ -156,7 +156,7 @@ struct Data {
   template<typename IndexType>
   constexpr Type&
   operator()(const IndexType& i, const IndexType& j, const IndexType& k) {
-    static_assert(is_3d);
+    static_assert(dim == 3);
     assert(i * stride0_ + j * stride1_ + k < size_);
     assert(data_);
 
@@ -165,7 +165,7 @@ struct Data {
   template<typename IndexType>
   constexpr const Type&
   operator()(const IndexType& i, const IndexType& j, const IndexType& k) const {
-    static_assert(is_3d);
+    static_assert(dim == 3);
     assert(i * stride0_ + j * stride1_ + k < size_);
     assert(data_);
 
@@ -188,7 +188,7 @@ struct Data {
   }
   template<typename IndexType>
   constexpr Type* Pointer(const IndexType& i, const IndexType& j) {
-    static_assert(is_2d);
+    static_assert(dim == 2);
     assert(i * stride0_ + j < size_);
     assert(data_);
 
@@ -196,7 +196,7 @@ struct Data {
   }
   template<typename IndexType>
   constexpr const Type* Pointer(const IndexType& i, const IndexType& j) const {
-    static_assert(is_2d);
+    static_assert(dim == 2);
     assert(i * stride0_ + j < size_);
     assert(data_);
 
@@ -204,8 +204,8 @@ struct Data {
   }
   template<typename IndexType>
   constexpr Type*
-  Pointer()(const IndexType& i, const IndexType& j, const IndexType& k) const {
-    static_assert(is_3d);
+  Pointer(const IndexType& i, const IndexType& j, const IndexType& k) const {
+    static_assert(dim == 3);
     assert(i * stride0_ + j * stride1_ + k < size_);
     assert(data_);
 
@@ -213,8 +213,8 @@ struct Data {
   }
   template<typename IndexType>
   constexpr Type*
-  Pointer()(const IndexType& i, const IndexType& j, const IndexType& k) {
-    static_assert(is_3d);
+  Pointer(const IndexType& i, const IndexType& j, const IndexType& k) {
+    static_assert(dim == 3);
     assert(i * stride0_ + j * stride1_ + k < size_);
     assert(data_);
 
