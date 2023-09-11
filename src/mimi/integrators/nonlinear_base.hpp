@@ -23,6 +23,9 @@ protected:
 public:
   std::string name_;
 
+  /// ids of contributing boundary elements, extracted based on boundary_marker_
+  mimi::utils::Vector<int> marked_boundary_elements_;
+
   /// basic ctor saved ptr to precomputed and name to use as key in precomputed
   NonlinearBase(
       const std::string& name,
@@ -33,15 +36,27 @@ public:
   ///
   virtual const std::string& Name() const { return name_; }
 
-  virtual void AssembleFaceResidual(const mfem::Vector& current_x) {
+  virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
-    mimi::utils::PrintAndThrowError("AssembleFaceResidual not implemented");
+    mimi::utils::PrintAndThrowError("AssembleDomainResidual not implemented");
   }
 
-  virtual void AssembleFaceResidualGrad(const mfem::Vector& current_x) {
+  virtual void AssembleDomainGrad(const mfem::Vector& current_x) {
     MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("AssembleFaceResidualGrad not implemented");
+
+    mimi::utils::PrintAndThrowError("AssembleDomainGrad not implemented");
+  }
+
+  virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("AssembleBoundaryResidual not implemented");
+  }
+
+  virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("AssembleBoundaryGrad not implemented");
   }
 
   /// implemement criterium in case norm(residual) == 0 is not enough

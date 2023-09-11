@@ -96,9 +96,6 @@ protected:
   /// marker for this bdr face integ
   const mfem::Array<int>* boundary_marker_ = nullptr;
 
-  /// ids of contributing boundary elements, extracted based on boundary_marker_
-  mimi::utils::Vector<int> marked_boundary_elements_;
-
   /// @brief quadrature order per elements - alternatively, could be per
   /// boundary patch thing
   mimi::utils::Vector<int> quadrature_orders_;
@@ -153,7 +150,7 @@ public:
     // prepare loop - deref and get a mesh to ask
     auto& mesh = *precomputed_->meshes_[0];
     auto& b_marker = *boundary_marker_;
-    marked_boundary_elements_.reserve(n_boundary_elements);
+    Base_::marked_boundary_elements_.reserve(n_boundary_elements);
     // loop boundary elements
     for (int i{}; i < n_boundary_elements; ++i) {
       auto& b_el = precomputed_->boundary_elements_[i];
@@ -161,9 +158,9 @@ public:
       if (b_marker[bdr_attr - 1] == 0) {
         continue;
       }
-      marked_boundary_elements_.push_back(i);
+      Base_::marked_boundary_elements_.push_back(i);
     }
-    marked_boundary_elements_.shrink_to_fit();
+    Base_::marked_boundary_elements_.shrink_to_fit();
 
     // extract boundary geometry type
     boundary_geometry_type_ =
@@ -262,7 +259,7 @@ public:
       auto& int_rules = precomputed_->int_rules_[i_thread];
 
       for (int i{marked_b_el_begin}; i < marked_b_el_end; ++i) {
-        const int& i_mbe = marked_boundary_elements_[i];
+        const int& i_mbe = Base_::marked_boundary_elements_[i];
         const auto& i_b_el = precomputed_->boundary_elements_[i_mbe];
         // get boundary transformations
         auto& b_trans =
@@ -317,9 +314,10 @@ public:
     };
 
     mimi::utils::NThreadExe(precompute_shapes, n_boundary_patches, n_threads);
-    mimi::utils::NThreadExe(precompute_trans_weights,
-                            static_cast<int>(marked_boundary_elements_.size()),
-                            n_threads);
+    mimi::utils::NThreadExe(
+        precompute_trans_weights,
+        static_cast<int>(Base_::marked_boundary_elements_.size()),
+        n_threads);
   }
 
   virtual void UpdateLagrange() {
@@ -327,7 +325,7 @@ public:
     mimi::utils::PrintAndThrowError("noch nicht bereit");
   }
 
-  virtual void AssembleFaceResidual(const mfem::Vector& current_x) {
+  virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
     // get related precomputed values
@@ -378,7 +376,7 @@ public:
       for (int i{begin}; i < end; ++i) {
         // get this loop's objects
         // important to extract makred value.
-        const int& i_mbe = marked_boundary_elements_[i];
+        const int& i_mbe = Base_::marked_boundary_elements_[i];
 
         const auto& i_b_vdof = precomputed_->boundary_v_dofs_[i_mbe];
         auto& i_b_el = precomputed_->boundary_elements_[i_mbe];
@@ -500,7 +498,7 @@ public:
                             precomputed_->meshes_.size());
   }
 
-  virtual void AssembleFaceResidualGrad(const mfem::Vector& current_x) {
+  virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
     MIMI_FUNC()
   }
 
