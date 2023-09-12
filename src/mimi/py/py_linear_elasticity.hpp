@@ -294,7 +294,6 @@ public:
     // setup a newton solver
     auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
     // auto newton = std::make_shared<mimi::solvers::Newton>();
-    //  auto newton = std::make_shared<mimi::solvers::Newton>();
     Base_::newton_solvers_["linear_elasticity"] = newton;
     le_oper->SetNewtonSolver(newton);
 
@@ -306,6 +305,7 @@ public:
                               .Warnings()
                               .Errors()
                               .Summary()
+                              .Iterations()
                               .FirstAndLast());
     newton->SetRelTol(1e-8);
     newton->SetAbsTol(1e-12);

@@ -42,6 +42,7 @@ public:
     // we retrieve results with ids, so we do it this way.
     bool active_{};
     double query_metric_tensor_weight_{};
+    mimi::utils::Data<double> normal_;
 
     /// given spline's para_dim and dim, allocates result's size.
     /// set give biggest acceptable size.
@@ -59,6 +60,7 @@ public:
       second_derivatives_.SetSize(para_dim * para_dim * dim);
       second_derivatives_.stride0_ = para_dim * dim;
       second_derivatives_.stride1_ = dim;
+      normal_.SetSize(dim);
     }
   };
 

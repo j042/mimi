@@ -63,13 +63,12 @@ inline void Normal(const mimi::utils::Data<double, 2>& first_dir,
   }
 }
 
-template<typename ArrayType>
 inline double
-NormalGap(const mimi::coefficients::NearestDistanceBase::Results& result,
-          ArrayType& normal) {
+NormalGap(mimi::coefficients::NearestDistanceBase::Results& result) {
 
   double normal_gap{};
   const int& dim = result.dim_;
+  auto& normal = result.normal_;
 
   // let's get normal
   if (dim == 2) {
@@ -87,6 +86,8 @@ NormalGap(const mimi::coefficients::NearestDistanceBase::Results& result,
   return normal_gap;
 }
 
+/// implements methods presented in "Sauer and De Lorenzis. An unbiased
+/// computational contact formulation for 3D friction (DOI: 10.1002/nme.4794)
 class PenaltyContact : public NonlinearBase {
 protected:
   /// scene
@@ -201,54 +202,6 @@ public:
 
     // quad order
     quadrature_orders_.resize(n_boundary_elements);
-
-    // // shapes is once per boundary patch. yes, this will have many recurring
-    // // shapes, which makes it easy to lookup
-    // auto precompute_shapes = [&](const int b_patch_begin,
-    //                              const int b_patch_end,
-    //                              const int i_thread) {
-    //   // thread's obj
-    //   auto& int_rules = precomputed_->int_rules_[i_thread];
-
-    //   for (int i{b_patch_begin}; i < b_patch_end; ++i) {
-    //     // get corresponding vector of shapes
-    //     auto& shapes = boundary_shapes[i];
-    //     auto& d_shapes = boundary_d_shapes[i];
-
-    //     // get id of a patch
-    //     mimi::utils::PrintInfo(precomputed_->meshes_[0]->NURBSext->GetNP());
-    //     const int b_el_id =
-    //         precomputed_->meshes_[0]->NURBSext->GetPatchBdrElements(i)[0];
-
-    //     // get elem
-    //     auto& b_el = *precomputed_->boundary_elements_[b_el_id];
-    //     const int n_dof = b_el.GetDof();
-
-    //     // get quad order
-    //     const int q_order =
-    //         (quadrature_order < 0) ? b_el.GetOrder() * 2 + 3 :
-    //         quadrature_order;
-
-    //     // get int rule
-    //     const mfem::IntegrationRule& ir =
-    //         int_rules.Get(boundary_geometry_type_, q_order);
-    //     // prepare quad loop
-    //     const int n_quad = ir.GetNPoints();
-    //     shapes.resize(n_quad);
-
-    //     // quad loop - calc shapes
-    //     for (int j{}; j < n_quad; ++j) {
-    //       mfem::Vector& shape = shapes[j];
-    //       mfem::DenseMatrix& d_shape = d_shapes[j];
-    //       shape.SetSize(n_dof);
-    //       d_shape.SetSize(n_dof, boundary_para_dim_);
-
-    //       const mfem::IntegrationPoint& ip = ir.IntPoint(j);
-    //       b_el.CalcShape(ip, shape);
-    //       b_el.CalcDShape(ip, d_shape);
-    //     }
-    //   }
-    // };
 
     // now, weight of jacobian.
     auto precompute_trans_weights = [&](const int marked_b_el_begin,
@@ -388,7 +341,6 @@ public:
       auto& int_rules = precomputed_->int_rules_[i_thread];
 
       // temp arrays
-      mimi::utils::Data<double> normal(dim_);
       mimi::utils::Data<double> traction_n(dim_);
 
       // element dependent densemat
@@ -406,7 +358,6 @@ public:
         // important to extract makred value.
 
         const int& i_mbe = Base_::marked_boundary_elements_[i];
-
         const auto& i_b_vdof = precomputed_->boundary_v_dofs_[i_mbe];
         auto& i_b_el = precomputed_->boundary_elements_[i_mbe];
         const auto& i_shapes = boundary_shapes[i_mbe];
@@ -445,16 +396,11 @@ public:
 
           const mfem::IntegrationPoint& ip = int_rule.IntPoint(q);
           const auto& q_shape = i_shapes[q];
-
           const auto& q_d_shape = i_d_shapes[q];
-
           const auto& q_target_to_reference_weight =
               i_target_to_reference_weights[q];
-
           const auto& q_lagrange = i_lagranges[q];
-
           auto& q_result = i_results[q];
-
           auto& q_normal_gap = i_normal_gaps[q];
 
           // mark this result inactive first so that we don't have to set
@@ -471,8 +417,8 @@ public:
           // query nearest distance
           nearest_distance_coeff_->NearestDistance(query, q_result);
 
-          // get normal gap
-          q_normal_gap = NormalGap(q_result, normal);
+          // get normal gap - this also saves normal at this point
+          q_normal_gap = NormalGap(q_result);
 
           // active checks
           //
@@ -509,13 +455,10 @@ public:
           // lambda_new = penalty_factor * normal_distance + lambda_old
           const double t_factor =
               nearest_distance_coeff_->coefficient_ * q_normal_gap + q_lagrange;
-          // assert(t_factor > 0.0);
-          std::cout << "normal is ";
+          assert(t_factor < 0.0);
           for (int j{}; j < dim_; ++j) {
-            traction_n[j] = t_factor * normal[j];
-            std::cout << normal[j] << " ";
+            traction_n[j] = t_factor * q_result.normal_[j];
           }
-          std::cout << std::endl;
 
           // get sqrt of det of metric tensor
           q_result.query_metric_tensor_weight_ =
@@ -543,8 +486,141 @@ public:
                             precomputed_->meshes_.size());
   }
 
+  /// -eps [I - c_ab * tangent_a dyadic tangent_b]
   virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
     MIMI_FUNC()
+
+    // get related precomputed values
+    auto& boundary_shapes = precomputed_->vectors_["boundary_shapes"];
+    auto& boundary_d_shapes = precomputed_->matrices_["boundary_d_shapes"];
+    // jacobian weights
+    auto& boundary_target_to_reference_weights =
+        precomputed_->scalars_["boundary_target_to_reference_weights"];
+    // augmented larange
+    auto& augmented_lagrange_multipliers =
+        precomputed_->scalars_["augmented_lagrange_multipliers"];
+    // normal gaps
+    auto& normal_gaps = precomputed_->scalars_["normal_gaps"];
+
+    auto assemble_face_grad = [&](const int begin,
+                                  const int end,
+                                  const int i_thread) {
+      auto& int_rules = precomputed_->int_rules_[i_thread];
+
+      // thread local matrices
+      // lack of better term, we call it cp_mat as mentione in literature
+      // consists of metric tensor and curvature tensor.
+      mfem::DenseMatrix cp_mat(boundary_para_dim_, boundary_para_dim_);
+      // dTn_dx
+      mfem::DenseMatrix dtn_dx(dim_, dim_);
+      // outer product of first ders temporary
+      mfem::DenseMatrix der1_vvt(dim_, dim_);
+      // wraper for der1 to use in vvt
+      mfem::Vector der1_wrap(nullptr, dim_);
+
+      for (int i{begin}; i < end; ++i) {
+        // get this loop's objects
+        const int& i_mbe = Base_::marked_boundary_elements_[i];
+        const auto& i_b_vdof = precomputed_->boundary_v_dofs_[i_mbe];
+        auto& i_b_el = precomputed_->boundary_elements_[i_mbe];
+        const auto& i_shapes = boundary_shapes[i_mbe];
+        const auto& i_d_shapes = boundary_d_shapes[i_mbe];
+        auto& i_results = nearest_distance_results_[i_mbe];
+        auto& i_lagranges = augmented_lagrange_multipliers[i_mbe];
+        auto& i_normal_gaps = normal_gaps[i_mbe];
+
+        // matrix to assemble
+        auto& i_grad = Base_::boundary_element_matrices_->operator[](i_mbe);
+        i_grad = 0.0; // initialize
+
+        // sizes
+        const int n_dof = i_b_el->GetDof();
+
+        // prepare quad loop
+        const auto& int_rule =
+            int_rules.Get(boundary_geometry_type_, quadrature_orders_[i_mbe]);
+
+        // quad loop
+        for (int q{}; q < int_rule.GetNPoints(); ++q) {
+          const mfem::IntegrationPoint& ip = int_rule.IntPoint(q);
+          const auto& q_shape = i_shapes[q];
+          const auto& q_d_shape = i_d_shapes[q];
+          const auto& q_lagrange = i_lagranges[q];
+          auto& q_result = i_results[q];
+          auto& q_normal_gap = i_normal_gaps[q];
+
+          // create some shortcuts from results
+          const auto& der1 = q_result.first_derivatives_;
+          const auto& der2 = q_result.second_derivatives_;
+          const auto& metric_tensor_weight =
+              q_result.query_metric_tensor_weight_;
+          const auto& normal = q_result.normal_;
+          const double& penalty = nearest_distance_coeff_->coefficient_;
+
+          // calc cp_mat - this is symmetric so has a potential to be reduced
+          // for 3D for 2D, won't make any difference.
+          for (int p_1{}; p_1 < boundary_para_dim_; ++p_1) {
+            for (int p_2{}; p_2 < boundary_para_dim_; ++p_2) {
+              auto& cp_mat_p_1_2 = cp_mat(p_1, p_2);
+
+              for (int d{}; d < dim_; ++d) {
+                // TODO make sure normal gap has correct sign
+                cp_mat_p_1_2 += der1(p_1, d) * der1(p_2, d)
+                                - q_normal_gap * normal[d] * der2(p_1, p_2, d);
+              }
+            }
+          }
+          // finalize by inverting this matrix
+          cp_mat.Invert();
+
+          // normal traction der
+          // start with -eps * I, this will set everything else to zero
+          // also sysmetric(, I think)
+          dtn_dx.Diag(-penalty, dim_);
+          // penalty * cp_mat_a_b * outer(der1, der1)
+          for (int d_1{}; d_1 < dim_; ++d_1) {
+            for (int d_2{}; d_2 < dim_; ++d_2) {
+              auto& dtn_dx_d_1_2 = dtn_dx(d_1, d_2);
+
+              for (int p_1{}; p_1 < boundary_para_dim_; ++p_1) {
+                for (int p_2{}; p_2 < boundary_para_dim_; ++p_2) {
+                  dtn_dx_d_1_2 += penalty * cp_mat(p_1, p_2) * der1(p_1, d_1)
+                                  * der1(p_2, d_2);
+                }
+              }
+            }
+          } // dtn_dx
+
+          const double weight = ip.weight * metric_tensor_weight;
+
+          // the four for loops
+          // let's at least try to have a contiguous access for one of it
+          // isn't this also symmetric?
+          double* grad_entry = i_grad.Data();
+          for (int d_2{}; d_2 < dim_; ++d_2) {
+            for (int f_2{}; f_2 < n_dof; ++f_2) {
+              const auto& shape_2 = q_shape[f_2];
+
+              for (int d_1{}; d_1 < dim_; ++d_1) {
+                const auto& dtn_dx_d_1_2 = dtn_dx(d_1, d_2);
+
+                for (int f_1{}; f_1 < n_dof; ++f_1) {
+                  *grad_entry++ =
+                      shape_2 * q_shape[f_1] * dtn_dx_d_1_2 * weight;
+                }
+              }
+            }
+
+          } // grad
+
+        } // quad
+
+      } // element
+    };
+
+    mimi::utils::NThreadExe(assemble_face_grad,
+                            marked_boundary_elements_.size(),
+                            precomputed_->meshes_.size());
   }
 
   virtual void AssembleFaceVector(

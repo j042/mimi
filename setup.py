@@ -55,7 +55,7 @@ class CMakeBuild(build_ext):
         # overwrite if ext.debug exists
         debug = ext.debug if hasattr(ext, "debug") else debug
         cfg = "Debug" if debug else "Release"
-        cfg = "Debug"
+        #        cfg = "Debug"
 
         # CMake lets you override the generator - we need to check this.
         # Can be set with Conda-Build, for example.

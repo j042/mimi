@@ -64,12 +64,52 @@ public:
   virtual mfem::Operator& GetGradient(const mfem::Vector& current_x) const {
     MIMI_FUNC();
 
-    mimi::utils::PrintInfo("Hey, not doing much yet");
-
     if (Grad == NULL) {
       Base_::Grad = new mfem::SparseMatrix(Base_::fes->GetVSize());
     } else {
       *Base_::Grad = 0.0;
+    }
+
+    // we assemble all first - these will call nthreadexe
+    // domain
+    for (auto& domain_integ : domain_nfi_) {
+      domain_integ->AssembleDomainGrad(current_x);
+
+      // add to global
+      const auto& el_mats = *domain_integ->element_matrices_;
+      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
+
+      for (int i{}; i < el_mats.size(); ++i) {
+        const auto& vdofs = *el_vdofs[i];
+        Base_::Grad->AddSubMatrix(vdofs, vdofs, el_mats[i], 0 /* skip_zeros */);
+      }
+    }
+
+    // boundary
+    for (auto& boundary_integ : boundary_face_nfi_) {
+      boundary_integ->AssembleBoundaryGrad(current_x);
+
+      // add to global
+      const auto& bel_mats = *boundary_integ->boundary_element_matrices_;
+      const auto& bel_vdofs = boundary_integ->precomputed_->boundary_v_dofs_;
+      for (const auto& boundary_marks :
+           boundary_integ->marked_boundary_elements_) {
+        const auto& b_vdofs = *bel_vdofs[boundary_marks];
+
+        Base_::Grad->AddSubMatrix(b_vdofs,
+                                  b_vdofs,
+                                  bel_mats[boundary_marks],
+                                  0 /* skip_zeros */);
+      }
+    }
+
+    if (!Base_::Grad->Finalized()) {
+      Base_::Grad->Finalize(0 /* skip_zeros */);
+    }
+
+    // set true dofs - if we have time, we could use nthread this (?)
+    for (const auto& tdof : Base_::ess_tdof_list) {
+      Base_::Grad->EliminateRowCol(tdof);
     }
 
     return *Base_::Grad;
