@@ -12,6 +12,7 @@
 // #include <splinepy/py/py_spline.hpp>
 
 // mimi
+#include "mimi/forms/nonlinear.hpp"
 #include "mimi/integrators/linear_elasticity.hpp"
 #include "mimi/integrators/penalty_contact.hpp"
 #include "mimi/integrators/vector_diffusion.hpp"
@@ -270,14 +271,19 @@ public:
       bilinear_precomputed->PasteCommonTo(contact_precomputed);
 
       auto nl_form =
-          std::make_shared<mfem::NonlinearForm>(disp_fes.fe_space_.get());
+          std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
       le_oper->AddNonlinearForm("contact", nl_form);
       for (const auto& [bid, nd_coeff] : contact) {
-        nl_form->AddBdrFaceIntegrator(
-            new mimi::integrators::PenaltyContact(nd_coeff,
-                                                  std::to_string(bid),
-                                                  contact_precomputed),
-            Base_::boundary_markers_[bid]);
+        auto contact_integ =
+            std::make_shared<mimi::integrators::PenaltyContact>(
+                nd_coeff,
+                std::to_string(bid),
+                contact_precomputed);
+        contact_integ->SetBoundaryMarker(&Base_::boundary_markers_[bid]);
+        contact_integ->Prepare();
+
+        nl_form->AddBdrFaceIntegrator(contact_integ,
+                                      &Base_::boundary_markers_[bid]);
       }
     }
 
@@ -286,9 +292,9 @@ public:
     Base_::linear_solvers_["linear_elasticity"] = lin_solver;
 
     // setup a newton solver
-    // auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
-    auto newton = std::make_shared<mimi::solvers::Newton>();
+    auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
     // auto newton = std::make_shared<mimi::solvers::Newton>();
+    //  auto newton = std::make_shared<mimi::solvers::Newton>();
     Base_::newton_solvers_["linear_elasticity"] = newton;
     le_oper->SetNewtonSolver(newton);
 

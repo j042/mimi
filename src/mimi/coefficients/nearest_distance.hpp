@@ -11,7 +11,7 @@ namespace mimi::coefficients {
 
 class NearestDistanceBase {
 public:
-  double coefficient_{1e-4};
+  double coefficient_{1e4};
   double tolerance_{1e-12};
   int para_dim_{-1};
   int dim_{-1};

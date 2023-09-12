@@ -12,7 +12,7 @@
 namespace mimi::integrators {
 
 class NonlinearBase : public mfem::NonlinearFormIntegrator {
-protected:
+public:
   std::shared_ptr<mimi::utils::PrecomputedData> precomputed_;
   std::unique_ptr<mimi::utils::Data<mfem::Vector>> element_vectors_;
   std::unique_ptr<mimi::utils::Data<mfem::Vector>> boundary_element_vectors_;
@@ -20,8 +20,10 @@ protected:
   std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>>
       boundary_element_matrices_;
 
-public:
   std::string name_;
+
+  /// marker for this bdr face integ
+  const mfem::Array<int>* boundary_marker_ = nullptr;
 
   /// ids of contributing boundary elements, extracted based on boundary_marker_
   mimi::utils::Vector<int> marked_boundary_elements_;
@@ -46,6 +48,12 @@ public:
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("AssembleDomainGrad not implemented");
+  }
+
+  virtual void SetBoundaryMarker(const mfem::Array<int>* b_marker) {
+    MIMI_FUNC()
+
+    boundary_marker_ = b_marker;
   }
 
   virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {

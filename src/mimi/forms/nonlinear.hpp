@@ -35,8 +35,9 @@ public:
       // add to global
       const auto& el_vecs = *domain_integ->element_vectors_;
       const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
+
       for (int i{}; i < el_vecs.size(); ++i) {
-        residual.AddElementVector(*el_vdofs[i], el_vecs[i])
+        residual.AddElementVector(*el_vdofs[i], el_vecs[i]);
       }
     }
 
@@ -45,19 +46,33 @@ public:
       boundary_integ->AssembleBoundaryResidual(current_x);
 
       // add to global
-      const auto& bel_vecs = *domain_integ->boundary_element_vectors_;
-      const auto& bel_vdofs = domain_integ->precomputed_->boundary_v_dofs_;
+      const auto& bel_vecs = *boundary_integ->boundary_element_vectors_;
+      const auto& bel_vdofs = boundary_integ->precomputed_->boundary_v_dofs_;
       for (const auto& boundary_marks :
-           domain_integ->marked_boundary_elements_) {
+           boundary_integ->marked_boundary_elements_) {
         residual.AddElementVector(*bel_vdofs[boundary_marks],
-                                  bel_vecs[boundary_marks])
+                                  bel_vecs[boundary_marks]);
       }
     }
 
     // set true dofs - if we have time, we could use nthread this.
     for (const auto& tdof : Base_::ess_tdof_list) {
-      y[tdof] = 0.0;
+      residual[tdof] = 0.0;
     }
+  }
+
+  virtual mfem::Operator& GetGradient(const mfem::Vector& current_x) const {
+    MIMI_FUNC();
+
+    mimi::utils::PrintInfo("Hey, not doing much yet");
+
+    if (Grad == NULL) {
+      Base_::Grad = new mfem::SparseMatrix(Base_::fes->GetVSize());
+    } else {
+      *Base_::Grad = 0.0;
+    }
+
+    return *Base_::Grad;
   }
 
   void AddDomainIntegrator(const NFIPointer_& nlfi) {
@@ -67,7 +82,7 @@ public:
   }
 
   void AddBdrFaceIntegrator(const NFIPointer_& nlfi,
-                            const Array<int>* bdr_marker = nullptr) {
+                            const mfem::Array<int>* bdr_marker = nullptr) {
     MIMI_FUNC()
 
     boundary_face_nfi_.push_back(nlfi);
