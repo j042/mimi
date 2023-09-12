@@ -194,6 +194,11 @@ public:
         precomputed_->scalars_["augmented_lagrange_multipliers"];
     augmented_lagrange_multipliers.resize(n_boundary_elements);
 
+    // we need to save penalty * dist + lagrange each iteration
+    auto& new_augmented_lagrange_multipliers =
+        precomputed_->scalars_["new_augmented_lagrange_multipliers"];
+    new_augmented_lagrange_multipliers.resize(n_boundary_elements);
+
     // save normal gap to update lagrange multiplier
     // we actually need normal_distance which is just -normal_gap.
     // I just don't want to introduce a new variable.
@@ -231,6 +236,7 @@ public:
         // get corresponding vector of lagrange multipliers
         // TODO: check if per-quad is correct.
         auto& i_lagrange = augmented_lagrange_multipliers[i_mbe];
+        auto& i_new_lagrange = new_augmented_lagrange_multipliers[i_mbe];
 
         // get corresponding vector of normal_gaps
         auto& i_normal_gaps = normal_gaps[i_mbe];
@@ -266,6 +272,7 @@ public:
         i_weights.resize(n_quad);
         i_results.resize(n_quad);
         i_lagrange.resize(n_quad, 0.0);
+        i_new_lagrange.resize(n_quad, 0.0);
         i_normal_gaps.resize(n_quad, 0.0);
         i_shapes.resize(n_quad);
         i_d_shapes.resize(n_quad);
@@ -293,8 +300,6 @@ public:
       }
     };
 
-    // mimi::utils::NThreadExe(precompute_shapes, n_boundary_patches,
-    // n_threads);
     mimi::utils::NThreadExe(
         precompute_trans_weights,
         static_cast<int>(Base_::marked_boundary_elements_.size()),
@@ -326,6 +331,9 @@ public:
     // augmented larange
     auto& augmented_lagrange_multipliers =
         precomputed_->scalars_["augmented_lagrange_multipliers"];
+
+    auto& new_augmented_lagrange_multipliers =
+        precomputed_->scalars_["new_augmented_lagrange_multipliers"];
 
     // normal gaps
     auto& normal_gaps = precomputed_->scalars_["normal_gaps"];
@@ -365,7 +373,8 @@ public:
         const auto& i_target_to_reference_weights =
             boundary_target_to_reference_weights[i_mbe];
         auto& i_results = nearest_distance_results_[i_mbe];
-        auto& i_lagranges = augmented_lagrange_multipliers[i_mbe];
+        const auto& i_lagranges = augmented_lagrange_multipliers[i_mbe];
+        auto& i_new_lagranges = new_augmented_lagrange_multipliers[i_mbe];
         auto& i_normal_gaps = normal_gaps[i_mbe];
         auto& i_residual = Base_::boundary_element_vectors_->operator[](i_mbe);
         i_residual = 0.0;
@@ -400,6 +409,7 @@ public:
           const auto& q_target_to_reference_weight =
               i_target_to_reference_weights[q];
           const auto& q_lagrange = i_lagranges[q];
+          auto& q_new_lagrange = i_new_lagranges[q];
           auto& q_result = i_results[q];
           auto& q_normal_gap = i_normal_gaps[q];
 
@@ -453,11 +463,11 @@ public:
           // for here, we just keep it as it is, since the results are the same
           //
           // lambda_new = penalty_factor * normal_distance + lambda_old
-          const double t_factor =
+          q_new_lagrange =
               nearest_distance_coeff_->coefficient_ * q_normal_gap + q_lagrange;
-          assert(t_factor < 0.0);
+          assert(q_new_lagrange < 0.0);
           for (int j{}; j < dim_; ++j) {
-            traction_n[j] = t_factor * q_result.normal_[j];
+            traction_n[j] = q_new_lagrange * q_result.normal_[j];
           }
 
           // get sqrt of det of metric tensor
@@ -496,9 +506,6 @@ public:
     // jacobian weights
     auto& boundary_target_to_reference_weights =
         precomputed_->scalars_["boundary_target_to_reference_weights"];
-    // augmented larange
-    auto& augmented_lagrange_multipliers =
-        precomputed_->scalars_["augmented_lagrange_multipliers"];
     // normal gaps
     auto& normal_gaps = precomputed_->scalars_["normal_gaps"];
 
@@ -526,7 +533,6 @@ public:
         const auto& i_shapes = boundary_shapes[i_mbe];
         const auto& i_d_shapes = boundary_d_shapes[i_mbe];
         auto& i_results = nearest_distance_results_[i_mbe];
-        auto& i_lagranges = augmented_lagrange_multipliers[i_mbe];
         auto& i_normal_gaps = normal_gaps[i_mbe];
 
         // matrix to assemble
@@ -550,7 +556,6 @@ public:
           const mfem::IntegrationPoint& ip = int_rule.IntPoint(q);
           const auto& q_shape = i_shapes[q];
           const auto& q_d_shape = i_d_shapes[q];
-          const auto& q_lagrange = i_lagranges[q];
           auto& q_normal_gap = i_normal_gaps[q];
 
           // create some shortcuts from results
