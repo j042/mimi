@@ -542,11 +542,15 @@ public:
 
         // quad loop
         for (int q{}; q < int_rule.GetNPoints(); ++q) {
+          auto& q_result = i_results[q];
+          if (!q_result.active_) {
+            continue;
+          }
+
           const mfem::IntegrationPoint& ip = int_rule.IntPoint(q);
           const auto& q_shape = i_shapes[q];
           const auto& q_d_shape = i_d_shapes[q];
           const auto& q_lagrange = i_lagranges[q];
-          auto& q_result = i_results[q];
           auto& q_normal_gap = i_normal_gaps[q];
 
           // create some shortcuts from results
@@ -606,7 +610,7 @@ public:
 
                 for (int f_1{}; f_1 < n_dof; ++f_1) {
                   *grad_entry++ =
-                      shape_2 * q_shape[f_1] * dtn_dx_d_1_2 * weight;
+                      shape_2 * -q_shape[f_1] * dtn_dx_d_1_2 * weight;
                 }
               }
             }
