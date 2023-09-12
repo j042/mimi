@@ -308,7 +308,42 @@ public:
 
   virtual void UpdateLagrange() {
     MIMI_FUNC();
-    mimi::utils::PrintAndThrowError("noch nicht bereit");
+
+    auto& augmented_lagrange_multipliers =
+        precomputed_->scalars_["augmented_lagrange_multipliers"];
+
+    auto& new_augmented_lagrange_multipliers =
+        precomputed_->scalars_["new_augmented_lagrange_multipliers"];
+
+    // active element loop
+    for (const int& i_mbe : Base_::marked_boundary_elements_) {
+      auto& i_lag = augmented_lagrange_multipliers[i_mbe];
+      const auto& i_new_lag = new_augmented_lagrange_multipliers[i_mbe];
+
+      assert(i_lag.size() == i_new_lag.size());
+
+      // quad loop
+      for (int j{}; j < static_cast<int>(i_lag.size()); ++j) {
+        i_lag[j] = i_new_lag[j];
+      }
+    }
+  }
+
+  virtual void ZeroLagrange() {
+    MIMI_FUNC()
+
+    auto& augmented_lagrange_multipliers =
+        precomputed_->scalars_["augmented_lagrange_multipliers"];
+
+    // active element loop
+    for (const int& i_mbe : Base_::marked_boundary_elements_) {
+      auto& i_lagranges = augmented_lagrange_multipliers[i_mbe];
+
+      // quad loop
+      for (auto& j_lagrange : i_lagranges) {
+        j_lagrange = 0.0;
+      }
+    }
   }
 
   virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {

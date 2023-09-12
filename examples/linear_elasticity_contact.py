@@ -11,7 +11,7 @@ le = mimi.PyLinearElasticity()
 le.read_mesh("tests/data/square-nurbs.mesh")
 
 # set param
-le.set_parameters(1E8, 0.4, 10000, 100)
+le.set_parameters(1e8, 0.4, 10000, 100)
 
 # refine
 le.elevate_degrees(2)
@@ -22,24 +22,26 @@ s = sp.NURBS(**le.nurbs())
 to_m, to_s = sp.io.mfem.dof_mapping(s)
 s.cps[:] = s.cps[to_s]
 
-# set bc    
+# set bc
 curv = sp.Bezier(
     [3],
-    [[-.5, 1.3],
-    [.3, .7],
-    [.7, .7],
-    [1.5, 1.3],]
+    [
+        [-0.5, 1.3],
+        [0.3, 0.7],
+        [0.7, 0.7],
+        [1.5, 1.3],
+    ],
 )
-curv.cps[:] += [.05, .45]
+curv.cps[:] += [0.05, 0.45]
 
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(100000, 4)
-scene.coefficient = 1E10
+scene.coefficient = 1e10
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
-#bc.initial.traction(1, 1, -100)
+# bc.initial.traction(1, 1, -100)
 bc.current.contact(1, scene)
 le.boundary_condition = bc
 
@@ -61,29 +63,29 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 tic.summary(print_=True)
 # set visualization options
 s.show_options["control_point_ids"] = False
-#s.show_options["knots"] = False
+# s.show_options["knots"] = False
 s.show_options["resolutions"] = 100
 s.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
 tic.summary(print_=True)
 # initialize a plotter
-#plt = gus.show([s, curv], close=False)
+# plt = gus.show([s, curv], close=False)
 for i in range(10):
     tic.toc("stepped")
-    #s.cps[:] = x[to_s]
-    #gus.show(
+    # s.cps[:] = x[to_s]
+    # gus.show(
     #    [s, curv],
     #    vedoplot=plt,
     #    interactive=False,
-    #)
-    #tic.toc("showing")
+    # )
+    # tic.toc("showing")
     le.step_time2()
     if i < 80:
-        curv.cps[:] -= [0, .005]
+        curv.cps[:] -= [0, 0.005]
     else:
-        curv.cps[:] -= [.005, 0]
+        curv.cps[:] -= [0.005, 0]
     scene.plant_kd_tree(100000, 4)
 
 tic.summary(print_=True)
-#gus.show(s, vedoplot=plt, interactive=True)
+# gus.show(s, vedoplot=plt, interactive=True)
