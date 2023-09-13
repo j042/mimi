@@ -26,13 +26,13 @@ s.cps[:] = s.cps[to_s]
 curv = sp.Bezier(
     [3],
     [
-        [-0.5, 1.3],
+        [-2.5, 1.3],
         [0.3, 0.7],
         [0.7, 0.7],
         [1.5, 1.3],
     ],
 )
-curv.cps[:] += [0.05, 0.45]
+curv.cps[:] += [0.05, 1]
 
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
@@ -49,7 +49,7 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("linear_elasticity", 0.0, 1e-8, 5, False)
+le.configure_newton("linear_elasticity", 1e-14, 1e-8, 20, False)
 
 tic.toc("bilinear, linear forms assembly")
 
@@ -74,9 +74,9 @@ for i in range(10000):
     tic.toc("stepped")
     s.cps[:] = x[to_s]
     gus.show(
-       [s, curv],
-       vedoplot=plt,
-       interactive=False,
+        [s, curv],
+        vedoplot=plt,
+        interactive=False,
     )
     tic.toc("showing")
     le.step_time2()
