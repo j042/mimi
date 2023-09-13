@@ -151,6 +151,17 @@ public:
 
     Base_::final_iter = it;
     Base_::final_norm = norm;
+
+    if (Base_::print_options.summary
+        || (!Base_::converged && Base_::print_options.warnings)
+        || Base_::print_options.first_and_last) {
+      mfem::out << "Newton: Number of iterations: " << final_iter << '\n'
+                << "   ||r|| = " << final_norm << '\n';
+    }
+    if (!Base_::converged
+        && (Base_::print_options.summary || Base_::print_options.warnings)) {
+      mfem::out << "Newton: No convergence!\n";
+    }
   }
 };
 

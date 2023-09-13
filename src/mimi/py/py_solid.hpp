@@ -388,7 +388,9 @@ public:
     mimi::utils::PrintAndThrowError("Derived class need to implement Setup().");
   };
 
-  virtual void ConfigureNewton(const std::string name,
+  /// as newton solvers are separetly by name, you can configure newton solvers
+  /// by name
+  virtual void ConfigureNewton(const std::string& name,
                                const double rel_tol,
                                const double abs_tol,
                                const double max_iter,
@@ -400,6 +402,46 @@ public:
     newton->SetAbsTol(abs_tol);
     newton->SetMaxIter(max_iter);
     newton->iterative_mode = iterative_mode;
+  }
+
+  /// get final norms. can be used for augmented langrange iterations
+  virtual py::tuple NewtonFinalNorms(const std::string& name) const {
+    MIMI_FUNC()
+
+    auto& newton = newton_solvers_.at(name);
+    return py::make_tuple(newton->GetFinalRelNorm(), newton->GetFinalNorm());
+  }
+
+  virtual void UpdateContactLagrange() {
+    MIMI_FUNC()
+
+    auto* mimi_oper =
+        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    if (mimi_oper) {
+      auto& contact_nlf = mimi_oper->nonlinear_forms_.at("contact");
+      for (auto& contact_integ : contact_nlf->boundary_face_nfi_) {
+        contact_integ->UpdateLagrange();
+      }
+    } else {
+      mimi::utils::PrintAndThrowError(
+          "Failed to cast operator to mimi's base.");
+    }
+  }
+
+  virtual void FillContactLagrange(const double& value) {
+    MIMI_FUNC()
+
+    auto* mimi_oper =
+        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    if (mimi_oper) {
+      auto& contact_nlf = mimi_oper->nonlinear_forms_.at("contact");
+      for (auto& contact_integ : contact_nlf->boundary_face_nfi_) {
+        contact_integ->FillLagrange(value);
+      }
+    } else {
+      mimi::utils::PrintAndThrowError(
+          "Failed to cast operator to mimi's base.");
+    }
   }
 
   /// @brief sets second order system with given ptr and takes ownership.

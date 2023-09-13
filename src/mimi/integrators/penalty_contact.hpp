@@ -324,12 +324,18 @@ public:
 
       // quad loop
       for (int j{}; j < static_cast<int>(i_lag.size()); ++j) {
+        //if (i_new_lag[j] < 0.) {
+        //  std::cout << "old lag " << i_lag[j];
+        //}
         i_lag[j] = i_new_lag[j];
+        //if (i_new_lag[j] < 0.) {
+        //std::cout << " new lag " << i_lag[j] << std::endl;
+        //}
       }
     }
   }
 
-  virtual void ZeroLagrange() {
+  virtual void FillLagrange(const double value) {
     MIMI_FUNC()
 
     auto& augmented_lagrange_multipliers =
@@ -341,7 +347,7 @@ public:
 
       // quad loop
       for (auto& j_lagrange : i_lagranges) {
-        j_lagrange = 0.0;
+        j_lagrange = value;
       }
     }
   }

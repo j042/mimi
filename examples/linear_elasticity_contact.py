@@ -11,11 +11,11 @@ le = mimi.PyLinearElasticity()
 le.read_mesh("tests/data/square-nurbs.mesh")
 
 # set param
-le.set_parameters(1e8, 0.4, 10000, 100)
+le.set_parameters(1e8, 0.4, 1000000, 10000)
 
 # refine
-le.elevate_degrees(2)
-le.subdivide(5)
+le.elevate_degrees(4)
+le.subdivide(2)
 
 # create splinepy partner
 s = sp.NURBS(**le.nurbs())
@@ -50,12 +50,12 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("linear_elasticity", 1e-13, 1e-6, 100, False)
+le.configure_newton("linear_elasticity", 0.0, 1e-12, 40, False)
 
 tic.toc("bilinear, linear forms assembly")
 
 # set step size
-le.time_step_size = 0.001
+le.time_step_size = 0.01
 
 # get view of solution, displacement
 x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
@@ -70,22 +70,22 @@ s.cps[:] = x[to_s]
 
 tic.summary(print_=True)
 # initialize a plotter
-# plt = gus.show([s, curv], close=False)
-for i in range(10):
+plt = gus.show([s, curv], close=False)
+for i in range(10000):
     tic.toc("stepped")
-    # s.cps[:] = x[to_s]
-    # gus.show(
-    #    [s, curv],
-    #    vedoplot=plt,
-    #    interactive=False,
-    # )
-    # tic.toc("showing")
+    s.cps[:] = x[to_s]
+    gus.show(
+       [s, curv],
+       vedoplot=plt,
+       interactive=False,
+    )
+    tic.toc("showing")
     le.step_time2()
-    if i < 80:
+    if i < 50:
         curv.cps[:] -= [0, 0.005]
     else:
         curv.cps[:] -= [0.005, 0]
     scene.plant_kd_tree(100000, 4)
 
 tic.summary(print_=True)
-# gus.show(s, vedoplot=plt, interactive=True)
+gus.show(s, vedoplot=plt, interactive=True)

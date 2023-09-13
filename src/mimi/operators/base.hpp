@@ -7,6 +7,7 @@
 
 #include <mfem.hpp>
 
+#include "mimi/forms/nonlinear.hpp"
 #include "mimi/solvers/newton.hpp"
 #include "mimi/utils/print.hpp"
 
@@ -16,7 +17,7 @@ class OperatorBase {
 public:
   using LinearFormPointer_ = std::shared_ptr<mfem::LinearForm>;
   using BilinearFormPointer_ = std::shared_ptr<mfem::BilinearForm>;
-  using NonlinearFormPointer_ = std::shared_ptr<mfem::NonlinearForm>;
+  using NonlinearFormPointer_ = std::shared_ptr<mimi::forms::Nonlinear>; //
 
   mfem::FiniteElementSpace& fe_space_;
 

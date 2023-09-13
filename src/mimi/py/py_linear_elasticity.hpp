@@ -274,12 +274,16 @@ public:
           std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
       le_oper->AddNonlinearForm("contact", nl_form);
       for (const auto& [bid, nd_coeff] : contact) {
+        // initialzie integrator with nearest distance coeff (splinepy splines)
         auto contact_integ =
             std::make_shared<mimi::integrators::PenaltyContact>(
                 nd_coeff,
                 std::to_string(bid),
                 contact_precomputed);
+        // set the same boundary marker. It will be internally used for nthread
+        // assemble of marked boundaries
         contact_integ->SetBoundaryMarker(&Base_::boundary_markers_[bid]);
+        // precompute basis and recurring options.
         contact_integ->Prepare();
 
         nl_form->AddBdrFaceIntegrator(contact_integ,

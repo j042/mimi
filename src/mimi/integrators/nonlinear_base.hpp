@@ -38,12 +38,14 @@ public:
   ///
   virtual const std::string& Name() const { return name_; }
 
+  /// NThread domain assemble
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("AssembleDomainResidual not implemented");
   }
 
+  /// NThread domain grad assemble
   virtual void AssembleDomainGrad(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
@@ -56,15 +58,30 @@ public:
     boundary_marker_ = b_marker;
   }
 
+  /// NThread boundary assemble
   virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("AssembleBoundaryResidual not implemented");
   }
 
+  /// NThread boundary grad assemble
   virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("AssembleBoundaryGrad not implemented");
+  }
+
+  virtual void UpdateLagrange() {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("UpdateLagrange not implemented for",
+                                    Name());
+  }
+
+  virtual void FillLagrange(const double value) {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("FillLagrange not implemented for", Name());
   }
 
   /// implemement criterium in case norm(residual) == 0 is not enough

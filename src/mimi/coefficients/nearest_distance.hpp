@@ -9,19 +9,28 @@
 
 namespace mimi::coefficients {
 
+/// @brief base class for nearest distance coefficients. Helps find nearest
+/// distance of foreign objects and contact formulations. Some contact related
+/// functions are implemented here.
 class NearestDistanceBase {
 public:
+  /// @brief coefficient used for contact formulation
   double coefficient_{1e4};
+  /// @brief tolerance for nearest search
   double tolerance_{1e-12};
+  /// @brief parametric dimension of the scene
   int para_dim_{-1};
+  /// @brief physical dimension of the scene
   int dim_{-1};
 
+  /// @brief nearest distance query
   struct Query {
     mimi::utils::Data<double> query_;
     mimi::utils::Data<double> initial_guess_;
     int max_iterations_;
   };
 
+  /// @brief results of nearest distance query
   struct Results {
     // query
     mimi::utils::Data<double> parametric_;
@@ -80,7 +89,7 @@ public:
     mimi::utils::PrintAndThrowError("Inherit and implement me.");
 
     return -1;
-  };
+  }
 };
 
 class NearestDistanceToSplines : public NearestDistanceBase {
