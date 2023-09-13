@@ -324,13 +324,7 @@ public:
 
       // quad loop
       for (int j{}; j < static_cast<int>(i_lag.size()); ++j) {
-        //if (i_new_lag[j] < 0.) {
-        //  std::cout << "old lag " << i_lag[j];
-        //}
         i_lag[j] = i_new_lag[j];
-        //if (i_new_lag[j] < 0.) {
-        //std::cout << " new lag " << i_lag[j] << std::endl;
-        //}
       }
     }
   }
@@ -646,17 +640,23 @@ public:
           // the four for loops
           // let's at least try to have a contiguous access for one of it
           // isn't this also symmetric?
+          //
+          // trying to do the following
+          // i_grad(d_1 * n_dof + f_1, d_2 * n_dof + f_2) += -q_shape(f_1) *
+          // q_shape(f_2) * dtn_dx(d_1, d_2) * weight;
           double* grad_entry = i_grad.Data();
           for (int d_2{}; d_2 < dim_; ++d_2) {
             for (int f_2{}; f_2 < n_dof; ++f_2) {
-              const auto& shape_2 = q_shape[f_2];
+              const auto& shape_2 =
+                  q_shape[f_2]; // shape2 is same for this column
 
               for (int d_1{}; d_1 < dim_; ++d_1) {
-                const auto& dtn_dx_d_1_2 = dtn_dx(d_1, d_2);
+                const auto& dtn_dx_d_1_2 =
+                    dtn_dx(d_1, d_2); // same value applied for same dim
 
                 for (int f_1{}; f_1 < n_dof; ++f_1) {
-                  *grad_entry++ =
-                      shape_2 * -q_shape[f_1] * dtn_dx_d_1_2 * weight;
+                  *grad_entry++ +=
+                      -q_shape(f_1) * shape_2 * dtn_dx_d_1_2 * weight;
                 }
               }
             }

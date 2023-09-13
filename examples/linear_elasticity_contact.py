@@ -11,11 +11,11 @@ le = mimi.PyLinearElasticity()
 le.read_mesh("tests/data/square-nurbs.mesh")
 
 # set param
-le.set_parameters(1e8, 0.4, 1000000, 10000)
+le.set_parameters(1e9, 0.4, 1000000, 10000)
 
 # refine
-le.elevate_degrees(4)
-le.subdivide(2)
+le.elevate_degrees(3)
+le.subdivide(4)
 
 # create splinepy partner
 s = sp.NURBS(**le.nurbs())
@@ -37,11 +37,10 @@ curv.cps[:] += [0.05, 0.45]
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(100000, 4)
-scene.coefficient = 1e10
+scene.coefficient = 1e11
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
-# bc.initial.traction(1, 1, -100)
 bc.current.contact(1, scene)
 le.boundary_condition = bc
 
@@ -50,12 +49,12 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("linear_elasticity", 0.0, 1e-12, 40, False)
+le.configure_newton("linear_elasticity", 0.0, 1e-8, 5, False)
 
 tic.toc("bilinear, linear forms assembly")
 
 # set step size
-le.time_step_size = 0.01
+le.time_step_size = 0.001
 
 # get view of solution, displacement
 x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
