@@ -29,6 +29,12 @@ public:
                                     Name());
   }
 
+  /// @brief x and dxdt should be current solution and advances are performed
+  /// inplace.
+  /// @param x
+  /// @param dxdt
+  /// @param t
+  /// @param dt
   virtual void FixedPointAdvance2(mfem::Vector& x,
                                   mfem::Vector& dxdt,
                                   double& t,

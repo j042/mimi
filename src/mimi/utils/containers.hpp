@@ -69,7 +69,7 @@ template<typename Type, int dim = -1>
 struct Data {
   Type* data_{nullptr};
   int size_{0};
-  int stride0_{1}; // set directly. in case of 3d this should be dim0 * dim1
+  int stride0_{1}; // set directly. in case of 3d this should be dim1 * dim2
   int stride1_{1}; // set directly.
 
   /// @brief can't set size twice
