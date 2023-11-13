@@ -4,6 +4,7 @@ import sys
 import platform
 import subprocess
 from pathlib import Path
+import site
 
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
@@ -77,6 +78,7 @@ class CMakeBuild(build_ext):
             # "-DMFEM_THREAD_SAFE=ON",
             "-DMFEM_USE_LAPACK=ON",
             "-DMIMI_COMPILE_SPLINEPY=OFF",
+            f"-DCMAKE_PREFIX_PATH={site.getsitepackages()[0]}",
         ]
 
         build_args = []
@@ -147,6 +149,9 @@ class CMakeBuild(build_ext):
             if hasattr(self, "parallel") and self.parallel:
                 # CMake 3.12+ only.
                 build_args += [f"-j{self.parallel}"]
+            else:
+                # always full parallel
+                build_args += [f"-j{os.cpu_count()}"]
 
         build_temp = Path(self.build_temp) / ext.name
         if not build_temp.exists():
