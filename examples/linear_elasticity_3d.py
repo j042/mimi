@@ -25,7 +25,7 @@ s.cps[:] = s.cps[to_s]
 # set bc
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(1, 0).dirichlet(1, 1).dirichlet(1, 2)
-bc.initial.body_force(1, -10)
+bc.initial.body_force(1, -200)
 le.boundary_condition = bc
 
 tic.toc()
@@ -40,7 +40,7 @@ tic.summary(print_=True)
 rhs = le.linear_form_view2("rhs")
 
 # set step size
-le.time_step_size = 0.1
+le.time_step_size = 0.01
 
 # get view of solution, displacement
 x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
