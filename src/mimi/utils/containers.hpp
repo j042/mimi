@@ -87,8 +87,9 @@ struct Data {
   Data(const int n) { SetSize(n); }
 
   /// n is size. n * stride is size * stride, don't be confused.
-  Data(int n, const int stride) : Data(n), stride0_(stride) {
+  Data(int n, const int stride) : Data(n) {
     assert(n % stride == 0);
+    stride0_ = stride;
   }
   ~Data() { delete[] data_; }
 
