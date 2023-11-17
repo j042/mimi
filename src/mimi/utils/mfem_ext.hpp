@@ -105,7 +105,7 @@ public:
   /// instead of returning internal ptr
   void GetBdrFaceTransformations(int BdrElemNo,
                                  FaceElementTransformationsExt* tr) {
-    int fn =  GetBdrElementFaceIndex(BdrElemNo);
+    int fn = GetBdrElementFaceIndex(BdrElemNo);
 
     // Check if the face is interior, shared, or nonconforming.
     if (FaceIsTrueInterior(fn) || faces_info[fn].NCFace >= 0) {
