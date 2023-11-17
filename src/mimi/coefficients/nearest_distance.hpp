@@ -61,15 +61,14 @@ public:
       para_dim_ = para_dim;
       dim_ = dim;
 
-      parametric_.SetSize(para_dim);
-      physical_.SetSize(dim);
-      physical_minus_query_.SetSize(dim);
-      first_derivatives_.SetSize(para_dim * dim);
-      first_derivatives_.stride0_ = dim;
-      second_derivatives_.SetSize(para_dim * para_dim * dim);
-      second_derivatives_.stride0_ = para_dim * dim;
-      second_derivatives_.stride1_ = dim;
-      normal_.SetSize(dim);
+      parametric_.Reallocate(para_dim);
+      physical_.Reallocate(dim);
+      physical_minus_query_.Reallocate(dim);
+      first_derivatives_.Reallocate(para_dim * dim);
+      first_derivatives_.SetShape(para_dim, dim);
+      second_derivatives_.Reallocate(para_dim * para_dim * dim);
+      second_derivatives_.SetShape(para_dim, para_dim, dim);
+      normal_.Reallocate(dim);
     }
   };
 
@@ -129,7 +128,7 @@ public:
     for (auto& spline : splines_) {
       const int para_dim = spline->Core()->SplinepyParaDim();
       mimi::utils::Data<int> res_query(para_dim);
-      res_query.fill(resolution);
+      res_query.Fill(resolution);
       spline->Core()->SplinepyPlantNewKdTreeForProximity(res_query.data(),
                                                          nthreads);
     }

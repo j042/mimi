@@ -170,10 +170,10 @@ public:
     // allocate element vectors and matrices
     Base_::boundary_element_matrices_ =
         std::make_unique<mimi::utils::Data<mfem::DenseMatrix>>();
-    Base_::boundary_element_matrices_->SetSize(n_boundary_elements);
+    Base_::boundary_element_matrices_->Reallocate(n_boundary_elements);
     Base_::boundary_element_vectors_ =
         std::make_unique<mimi::utils::Data<mfem::Vector>>();
-    Base_::boundary_element_vectors_->SetSize(n_boundary_elements);
+    Base_::boundary_element_vectors_->Reallocate(n_boundary_elements);
 
     // shapes
     auto& boundary_shapes = precomputed_->vectors_["boundary_shapes"];
@@ -379,7 +379,7 @@ public:
       // prepare per thread data - query, int_rule
       mimi::coefficients::NearestDistanceBase::Query query{};
       query.max_iterations_ = 20;
-      query.query_.SetSize(dim_); // allocate
+      query.query_.Reallocate(dim_); // allocate
 
       auto& int_rules = precomputed_->int_rules_[i_thread];
 
