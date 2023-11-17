@@ -57,7 +57,6 @@ public:
 template<typename Type>
 using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
 
-
 /// @brief Fully dynamic array that can view another data. Equipped with basic
 /// math operations.
 /// @tparam DataType

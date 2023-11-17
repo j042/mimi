@@ -47,6 +47,7 @@ void init_py_solid(py::module_& m) {
            py::arg("bid"),
            py::arg("dim"))
       .def("zero_dof_ids", &PySolid::ZeroDofIds, py::arg("fe_space_name"))
+      .def("nonlinear_from2", &PySolid::NonlinearForm2, py::arg("nlf_name"))
       .def("step_time2", &PySolid::StepTime2)
       .def("configure_newton",
            &PySolid::ConfigureNewton,

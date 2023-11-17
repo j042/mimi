@@ -17,10 +17,12 @@ conda install -c conda-forge suitesparse
 # brew (mac)
 brew install suite-sparse
 # ubuntu
-# ?
+sudo apt-get install libsuitesparse-dev
 
 # 3. install mimi
 python3 setup.py develop
+# for debug build
+DEBUG=1 python3 setup.py develop
 
 # 4. try examples - currently those need to be called at mimi's root
 python3 examples/linear_elasticity_contact.py

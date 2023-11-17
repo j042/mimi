@@ -13,6 +13,7 @@
 #include <splinepy/py/py_spline.hpp>
 
 // mimi
+#include "mimi/forms/nonlinear.hpp"
 #include "mimi/operators/base.hpp"
 #include "mimi/py/py_utils.hpp"
 #include "mimi/solvers/newton.hpp"
@@ -509,6 +510,23 @@ public:
     auto& fes = fe_spaces_.at(fes_name);
 
     return mimi::py::NumpyCopy<int>(fes.zero_dofs_, fes.zero_dofs_.Size());
+  }
+
+  virtual std::shared_ptr<mimi::forms::Nonlinear>
+  NonlinearForm2(const std::string& nlf_name) {
+    MIMI_FUNC()
+
+    assert(oper2_);
+
+    auto* mimi_oper2 =
+        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+
+    if (!mimi_oper2) {
+      mimi::utils::PrintAndThrowError(
+          "2nd order dynamic system does not exist yet.");
+    }
+
+    return mimi_oper2->nonlinear_forms_.at(nlf_name);
   }
 
   virtual void StepTime2() {
