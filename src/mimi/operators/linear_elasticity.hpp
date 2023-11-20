@@ -140,7 +140,9 @@ public:
     viscosity_ = MimiBase_::bilinear_forms_["viscosity"];
     if (viscosity_) {
       viscosity_->Finalize(0); // skip_zero is 0
-      mimi::utils::PrintInfo(Name(), "has viscosity term.");
+      // if this is sorted, we can just add A
+      viscosity_->SortColumIndices()
+          mimi::utils::PrintInfo(Name(), "has viscosity term.");
     }
   }
 
