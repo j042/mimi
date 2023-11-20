@@ -13,9 +13,6 @@ public:
   using MfemBase_ = Base_::MfemBase_;
   using NonlinearFormPointer_ = MimiBase_::MinlinaerFormPointer;
 
-  /// inherit ctor
-  using Base_::Base_;
-
 protected:
   // nonlinear stiffness -> Base_::stiffness_ ist left untouched here
   NonlinearFormPointer_ nonlinear_stiffness_;
@@ -28,9 +25,10 @@ protected:
   int mass_n_nonzeros_ = -1;
 
 public:
-  NonlinearSolid(mfem::FiniteElementSpace& fe_space)
-      : MimiBase_(fe_space),
-        MfemBase_(fe_space.GetTrueVSize(), 0.0) {
+  /// This is same as Base_'s ctor
+  NonlinearSolid(mfem::FiniteElementSpace& fe_space,
+                 mfem::GridFunction* x_ref))
+      : Base_(fe_spaces, x_ref) {
     MIMI_FUNC()
   }
 
