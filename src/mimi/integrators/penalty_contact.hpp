@@ -94,10 +94,6 @@ protected:
   std::shared_ptr<mimi::coefficients::NearestDistanceBase>
       nearest_distance_coeff_ = nullptr;
 
-  /// @brief quadrature order per elements - alternatively, could be per
-  /// boundary patch thing
-  mimi::utils::Vector<int> quadrature_orders_;
-
   /// results from proximity queries, to be reused for grad - latest relevant
   /// residual and grad are calls right after one another from newton solver
   mimi::utils::Vector<
@@ -108,8 +104,7 @@ protected:
   /// the geometry type all the time, we save this just once.
   mfem::Geometry::Type boundary_geometry_type_;
 
-  /// convenient constants - space dim
-  int dim_;
+  /// convenient constants - space dim (dim_) is in base
   int boundary_para_dim_;
 
 public:
@@ -206,7 +201,7 @@ public:
     normal_gaps.resize(n_boundary_elements);
 
     // quad order
-    quadrature_orders_.resize(n_boundary_elements);
+    boundary_quadrature_orders_.resize(n_boundary_elements);
 
     // now, weight of jacobian.
     auto precompute_trans_weights = [&](const int marked_b_el_begin,
@@ -250,7 +245,7 @@ public:
                                 : quadrature_order;
 
         // save this quad_order for the element
-        quadrature_orders_[i_mbe] = q_order;
+        boundary_quadrature_orders_[i_mbe] = q_order;
 
         // get int rule
         const mfem::IntegrationRule& ir =
@@ -433,7 +428,8 @@ public:
 
         // prepare quad loop
         const auto& int_rule =
-            int_rules.Get(boundary_geometry_type_, quadrature_orders_[i_mbe]);
+            int_rules.Get(boundary_geometry_type_,
+                          boundary_quadrature_orders_[i_mbe]);
 
         // quad loop
         for (int q{}; q < int_rule.GetNPoints(); ++q) {
@@ -579,7 +575,8 @@ public:
 
         // prepare quad loop
         const auto& int_rule =
-            int_rules.Get(boundary_geometry_type_, quadrature_orders_[i_mbe]);
+            int_rules.Get(boundary_geometry_type_,
+                          boundary_quadrature_orders_[i_mbe]);
 
         // quad loop
         for (int q{}; q < int_rule.GetNPoints(); ++q) {

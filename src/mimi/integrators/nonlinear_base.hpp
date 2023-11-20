@@ -28,6 +28,17 @@ public:
   /// ids of contributing boundary elements, extracted based on boundary_marker_
   mimi::utils::Vector<int> marked_boundary_elements_;
 
+  /// @brief quadrature order per elements - alternatively, could be per
+  /// patch thing
+  mimi::utils::Vector<int> quadrature_orders_;
+
+  /// @brief quadrature order per boundary elements - alternatively, could be
+  /// per boundary patch thing
+  mimi::utils::Vector<int> boundary_quadrature_orders_;
+
+  /// convenient constants - space dim
+  int dim_;
+
   /// basic ctor saved ptr to precomputed and name to use as key in precomputed
   NonlinearBase(
       const std::string& name,
@@ -35,8 +46,11 @@ public:
       : name_(name),
         precomputed_(precomputed) {}
 
-  ///
+  /// Name of the integrator
   virtual const std::string& Name() const { return name_; }
+
+  /// Precompute call interface
+  virtual void Prepare(const int quadrature_order);
 
   /// NThread domain assemble
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
