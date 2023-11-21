@@ -100,10 +100,6 @@ protected:
       mimi::utils::Vector<mimi::coefficients::NearestDistanceBase::Results>>
       nearest_distance_results_;
 
-  /// decided to ask for intrules all the time. but since we don't wanna call
-  /// the geometry type all the time, we save this just once.
-  mfem::Geometry::Type boundary_geometry_type_;
-
   /// convenient constants - space dim (dim_) is in base
   int boundary_para_dim_;
 

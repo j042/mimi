@@ -36,6 +36,13 @@ public:
   /// per boundary patch thing
   mimi::utils::Vector<int> boundary_quadrature_orders_;
 
+  /// decided to ask for intrules all the time. but since we don't wanna call
+  /// the geometry type all the time, we save this just once.
+  mfem::Geometry::Type geometry_type_;
+
+  /// see geometry_type_
+  mfem::Geometry::Type boundary_geometry_type_;
+
   /// convenient constants - space dim
   int dim_;
 
