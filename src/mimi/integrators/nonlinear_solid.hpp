@@ -199,6 +199,7 @@ public:
         precomputed_->matrices_["target_to_reference_jacobians"];
     auto& deformation_gradients =
         precomputed_->matrices_["deformation_gradients"];
+    // maybe we won't save those
     auto& deformation_gradient_inverses =
         precomputed_->matrices_["deformation_gradient_inverses"];
     auto& deformation_gradient_weights =
@@ -220,6 +221,8 @@ public:
 
       // temporary stress holder can be either PK1 or cauchy, based on material
       mfem::DenseMatrix stress(dim_, dim_);
+      // gradients of basis in physical (current) configuration
+      mfem::DenseMatrix dN_dx(dim_, dim_);
 
       for (int i{begin}; i < end; ++i) {
         // in
@@ -231,8 +234,11 @@ public:
         const auto& i_target_to_reference_jacobians =
             target_to_reference_jacobians[i];
 
-        // out
+        // out / local save
         auto& i_deformation_gradients = deformation_gradients[i];
+        auto& i_deformation_gradient_inverses =
+            deformation_gradient_inverses[i];
+        auto& i_deformation_gradient_weights = deformation_gradient_weights[i];
         auto& i_residual = Base_::element_vectors_->operator[](i);
         i_residual = 0.0;
 
@@ -257,11 +263,22 @@ public:
           const auto& q_reference_to_target_weight =
               i_reference_to_target_weights[q];
           auto& q_deformation_gradient = i_deformation_gradients[q];
+          auto& q_deformation_gradient_inverse =
+              i_deformation_gradient_inverses[q];
+          auto& q_deformation_gradient_weight =
+              i_deformation_gradient_weights[q];
 
           // get dx_dX
           mfem::MultAtB(i_current_solution_mat_view,
                         q_target_d_shape,
                         q_deformation_gradient);
+
+          // we may not need this
+          // also can do it in if(PhysicalIntegration())
+          // TODO talk to Dr Z
+          mfem::CalcInverse(q_deformation_gradient,
+                            q_deformation_gradient_inverse);
+          q_deformation_gradient_weight = q_deformation_gradient.Weight();
 
           // evaluate cauchy or PK1 stress
           material_->EvaluateStress(i_material_states[q],
@@ -271,8 +288,10 @@ public:
           // check where this needs to be integrated
           if (material_->PhysicalIntegration()) {
             // stress is probably cauchy
-            auto&
-
+            mfem::Mult(q_target_d_shape, q_deformation_gradient_inverse, dN_dx);
+            stress *= q_deformation_gradient_weight * ip.weight
+                      * q_reference_to_target_weight;
+            mfem::AddMultABt(dN_dx, stress, i_residual_mat_view);
           } else {
             // stress is probably PK1
             stress *= ip.weight * q_reference_to_target_weight;
