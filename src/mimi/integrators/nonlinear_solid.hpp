@@ -47,11 +47,11 @@ class NonliearSolid : public NonlinearBase {
         precomputed_->scalars_["reference_to_target_weights"];
     reference_to_target_weights.resize(n_elements);
 
-    // element tartar_to_reference jacobian (inverse of reference_to_target
+    // element target_to_reference jacobian (inverse of reference_to_target
     // jacobian)
-    auto& tartar_to_reference_jacobians =
-        precomputed_->matrices_["tartar_to_reference_jacobians"];
-    tartar_to_reference_jacobians.resize(n_elements);
+    auto& target_to_reference_jacobians =
+        precomputed_->matrices_["target_to_reference_jacobians"];
+    target_to_reference_jacobians.resize(n_elements);
 
     // extract element geometry type
     geometry_type_ = precomputed_->elements_[0]->GetGeomType();
@@ -76,8 +76,8 @@ class NonliearSolid : public NonlinearBase {
         auto& i_d_shapes = d_shapes[i];
         auto& i_target_d_shapes = target_d_shapes[i];
         auto& i_reference_to_target_weights = reference_to_target_weights[i];
-        auto& i_tartar_to_reference_jacobians =
-            tartar_to_reference_jacobians[i];
+        auto& i_target_to_reference_jacobians =
+            target_to_reference_jacobians[i];
 
         // get quad order
         const int q_order = (quadrature_order < 0)
@@ -98,7 +98,7 @@ class NonliearSolid : public NonlinearBase {
         i_d_shapes.resize(n_quad);
         i_target_d_shapes.resize(n_quad);
         i_reference_to_target_weights.resize(n_quad);
-        i_tartar_to_reference_jacobians.resize(n_quad);
+        i_target_to_reference_jacobians.resize(n_quad);
 
         // also allocate element based vectors and matrix (assembly output)
         element_vectors_->operator[](i).SetSize(n_dof * dim_);
@@ -112,18 +112,18 @@ class NonliearSolid : public NonlinearBase {
           // get d shapes
           mfem::DenseMatrix& j_d_shape = i_shapes[j];
           mfem::DenseMatrix& j_target_d_shape = i_target_d_shapes[j];
-          mfem::DenseMatrix& j_tartar_to_reference_jacobian =
-              i_tartar_to_reference_jacobians[j];
+          mfem::DenseMatrix& j_target_to_reference_jacobian =
+              i_target_to_reference_jacobians[j];
           j_d_shape.SetSize(n_dof, dim_);
           j_target_d_shape.SetSize(n_dof, dim_);
-          j_tartar_to_reference_jacobian.SetSize(dim_, dim_);
+          j_target_to_reference_jacobian.SetSize(dim_, dim_);
 
           //  Calc
           i_el->CalcDShape(ip, j_d_shape);
           mfem::CalcInverse(i_el_trans.Jacobian(),
-                            j_tartar_to_reference_jacobian);
+                            j_target_to_reference_jacobian);
           mfem::Mult(j_d_shape,
-                     j_tartar_to_reference_jacobian,
+                     j_target_to_reference_jacobian,
                      j_target_d_shape);
 
           // at last, trans weight
@@ -148,8 +148,8 @@ class NonliearSolid : public NonlinearBase {
     auto& reference_to_target_weights =
         precomputed_->scalars_["reference_to_target_weights"];
     // jacobians are n_elem * n_quad (n_dim, n_dim)
-    auto& tartar_to_reference_jacobians =
-        precomputed_->matrices_["tartar_to_reference_jacobians"];
+    auto& target_to_reference_jacobians =
+        precomputed_->matrices_["target_to_reference_jacobians"];
 
     // lambda for nthread assemble
     auto assemble_element_residual = [&](const int begin,
@@ -171,8 +171,8 @@ class NonliearSolid : public NonlinearBase {
         const auto& i_target_d_shapes = target_d_shapes[i];
         const auto& i_reference_to_target_weights =
             reference_to_target_weights[i];
-        const auto& i_tartar_to_reference_jacobians =
-            tartar_to_reference_jacobians[i];
+        const auto& i_target_to_reference_jacobians =
+            target_to_reference_jacobians[i];
 
         auto& i_residual = Base_::element_vectors_->operator[](i);
         i_residual = 0.0;
