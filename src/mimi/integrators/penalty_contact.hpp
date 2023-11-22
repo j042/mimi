@@ -175,9 +175,9 @@ public:
     boundary_d_shapes.resize(n_boundary_elements);
 
     // jacobian weights
-    auto& boundary_target_to_reference_weights =
-        precomputed_->scalars_["boundary_target_to_reference_weights"];
-    boundary_target_to_reference_weights.resize(n_boundary_elements);
+    auto& boundary_reference_to_target_weights =
+        precomputed_->scalars_["boundary_reference_to_target_weights"];
+    boundary_reference_to_target_weights.resize(n_boundary_elements);
 
     // lagrange_multiplier for augmented
     // we don't have to use it, but we have it
@@ -219,10 +219,10 @@ public:
 
         // get boundary transformations
         auto& i_b_trans =
-            *precomputed_->target_to_reference_boundary_trans_[i_mbe];
+            *precomputed_->reference_to_target_boundary_trans_[i_mbe];
 
         // get corresponding vector of weights to fill
-        auto& i_weights = boundary_target_to_reference_weights[i_mbe];
+        auto& i_weights = boundary_reference_to_target_weights[i_mbe];
 
         // get corresponding vector of lagrange multipliers
         // TODO: check if per-quad is correct.
@@ -349,9 +349,9 @@ public:
                                                       // (n_dof * n_dim)
 
     // jacobian weights
-    auto& boundary_target_to_reference_weights =
+    auto& boundary_reference_to_target_weights =
         precomputed_
-            ->scalars_["boundary_target_to_reference_weights"]; // n_b_elem *
+            ->scalars_["boundary_reference_to_target_weights"]; // n_b_elem *
                                                                 // n_quad
 
     // augmented larange
@@ -396,8 +396,8 @@ public:
         auto& i_b_el = precomputed_->boundary_elements_[i_mbe];
         const auto& i_shapes = boundary_shapes[i_mbe];
         const auto& i_d_shapes = boundary_d_shapes[i_mbe];
-        const auto& i_target_to_reference_weights =
-            boundary_target_to_reference_weights[i_mbe];
+        const auto& i_reference_to_target_weights =
+            boundary_reference_to_target_weights[i_mbe];
         auto& i_results = nearest_distance_results_[i_mbe];
         const auto& i_lagranges = augmented_lagrange_multipliers[i_mbe];
         auto& i_new_lagranges = new_augmented_lagrange_multipliers[i_mbe];
@@ -433,8 +433,8 @@ public:
           const mfem::IntegrationPoint& ip = int_rule.IntPoint(q);
           const auto& q_shape = i_shapes[q];
           const auto& q_d_shape = i_d_shapes[q];
-          const auto& q_target_to_reference_weight =
-              i_target_to_reference_weights[q];
+          const auto& q_reference_to_target_weight =
+              i_reference_to_target_weights[q];
           const auto& q_lagrange = i_lagranges[q];
           auto& q_new_lagrange = i_new_lagranges[q];
           auto& q_result = i_results[q];
@@ -502,7 +502,7 @@ public:
               current_quad_derivatives.Weight();
 
           // get product of all the weights
-          // I don't think we need this(* q_target_to_reference_weight)
+          // I don't think we need this(* q_reference_to_target_weight)
           const double weight =
               ip.weight * q_result.query_metric_tensor_weight_;
 
@@ -531,8 +531,8 @@ public:
     auto& boundary_shapes = precomputed_->vectors_["boundary_shapes"];
     auto& boundary_d_shapes = precomputed_->matrices_["boundary_d_shapes"];
     // jacobian weights
-    auto& boundary_target_to_reference_weights =
-        precomputed_->scalars_["boundary_target_to_reference_weights"];
+    auto& boundary_reference_to_target_weights =
+        precomputed_->scalars_["boundary_reference_to_target_weights"];
     // normal gaps
     auto& normal_gaps = precomputed_->scalars_["normal_gaps"];
 
