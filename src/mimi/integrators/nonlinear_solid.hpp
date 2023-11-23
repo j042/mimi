@@ -12,8 +12,33 @@ namespace mimi::integrators {
 /// Computes F and passes it to material
 class NonliearSolid : public NonlinearBase {
 public:
+  template<typename T>
+  using Vector_ = mimi::utils::Vector<T> using QuadratureMatrices_ =
+      Vector_<Vector_<mfem::DenseMatrix>>;
+  using QuadratureScalars_ = Vector_<Vector_<double>>;
+
   /// material states (n_elements * n_quads)
-  mimi::utils::Vector<mimi::utils::Vector<MaterialState>> material_states_;
+  Vector_<Vector_<MaterialState>> material_states_;
+
+  /// for smooth nthread exe with FD or AD, we need element assembly
+  /// that we can call element wise. So here, we will save
+  /// pointers to precomputed entities for direct access
+  const QuadratureMatrices_* precomputed_dN_dxi_;
+  const QuadratureMatrices_* precomputed_dN_dX_;
+  const QuadratureScalars_* precomputed_det_J_reference_to_target_;
+  const QuadratureMatrices_* precomputed_J_target_to_reference_;
+
+  QuadratureMatrices_* current_F_;
+  QudaratureMatrices_* current_F_inv_;
+  QuadratureScalars_* current_det_F_;
+
+  /// temporary objects for thread safety
+  /// to be used in element-wise assembly
+  Vector_<mfem::DenseMatrix> residual_matrix_views_;
+  Vector_<mfem::Vector> element_vector_copies_;
+  Vector_<mfem::Vector> element_vector_matrix_view_;
+  Vector_<mfem::DenseMatrix> stress_;
+  Vector_<mfem::DenseMatrix> dN_dx_;
 
   virtual const std::string& Name() const { return name_; }
 
@@ -183,6 +208,38 @@ public:
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
                             n_elements,
                             n_threads);
+
+    // now, save pointers locally
+    precomputed_dN_dxi_ = &d_shapes;
+    precomputed_dN_dX_ = &target_d_shapes;
+    precomputed_det_J_reference_to_target_ = &reference_to_target_weights;
+    precomputed_J_target_to_reference_ = &target_to_reference_jacobians;
+
+    current_F_ = &deformation_gradients;
+    current_F_inv_ = &deformation_gradients_inverses;
+    current_det_F_ = &deformation_gradient_weights;
+
+    // thread safety committee
+    residual_matrix_views_.resize(n_threads);
+    element_vector_copies_.resize(n_threads);
+    element_vector_matrix_view_.resize(n_threads);
+    stress_.resize(nthreads, mfem::DenseMatrix(dim_, dim_));
+    // dN_dx's size depends on n_dof.  in single patch it's all the same
+    // for multipatch, can't guarantee.
+    dN_dx_.resize(nthreads);
+  }
+
+  /// element level assembly.
+  /// currently copy of AssemblyDomainResidual.
+  /// meant to be used for FD
+  /// or, AD, where we can assemble both LHS and RHS contributions
+  virtual void AssembleElementResidual(const mfem::Vector& input_element_x,
+                                       const int& i_elem,
+                                       const int& i_thread,
+                                       mfem::Vector& element_residual) const {
+    auto& int_rules = precomputed_->int_rules_[i_thread];
+    const auto& int_rule =
+        int_rules.Get(geometry_type_, quadrature_orders_[i_elem]);
   }
 
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
@@ -223,7 +280,7 @@ public:
       // temporary stress holder can be either PK1 or cauchy, based on material
       mfem::DenseMatrix stress(dim_, dim_);
       // gradients of basis in physical (current) configuration
-      mfem::DenseMatrix dN_dx(dim_, dim_);
+      mfem::DenseMatrix dN_dx;
 
       for (int i{begin}; i < end; ++i) {
         // in
@@ -289,6 +346,7 @@ public:
           // check where this needs to be integrated
           if (material_->PhysicalIntegration()) {
             // stress is probably cauchy
+            dN_dx.SetSize(n_dof, dim_);
             mfem::Mult(q_target_d_shape, q_deformation_gradient_inverse, dN_dx);
             stress *= q_deformation_gradient_weight * ip.weight
                       * q_reference_to_target_weight;
