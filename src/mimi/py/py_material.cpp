@@ -14,7 +14,10 @@ void init_py_material(py::module_& m) {
 
   py::class_<MaterialBase, std::shared_ptr<MaterialBase>> klasse(m,
                                                                  "PyMaterial");
-  klasse.def(py::init<>()).def("name", &MaterialBase::Name);
+  klasse.def(py::init<>())
+      .def("name", &MaterialBase::Name)
+      .def_readwrite("density", &MaterialBase::density_)
+      .def_readwrite("viscosity", &MaterialBase::viscosity_);
 }
 
 } // namespace mimi::py
