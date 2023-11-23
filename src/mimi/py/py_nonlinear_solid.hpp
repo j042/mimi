@@ -164,6 +164,7 @@ public:
     nonlinear_solid_integ->Prepare();
     // add integrator to nl form
     nonlinear_stiffness->AddDomainIntegrator(nonlinear_solid_integ);
+    nonlinear_stiffness->SetEssentialTrueDofs(disp_fes.zero_dofs_);
 
     // 4. linear form
     auto rhs = std::make_shared<mfem::LinearForm>(disp_fes.fe_space_.get());

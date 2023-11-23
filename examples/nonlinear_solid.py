@@ -13,9 +13,11 @@ nl.subdivide(1)
 
 # create material
 # PyMaterial is platzhalter
-mat = mimi.PyMaterial()
-mat.density = 1000
+mat = mimi.PyStVenantKirchhoff()
+mat.density = 1
 mat.viscosity = -1
+mat.lambda_ = 1
+mat.mu = 1
 nl.set_material(mat)
 
 # create splinepy nurbs to show
@@ -24,16 +26,18 @@ to_m, to_s = sp.io.mfem.dof_mapping(s)
 s.cps[:] = s.cps[to_s]
 
 bc = mimi.BoundaryConditions()
+#bc.initial.dirichlet(1, 0).dirichlet(1, 1)
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
-bc.initial.body_force(1, -10)
+#bc.initial.dirichlet(3, 0).dirichlet(3, 1)
+bc.initial.body_force(1, -0.01)
 
 nl.boundary_condition = bc
 
-nl.setup(1)
+nl.setup(2)
 
 rhs = nl.linear_form_view2("rhs")
 
-nl.time_step_size = 0.1
+nl.time_step_size = 0.05
 
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
@@ -42,11 +46,11 @@ s.show_options["resolutions"] = 50
 s.cps[:] = x[to_s]
 
 plt = gus.show(s, close=False)
-for i in range(1000):
+for i in range(10000):
     if True:
         s.cps[:] = x[to_s]
         gus.show(
-            s,
+            [str(i),s],
             vedoplot=plt,
             interactive=False,
         )

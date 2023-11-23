@@ -16,6 +16,8 @@ class MaterialBase {
 public:
   double density_{-1.0};
   double viscosity_{-1.0};
+  double lambda_{-1.0};
+  double mu_{-1.0};
   virtual std::string Name() const { return "MaterialBase"; }
 
   virtual void EvaluateStress(const mfem::DenseMatrix& F,
@@ -43,6 +45,43 @@ public:
     MIMI_FUNC()
   }
   virtual void EvaluateGrad() const { MIMI_FUNC() }
+};
+
+class StVenantKirchhoff : public MaterialBase {
+public:
+  virtual std::string Name() const { return "StVenantKirchhoff"; }
+
+  virtual void EvaluateStress(const mfem::DenseMatrix& F,
+                              MaterialState& state,
+                              mfem::DenseMatrix& stress) const {
+    MIMI_FUNC()
+    EvaluatePK1(F, state, stress);
+  }
+
+  virtual void EvaluatePK1(const mfem::DenseMatrix& F,
+                           MaterialState&,
+                           mfem::DenseMatrix& P) const {
+    MIMI_FUNC()
+    const int size = F.Height();
+    mfem::DenseMatrix I;
+    I.Diag(1, size);
+
+    mfem::DenseMatrix C(size);
+    mfem::DenseMatrix E(size);
+    mfem::DenseMatrix S(size);
+
+    // C
+    mfem::MultAtB(F, F, C);
+
+    // E
+    mfem::Add(.5, C, -.5, I, E);
+
+    // S
+    mfem::Add(lambda_ * E.Trace(), I, 2 * mu_, E, S);
+
+    // P
+    mfem::Mult(F, S, P);
+  }
 };
 
 } // namespace mimi::integrators
