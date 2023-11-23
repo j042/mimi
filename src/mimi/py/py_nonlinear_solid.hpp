@@ -4,6 +4,9 @@
 
 #include "mimi/integrators/materials.hpp"
 #include "mimi/integrators/nonlinear_solid.hpp"
+#include "mimi/integrators/penalty_contact.hpp"
+#include "mimi/integrators/vector_diffusion.hpp"
+#include "mimi/integrators/vector_mass.hpp"
 #include "mimi/operators/nonlinear_solid.hpp"
 #include "mimi/py/py_solid.hpp"
 
@@ -16,7 +19,7 @@ public:
 
   MaterialPointer_ material_;
 
-  PyLinearSolid() = default;
+  PyNonlinearSolid() = default;
 
   virtual void SetMaterial(const MaterialPointer_& material) {
     MIMI_FUNC()
@@ -79,7 +82,7 @@ public:
     // set initial condition
     // you can change this in python using SolutionView()
     x = x_ref;
-    v = 0.0;
+    x_dot = 0.0;
 
     // let's process boundaries
     Base_::FindBoundaryDofIds();
@@ -99,13 +102,13 @@ public:
     nl_oper->AddBilinearForm("mass", mass);
 
     // create density coeff for mass integrator
-    assert(material_->density_ > 0.0) auto& density =
-        Base_::coefficients_["density"];
+    assert(material_->density_ > 0.0);
+    auto& density = Base_::coefficients_["density"];
     density = std::make_shared<mfem::ConstantCoefficient>(material_->density_);
 
     // create integrator using density
     // this is owned by bilinear form, so do that first before we forget
-    auto* mass_integ = new mimi::integrators::VectorMass(rho);
+    auto* mass_integ = new mimi::integrators::VectorMass(density);
     mass->AddDomainIntegrator(mass_integ);
 
     // precompute using nthread
@@ -117,14 +120,15 @@ public:
     mass_integ->element_matrices_.reset(); // release saved matrices
 
     // 2. damping / viscosity, as mfem calls it
-    if (material_->damping_ > 0.0) {
+    if (material_->viscosity_ > 0.0) {
       auto visc =
           std::make_shared<mfem::BilinearForm>(disp_fes.fe_space_.get());
       nl_oper->AddBilinearForm("viscosity", visc);
 
       // create viscosity coeff
       auto& visc_coeff = Base_::coefficients_["viscosity"];
-      visc_coeff = std::make_shared<mfem::ConstantCoefficient>(viscosity_);
+      visc_coeff =
+          std::make_shared<mfem::ConstantCoefficient>(material_->viscosity_);
 
       // create integrator using viscosity
       // and add it to bilinear form
@@ -148,13 +152,14 @@ public:
 
     // nlform
     auto nonlinear_stiffness =
-        std::make_shared<mimi::forms::Nonlinear>(disp.fe_space_.get());
+        std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
     // add it to operator
     nl_oper->AddNonlinearForm("nonlinear_stiffness", nonlinear_stiffness);
     // create integrator
     auto nonlinear_solid_integ =
         std::make_shared<mimi::integrators::NonlinearSolid>(
             material_->Name() + "-NonlinearSolid",
+            material_,
             nonlinear_stiffness_precomputed);
     nonlinear_solid_integ->Prepare();
     // add integrator to nl form
@@ -223,7 +228,7 @@ public:
       rhs->Assemble();
       // remove dirichlet nodes
       rhs->SetSubVector(disp_fes.zero_dofs_, 0.0);
-      le_oper->AddLinearForm("rhs", rhs);
+      nl_oper->AddLinearForm("rhs", rhs);
     }
 
     // check contact
@@ -237,7 +242,7 @@ public:
 
       auto nl_form =
           std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
-      le_oper->AddNonlinearForm("contact", nl_form);
+      nl_oper->AddNonlinearForm("contact", nl_form);
       for (const auto& [bid, nd_coeff] : contact) {
         // initialzie integrator with nearest distance coeff (splinepy splines)
         auto contact_integ =
@@ -282,7 +287,7 @@ public:
 
     // ode
     auto gen_alpha =
-        std::make_unique<mimi::solvers::GeneralizedAlpha2>(*le_oper);
+        std::make_unique<mimi::solvers::GeneralizedAlpha2>(*nl_oper);
     gen_alpha->PrintInfo();
 
     // finalize operator

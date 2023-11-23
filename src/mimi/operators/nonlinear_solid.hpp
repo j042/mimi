@@ -8,27 +8,26 @@ namespace mimi::operators {
 
 class NonlinearSolid : public LinearElasticity {
 public:
-  using Base_ = NonlinearSolid;
+  using Base_ = LinearElasticity;
   using MimiBase_ = Base_::MimiBase_;
   using MfemBase_ = Base_::MfemBase_;
-  using NonlinearFormPointer_ = MimiBase_::MinlinaerFormPointer;
+  using NonlinearFormPointer_ = MimiBase_::NonlinearFormPointer_;
 
 protected:
   // nonlinear stiffness -> Base_::stiffness_ ist left untouched here
   NonlinearFormPointer_ nonlinear_stiffness_;
 
   // unlike base classes, we will keep one sparse matrix and initialize
-  std::unique_ptr<mfem::SparseMatrix> owning_jacobian_
+  std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
 
-      /// data to mass sparse matrix - A is mfem's notation of data array
-      const double* mass_A_ = nullptr;
+  /// data to mass sparse matrix - A is mfem's notation of data array
+  const double* mass_A_ = nullptr;
   int mass_n_nonzeros_ = -1;
 
 public:
   /// This is same as Base_'s ctor
-  NonlinearSolid(mfem::FiniteElementSpace& fe_space,
-                 mfem::GridFunction* x_ref))
-      : Base_(fe_spaces, x_ref) {
+  NonlinearSolid(mfem::FiniteElementSpace& fe_space, mfem::GridFunction* x_ref)
+      : Base_(fe_space, x_ref) {
     MIMI_FUNC()
   }
 
@@ -48,8 +47,8 @@ public:
     // and sorted
     assert(Base_::mass_->SpMat().ColumnsAreSorted());
     // take SpMat's pointers
-    mass_A_ = &Base_::mass_->SpMat();
-    mass_n_nonzeros_ = Base_::mas_->SpMat().NumNonZeroElems();
+    mass_A_ = Base_::mass_->SpMat().GetData();
+    mass_n_nonzeros_ = Base_::mass_->SpMat().NumNonZeroElems();
     if (Base_::viscosity_) {
       // same for viscosity_
       assert(Base_::viscosity_->SpMat().Finalized());
@@ -64,11 +63,11 @@ public:
     // copy jacobian with mass matrix to initialize sparsity pattern
     // technically, we don't have to copy I & J;
     // technically, it is okay to copy
-    owning_jacobian_ = std::make_unique<mfem::SpareseMatrix>(mass_->SpMat());
+    owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(mass_->SpMat());
     assert(owning_jacobian_->Finalized());
     Base_::jacobian_ = owning_jacobian_.get();
     // and initialize values with zero
-    owning_jacobian->operator=(0.0);
+    owning_jacobian_->operator=(0.0);
   }
 
   /// @brief computes right hand side of ODE (explicit solve)
@@ -169,7 +168,7 @@ public:
 
     // initalize
     // 1. mass - just copy A
-    std::copy_n(mass_A_, mass_nonzeros_, jabobian_->GetData());
+    std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
 
     // 2. nonlinear stiffness
     jacobian_->Add(fac0_,

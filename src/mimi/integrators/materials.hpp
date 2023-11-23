@@ -16,7 +16,7 @@ class MaterialBase {
 public:
   double density_{-1.0};
   double viscosity_{-1.0};
-  virtual const std::string& Name() const { return "MaterialBase"; }
+  virtual std::string Name() const { return "MaterialBase"; }
 
   virtual void EvaluateStress(const mfem::DenseMatrix& F,
                               MaterialState& state,
