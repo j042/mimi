@@ -50,6 +50,11 @@ public:
   QuadratureMatrices_* current_F_inv_;
   QuadratureScalars_* current_det_F_;
 
+  NonlinearSolid(
+      const std::string& name,
+      const std::shared_ptr<mimi::utils::PrecomputedData>& precomputed)
+      : NonlinearBase(name, precomputed) {}
+
   virtual const std::string& Name() const { return name_; }
 
   /// This one needs / stores
