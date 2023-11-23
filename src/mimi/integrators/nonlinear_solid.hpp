@@ -3,6 +3,7 @@
 #include "mimi/integrators/materials.hpp"
 #include "mimi/integrators/nonlinear_base.hpp"
 #include "mimi/utils/containers.hpp"
+#include "mimi/utils/n_thread_exe.hpp"
 
 namespace mimi::integrators {
 
@@ -208,7 +209,7 @@ public:
     // lambda for nthread assemble
     auto assemble_element_residual = [&](const int begin,
                                          const int end,
-                                         const end i_thread) {
+                                         const int i_thread) {
       // for thread safety, each thread gets a thread-unsafe objects
       auto& int_rules = precomputed_->int_rules_[i_thread];
 
@@ -300,9 +301,18 @@ public:
         }
       }
     };
+
+    mimi::utils::NThreadExe(assemble_element_residual,
+                            element_vectors_->size(),
+                            n_threads_);
   }
 
-  virtual void AssembleDomainGrad(const mfem::Vector& current_x) { MIMI_FUNC() }
+  virtual void AssembleDomainGrad(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+
+    // currently we do FD
+    // I realize, we need a separate element assembly..
+  }
 };
 
 } // namespace mimi::integrators
