@@ -251,6 +251,8 @@ public:
                                        const int& i_elem,
                                        const int& i_thread,
                                        mfem::Vector& output_element_residual) {
+    MIMI_FUNC()
+
     // deref thread local
     auto& int_rules = precomputed_->int_rules_[i_thread];
     const auto& int_rule =
@@ -491,7 +493,8 @@ public:
           double* grad_col = &i_grad_mat(0, j);
           const double* f_res = forward_element_residual.GetData();
           const double* b_res = backward_element_residual.GetData();
-          for (; f_res != f_res + n_dof;) {
+          const double* f_res_end = f_res + n_dof;
+          for (; f_res != f_res_end;) {
             *grad_col++ = ((*f_res++) - (*b_res++)) / two_diff_step;
           }
 

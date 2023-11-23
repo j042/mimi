@@ -8,7 +8,7 @@ sp.settings.NTHREADS = 4
 nl = mimi.PyNonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
-nl.elevate_degrees(2)
+nl.elevate_degrees(1)
 nl.subdivide(1)
 
 # create material
@@ -29,7 +29,7 @@ bc.initial.body_force(1, -10)
 
 nl.boundary_condition = bc
 
-nl.setup(4)
+nl.setup(1)
 
 rhs = nl.linear_form_view2("rhs")
 
