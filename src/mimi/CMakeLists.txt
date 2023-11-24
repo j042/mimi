@@ -1,6 +1,12 @@
 set(SRCS
-    py/py_boundary_conditions.cpp py/py_solid.cpp py/py_linear_elasticity.cpp
-    py/py_nearest_distance.cpp py/py_nonlinear_form.cpp py/mimi.cpp)
+    py/py_boundary_conditions.cpp
+    py/py_solid.cpp
+    py/py_linear_elasticity.cpp
+    py/py_nearest_distance.cpp
+    py/py_nonlinear_form.cpp
+    py/py_material.cpp
+    py/py_nonlinear_solid.cpp
+    py/mimi.cpp)
 
 pybind11_add_module(mimi ${SRCS})
 
