@@ -316,10 +316,10 @@ public:
 
         tmp.dN_dx_.SetSize(n_dof, dim_);
         mfem::Mult(q_dN_dX, q_F_inv, tmp.dN_dx_);
-        mfem::AddMult_a_ABt(q_det_F * ip.weight * q_det_J_reference_to_target,
-                            tmp.dN_dx_,
-                            tmp.stress_,
-                            tmp.residual_matrix_view_);
+        mfem::AddMult_a(q_det_F * ip.weight * q_det_J_reference_to_target,
+                        tmp.dN_dx_,
+                        tmp.stress_,
+                        tmp.residual_matrix_view_);
       } else {
         // call PK1
         material_->EvaluatePK1(q_F, i_thread, q_material_state, tmp.stress_);
@@ -437,11 +437,11 @@ public:
                                       stress);
 
             mfem::Mult(q_target_d_shape, q_deformation_gradient_inverse, dN_dx);
-            mfem::AddMult_a_ABt(q_deformation_gradient_weight * ip.weight
-                                    * q_reference_to_target_weight,
-                                dN_dx,
-                                stress,
-                                i_residual_mat_view);
+            mfem::AddMult_a(q_deformation_gradient_weight * ip.weight
+                                * q_reference_to_target_weight,
+                            dN_dx,
+                            stress,
+                            i_residual_mat_view);
           } else {
             // call PK1
             material_->EvaluatePK1(q_deformation_gradient,
