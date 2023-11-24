@@ -79,7 +79,7 @@ public:
     dim_ = precomputed_->meshes_[0]->Dimension();
 
     // setup material
-    material_->Setup(dim);
+    material_->Setup(dim_, n_threads_);
 
     // allocate element vectors and matrices
     element_matrices_ =
@@ -299,31 +299,34 @@ public:
       const auto& q_det_J_reference_to_target = i_det_J_reference_to_target[q];
       const auto& q_J_target_to_reference = i_J_target_to_reference[q];
       auto& q_F = i_F[q];
-      auto& q_F_inv = i_F[q];
-      auto& q_det_F = i_det_F[q];
       auto& q_material_state = i_material_states[q];
+
       // get dx_dX (=F)
       mfem::MultAtB(tmp.element_vector_matrix_view_, q_dN_dX, q_F);
 
-      // get F^-1 and det(F)
-      mfem::CalcInverse(q_F, q_F_inv);
-      q_det_F = q_F.Weight();
-
-      // evaluate cauchy or PK1 stress
-      material_->EvaluateStress(q_F, q_material_state, tmp.stress_);
-
       // check where this needs to be integrated
-      if (material_->PhysicalIntegration()) {
-        // stress is probably cauchy
+      if (material_->UsesCauchy()) {
+        // get F^-1 and det(F)
+        auto& q_F_inv = i_F[q];
+        auto& q_det_F = i_det_F[q];
+        mfem::CalcInverse(q_F, q_F_inv);
+        q_det_F = q_F.Weight();
+
+        material_->EvaluateCauchy(q_F, i_thread, q_material_state, tmp.stress_);
+
         tmp.dN_dx_.SetSize(n_dof, dim_);
         mfem::Mult(q_dN_dX, q_F_inv, tmp.dN_dx_);
-        // scalar multiplcation to stress for integration
-        tmp.stress_ *= q_det_F * ip.weight * q_det_J_reference_to_target;
-        mfem::AddMultABt(tmp.dN_dx_, tmp.stress_, tmp.residual_matrix_view_);
+        mfem::AddMult_a_ABt(q_det_F * ip.weight * q_det_J_reference_to_target,
+                            tmp.dN_dx_,
+                            tmp.stress_,
+                            tmp.residual_matrix_view_);
       } else {
-        // stress is probably PK1
-        tmp.stress_ *= ip.weight * q_det_J_reference_to_target;
-        mfem::AddMultABt(q_dN_dX, tmp.stress_, tmp.residual_matrix_view_);
+        // call PK1
+        material_->EvaluatePK1(q_F, i_thread, q_material_state, tmp.stress_);
+        mfem::AddMult_a_ABt(ip.weight * q_det_J_reference_to_target,
+                            q_dN_dX,
+                            tmp.stress_,
+                            tmp.residual_matrix_view_);
       }
     }
   }
@@ -409,40 +412,46 @@ public:
           const auto& q_reference_to_target_weight =
               i_reference_to_target_weights[q];
           auto& q_deformation_gradient = i_deformation_gradients[q];
-          auto& q_deformation_gradient_inverse =
-              i_deformation_gradient_inverses[q];
-          auto& q_deformation_gradient_weight =
-              i_deformation_gradient_weights[q];
+          auto& q_material_state = i_material_states[q];
 
           // get dx_dX
           mfem::MultAtB(i_current_solution_mat_view,
                         q_target_d_shape,
                         q_deformation_gradient);
 
-          // we may not need this
-          // also can do it in if(PhysicalIntegration())
-          // TODO talk to Dr Z
-          mfem::CalcInverse(q_deformation_gradient,
-                            q_deformation_gradient_inverse);
-          q_deformation_gradient_weight = q_deformation_gradient.Weight();
-
-          // evaluate cauchy or PK1 stress
-          material_->EvaluateStress(q_deformation_gradient,
-                                    i_material_states[q],
-                                    stress);
-
           // check where this needs to be integrated
-          if (material_->PhysicalIntegration()) {
-            // stress is probably cauchy
+          if (material_->UsesCauchy()) {
             dN_dx.SetSize(n_dof, dim_);
+            // get F^-1 and det(F)
+            auto& q_deformation_gradient_inverse =
+                i_deformation_gradient_inverses[q];
+            auto& q_deformation_gradient_weight =
+                i_deformation_gradient_weights[q];
+            mfem::CalcInverse(q_deformation_gradient,
+                              q_deformation_gradient_inverse);
+            q_deformation_gradient_weight = q_deformation_gradient.Weight();
+
+            material_->EvaluateCauchy(q_deformation_gradient,
+                                      i_thread,
+                                      q_material_state,
+                                      stress);
+
             mfem::Mult(q_target_d_shape, q_deformation_gradient_inverse, dN_dx);
-            stress *= q_deformation_gradient_weight * ip.weight
-                      * q_reference_to_target_weight;
-            mfem::AddMultABt(dN_dx, stress, i_residual_mat_view);
+            mfem::AddMult_a_ABt(q_deformation_gradient_weight * ip.weight
+                                    * q_reference_to_target_weight,
+                                dN_dx,
+                                stress,
+                                i_residual_mat_view);
           } else {
-            // stress is probably PK1
-            stress *= ip.weight * q_reference_to_target_weight;
-            mfem::AddMultABt(q_target_d_shape, stress, i_residual_mat_view);
+            // call PK1
+            material_->EvaluatePK1(q_deformation_gradient,
+                                   i_thread,
+                                   q_material_state,
+                                   stress);
+            mfem::AddMult_a_ABt(ip.weight * q_reference_to_target_weight,
+                                q_target_d_shape,
+                                stress,
+                                i_residual_mat_view);
           }
         }
       }

@@ -16,8 +16,8 @@ nl.subdivide(1)
 mat = mimi.PyStVenantKirchhoff()
 mat.density = 1
 mat.viscosity = -1
-mat.lambda_ = 1
-mat.mu = 1
+mat.lambda_ = 50
+mat.mu = 200
 nl.set_material(mat)
 
 # create splinepy nurbs to show
@@ -29,7 +29,7 @@ bc = mimi.BoundaryConditions()
 # bc.initial.dirichlet(1, 0).dirichlet(1, 1)
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
 # bc.initial.dirichlet(3, 0).dirichlet(3, 1)
-bc.initial.body_force(1, -0.01)
+bc.initial.body_force(1, -1)
 
 nl.boundary_condition = bc
 
