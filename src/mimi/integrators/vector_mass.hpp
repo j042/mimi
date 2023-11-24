@@ -41,65 +41,64 @@ public:
     // allocate
     element_matrices_ = std::make_unique<ElementMatrices_>(n_elem);
 
-    auto assemble_element_matrices =
-        [&](const int begin, const int end, const int i_thread) {
-          // aux mfem containers
-          mfem::Vector shape;
-          mfem::DenseMatrix shape_mat;
+    auto assemble_element_matrices = [&](const int begin,
+                                         const int end,
+                                         const int i_thread) {
+      // aux mfem containers
+      mfem::Vector shape;
+      mfem::DenseMatrix shape_mat;
 
-          for (int i{begin}; i < end; ++i) {
-            auto& int_rules = precomputed.int_rules_[i_thread];
-            auto& el = *precomputed.elements_[i];
-            auto& eltrans_stress_free_to_reference =
-                *precomputed.target_to_reference_element_trans_[i];
+      for (int i{begin}; i < end; ++i) {
+        auto& int_rules = precomputed.int_rules_[i_thread];
+        auto& el = *precomputed.elements_[i];
+        auto& eltrans_reference_to_target =
+            *precomputed.reference_to_target_element_trans_[i];
 
-            // basic infos for this elem
-            const int n_dof = el.GetDof();
-            const int dim = el.GetDim();
+        // basic infos for this elem
+        const int n_dof = el.GetDof();
+        const int dim = el.GetDim();
 
-            // alloc shape and shape_mat
-            shape.SetSize(n_dof);
-            shape_mat.SetSize(n_dof, n_dof);
+        // alloc shape and shape_mat
+        shape.SetSize(n_dof);
+        shape_mat.SetSize(n_dof, n_dof);
 
-            // get elmat to save and set size
-            mfem::DenseMatrix& elmat = element_matrices_->operator[](i);
-            elmat.SetSize(n_dof * dim, n_dof * dim);
-            elmat = 0.0;
+        // get elmat to save and set size
+        mfem::DenseMatrix& elmat = element_matrices_->operator[](i);
+        elmat.SetSize(n_dof * dim, n_dof * dim);
+        elmat = 0.0;
 
-            // prepare quad loop
-            const mfem::IntegrationRule& ir = int_rules.Get(
-                el.GetGeomType(),
-                2 * el.GetOrder() + eltrans_stress_free_to_reference.OrderW());
+        // prepare quad loop
+        const mfem::IntegrationRule& ir = int_rules.Get(
+            el.GetGeomType(),
+            2 * el.GetOrder() + eltrans_reference_to_target.OrderW());
 
-            // quad loop
-            for (int q{}; q < ir.GetNPoints(); ++q) {
-              const mfem::IntegrationPoint& ip = ir.IntPoint(q);
+        // quad loop
+        for (int q{}; q < ir.GetNPoints(); ++q) {
+          const mfem::IntegrationPoint& ip = ir.IntPoint(q);
 
-              // get shape
-              el.CalcShape(ip, shape);
+          // get shape
+          el.CalcShape(ip, shape);
 
-              // prepare transformation
-              eltrans_stress_free_to_reference.SetIntPoint(&ip);
+          // prepare transformation
+          eltrans_reference_to_target.SetIntPoint(&ip);
 
-              // save a weight for integration
-              const double weight{ip.weight
-                                  * eltrans_stress_free_to_reference.Weight()};
+          // save a weight for integration
+          const double weight{ip.weight * eltrans_reference_to_target.Weight()};
 
-              // VVt
-              mfem::MultVVt(shape, shape_mat);
+          // VVt
+          mfem::MultVVt(shape, shape_mat);
 
-              // here, we only have ctor for coeff. but if Vector/Matrix coeff
-              // is planned implement changes here
-              shape_mat *=
-                  weight * coeff_->Eval(eltrans_stress_free_to_reference, ip);
+          // here, we only have ctor for coeff. but if Vector/Matrix coeff
+          // is planned implement changes here
+          shape_mat *= weight * coeff_->Eval(eltrans_reference_to_target, ip);
 
-              // four for loops
-              for (int d{}; d < dim; ++d) {
-                elmat.AddMatrix(shape_mat, n_dof * d, n_dof * d);
-              }
-            } // quad loop
+          // four for loops
+          for (int d{}; d < dim; ++d) {
+            elmat.AddMatrix(shape_mat, n_dof * d, n_dof * d);
           }
-        };
+        } // quad loop
+      }
+    };
 
     // exe
     mimi::utils::NThreadExe(assemble_element_matrices, n_elem, nthreads);

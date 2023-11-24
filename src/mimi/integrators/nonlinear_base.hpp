@@ -57,7 +57,11 @@ public:
   virtual const std::string& Name() const { return name_; }
 
   /// Precompute call interface
-  virtual void Prepare(const int quadrature_order);
+  virtual void Prepare(const int quadrature_order) {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("Prepare not implemented");
+  };
 
   /// NThread domain assemble
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {

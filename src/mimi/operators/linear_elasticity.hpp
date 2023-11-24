@@ -107,7 +107,7 @@ public:
     // density), meaning we can reset gradients at each iteration by copying A
     // 3. UMFPack, solver we use, always expect sorted matrix and it's called at
     // every iteration.
-    mass_->SortColumIndices();
+    mass_->SpMat().SortColumnIndices();
 
     // setup mass solver
     mass_inv_.iterative_mode = false;
@@ -141,8 +141,8 @@ public:
     if (viscosity_) {
       viscosity_->Finalize(0); // skip_zero is 0
       // if this is sorted, we can just add A
-      viscosity_->SortColumIndices()
-          mimi::utils::PrintInfo(Name(), "has viscosity term.");
+      viscosity_->SpMat().SortColumnIndices();
+      mimi::utils::PrintInfo(Name(), "has viscosity term.");
     }
   }
 
