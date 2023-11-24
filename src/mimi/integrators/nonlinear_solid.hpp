@@ -33,7 +33,7 @@ protected:
 
   Vector_<Temporary> thread_local_temporaries_;
 
-  int nthreads_;
+  int n_threads_;
 
   std::shared_ptr<MaterialBase> material_;
 
@@ -73,10 +73,13 @@ public:
     // get numbers to decide loop size
     const int n_elements = precomputed_->meshes_[0]->NURBSext->GetNE();
     // n meshes should equal to nthrea config at the beginning
-    nthreads_ = precomputed_->meshes_.size();
+    n_threads_ = precomputed_->meshes_.size();
 
     // get dim
     dim_ = precomputed_->meshes_[0]->Dimension();
+
+    // setup material
+    material_->Setup(dim);
 
     // allocate element vectors and matrices
     element_matrices_ =
@@ -223,7 +226,7 @@ public:
 
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
                             n_elements,
-                            nthreads_);
+                            n_threads_);
 
     // now, save pointers locally
     precomputed_dN_dxi_ = &d_shapes;
@@ -236,7 +239,7 @@ public:
     current_det_F_ = &deformation_gradient_weights;
 
     // thread safety committee
-    thread_local_temporaries_.resize(nthreads_);
+    thread_local_temporaries_.resize(n_threads_);
     // allocate stress
     for (auto& tlt : thread_local_temporaries_) {
       tlt.stress_.SetSize(dim_, dim_);
@@ -447,7 +450,7 @@ public:
 
     mimi::utils::NThreadExe(assemble_element_residual,
                             element_vectors_->size(),
-                            nthreads_);
+                            n_threads_);
   }
 
   virtual void AssembleDomainGrad(const mfem::Vector& current_x) {
@@ -504,7 +507,7 @@ public:
       }
     };
 
-    mimi::utils::NThreadExe(fd_grad, element_matrices_->size(), nthreads_);
+    mimi::utils::NThreadExe(fd_grad, element_matrices_->size(), n_threads_);
   }
 };
 

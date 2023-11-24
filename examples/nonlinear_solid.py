@@ -26,9 +26,9 @@ to_m, to_s = sp.io.mfem.dof_mapping(s)
 s.cps[:] = s.cps[to_s]
 
 bc = mimi.BoundaryConditions()
-#bc.initial.dirichlet(1, 0).dirichlet(1, 1)
+# bc.initial.dirichlet(1, 0).dirichlet(1, 1)
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
-#bc.initial.dirichlet(3, 0).dirichlet(3, 1)
+# bc.initial.dirichlet(3, 0).dirichlet(3, 1)
 bc.initial.body_force(1, -0.01)
 
 nl.boundary_condition = bc
@@ -50,7 +50,7 @@ for i in range(10000):
     if True:
         s.cps[:] = x[to_s]
         gus.show(
-            [str(i),s],
+            [str(i), s],
             vedoplot=plt,
             interactive=False,
         )
