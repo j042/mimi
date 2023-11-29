@@ -73,6 +73,12 @@ public:
     return false;
   }
 
+  /// each material that needs states can implement this.
+  /// else, just nullptr
+  virtual std::shared_ptr<MaterialBase> CreateState() const {
+    return std::shared_ptr<MaterialBase>{};
+  };
+
   /// @brief unless implemented, this will try to call evaluate PK1 and
   /// transform if none of stress is implemented, you will be stuck in a
   /// neverending loop current implementation is not so memory efficient
