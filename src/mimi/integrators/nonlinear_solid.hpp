@@ -133,7 +133,7 @@ public:
     quadrature_orders_.resize(n_elements);
 
     // material states - this is per elements per quad points
-    material_states_.resize(n_elements);
+    material_states_.resize(n_elements, material_->CreateState());
 
     auto precompute_at_elements_and_quads = [&](const int el_begin,
                                                 const int el_end,

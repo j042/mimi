@@ -21,6 +21,9 @@ struct MaterialState {
 /// We can either define material or material state (in this case one material)
 /// at each quad point. Something to consider before implementing everything
 class MaterialBase {
+public:
+  using MaterialStatePtr_ = std::shared_ptr<MaterialState>;
+
 protected:
   int dim_;
   int n_threads_;
@@ -61,11 +64,6 @@ public:
         Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
   }
 
-  /// integrators will put each state to initialize to this function
-  virtual void InitializeState(MaterialState& state){MIMI_FUNC()
-
-  };
-
   /// gives hint to integrator, which stress is implemented we need
   virtual bool UsesCauchy() const {
     MIMI_FUNC()
@@ -75,9 +73,7 @@ public:
 
   /// each material that needs states can implement this.
   /// else, just nullptr
-  virtual std::shared_ptr<MaterialBase> CreateState() const {
-    return std::shared_ptr<MaterialBase>{};
-  };
+  virtual MaterialStatePtr_ CreateState() const { return MaterialStatePtr_{}; };
 
   /// @brief unless implemented, this will try to call evaluate PK1 and
   /// transform if none of stress is implemented, you will be stuck in a
@@ -87,7 +83,7 @@ public:
   /// @param sigma
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
-                              MaterialState& state,
+                              MaterialMaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
 
@@ -134,6 +130,7 @@ public:
 class StVenantKirchhoff : public MaterialBase {
 public:
   using Base_ = MaterialBase;
+  using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
 
 protected:
   /// I am thread-safe. Don't touch me after Setup
@@ -170,7 +167,7 @@ public:
 
   virtual void EvaluatePK1(const mfem::DenseMatrix& F,
                            const int& i_thread,
-                           MaterialState&,
+                           MaterialStatePtr_&,
                            mfem::DenseMatrix& P) {
     MIMI_FUNC()
 
@@ -191,6 +188,72 @@ public:
 
     // P
     mfem::Mult(F, S, P);
+  }
+};
+
+/// @brief https://en.wikipedia.org/wiki/Neo-Hookean_solid
+/// mu / det(F) * (B - I) + lambda * (det(F))
+/// B = FF^t
+class CompressibleOgdenNeoHookean : public MaterialBase {
+public:
+  using Base_ = MaterialBase;
+  using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
+
+protected:
+  /// I am thread-safe. Don't touch me after Setup
+  mfem::DenseMatrix I_;
+
+  /// just for lookup index
+  static constexpr const int k_B{0};
+
+public:
+  virtual std::string Name() const { return "CompressibleOdgenNeoHookean"; }
+
+  /// gives hint to integrator, which stress is implemented we need
+  virtual bool UsesCauchy() const {
+    MIMI_FUNC()
+    return true;
+  }
+
+  virtual void Setup(const int dim, const int nthread) {
+    MIMI_FUNC()
+
+    /// base setup for conversions and dim, nthread
+    Base_::Setup(dim, nthread);
+
+    // I
+    I_.Diag(1., dim);
+
+    /// make space for C F S
+    aux_matrices_.resize(
+        n_threads_,
+        Vector_<mfem::DenseMatrix>(1, mfem::DenseMatrix(dim_)));
+  }
+
+  /// mu / det(F) * (B - I) + lambda * (det(F))
+  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
+                              const int& i_thread,
+                              MaterialStatePtr_&,
+                              mfem::DenseMatrix& sigma) {
+    MIMI_FUNC()
+
+    // get aux
+    auto& i_aux = aux_matrices_[i_thread];
+    mfem::DenseMatrix& B = i_aux[k_B];
+
+    // precompute aux values
+    const double det_F = F.Det();
+    const double mu_over_det_F = mu_ / det_F;
+    mfem::MultABt(F, F, B); // left green
+
+    // flattening the eq above,
+    // mu / det(F) B - mu / det(F) I + lambda * (det(F) - 1) I
+    // mu / det(F) B + (-mu / det(F) + lambda * (det(F) - 1)) I
+    mfem::Add(mu_over_det_F,
+              B,
+              -mu_over_det_F + lambda_ * (det_F - 1.),
+              I_,
+              sigma);
   }
 };
 
