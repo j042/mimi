@@ -192,7 +192,7 @@ public:
 };
 
 /// @brief https://en.wikipedia.org/wiki/Neo-Hookean_solid
-/// mu / det(F) * (B - I) + lambda * (det(F))
+/// mu / det(F) * (B - I) + lambda * (det(F) - 1) I
 /// B = FF^t
 class CompressibleOgdenNeoHookean : public MaterialBase {
 public:
@@ -230,7 +230,7 @@ public:
         Vector_<mfem::DenseMatrix>(1, mfem::DenseMatrix(dim_)));
   }
 
-  /// mu / det(F) * (B - I) + lambda * (det(F))
+  /// mu / det(F) * (B - I) + lambda * (det(F) - 1) I
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
                               MaterialStatePtr_&,
