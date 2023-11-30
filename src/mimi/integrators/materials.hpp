@@ -83,7 +83,7 @@ public:
   /// @param sigma
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
-                              MaterialMaterialStatePtr_& state,
+                              MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
 
@@ -105,7 +105,7 @@ public:
   /// neverending loop current implementation is not so memory efficient
   virtual void EvaluatePK1(const mfem::DenseMatrix& F,
                            const int& i_thread,
-                           MaterialState& state,
+                           MaterialStatePtr_& state,
                            mfem::DenseMatrix& P) {
     MIMI_FUNC()
 

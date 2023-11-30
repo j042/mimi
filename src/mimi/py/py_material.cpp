@@ -31,7 +31,7 @@ void init_py_material(py::module_& m) {
 
   py::class_<CompOgdenNH, std::shared_ptr<CompOgdenNH>, MaterialBase> conh(
       m,
-      "PyCompressibleOdgenNeoHookean");
+      "PyCompressibleOgdenNeoHookean");
   conh.def(py::init<>());
 }
 
