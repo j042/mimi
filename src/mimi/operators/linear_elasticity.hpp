@@ -75,7 +75,7 @@ public:
     pure_diff_.SetSize(x_ref->Size());
   }
 
-  virtual std::string Name() { return "LinearElasticity"; }
+  virtual std::string Name() const { return "LinearElasticity"; }
 
   virtual void
   SolverConfig(const double rel_tol, const double abs_tol, const int max_iter) {
@@ -92,13 +92,24 @@ public:
     rhs_vector_ = rhs_vector;
   }
 
-  /// @brief setup all the necessary forms
-  virtual void Setup() {
+  virtual void SetupBilinearMassForm() {
     MIMI_FUNC()
-
     // setup mass matrix and inverter
     // this is used once at the very beginning of implicit ode step
     mass_ = MimiBase_::bilinear_forms_.at("mass");
+
+    // we will finalize here
+    mass_->Finalize(0); // skip_zero is 0, because there won't be zeros.
+    // we sort mass matrix for several reasons:
+    // 1. For derived (nonlinear) systems, we can take sparsity patterns
+    // directly from mass matrix
+    // 2. Mass matrix is not dependent in time (or at least for uniform
+    // density), meaning we can reset gradients at each iteration by copying A
+    // 3. UMFPack, solver we use, always expect sorted matrix and it's called at
+    // every iteration.
+    mass_->SpMat().SortColumnIndices();
+
+    // setup mass solver
     mass_inv_.iterative_mode = false;
     mass_inv_.SetRelTol(rel_tol_);
     mass_inv_.SetAbsTol(abs_tol_);
@@ -110,28 +121,54 @@ public:
                                 .FirstAndLast());
     mass_inv_.SetPreconditioner(mass_inv_prec_);
     mass_inv_.SetOperator(mass_->SpMat());
+  }
 
-    // stiffness
-    stiffness_ = MimiBase_::bilinear_forms_.at("stiffness");
+  virtual void SetupNonlinearContactForm() {
+    MIMI_FUNC()
 
     // contact
     contact_ = MimiBase_::nonlinear_forms_["contact"];
     if (contact_) {
       mimi::utils::PrintInfo(Name(), "has contact term.");
     }
+  }
 
-    // following forms are optional
+  virtual void SetupBilinearViscosityForm() {
+    MIMI_FUNC()
+
     // viscosity
     viscosity_ = MimiBase_::bilinear_forms_["viscosity"];
     if (viscosity_) {
+      viscosity_->Finalize(0); // skip_zero is 0
+      // if this is sorted, we can just add A
+      viscosity_->SpMat().SortColumnIndices();
       mimi::utils::PrintInfo(Name(), "has viscosity term.");
     }
+  }
+
+  virtual void SetupLinearRhsForm() {
+    MIMI_FUNC()
 
     // rhs linear form
     rhs_ = MimiBase_::linear_forms_["rhs"];
     if (rhs_) {
       mimi::utils::PrintInfo(Name(), "has rhs linear form term");
     }
+  }
+
+  /// @brief setup all the necessary forms
+  virtual void Setup() {
+    MIMI_FUNC()
+
+    // stiffness
+    stiffness_ = MimiBase_::bilinear_forms_.at("stiffness");
+
+    SetupBilinearMassForm();
+
+    // following forms are optional
+    SetupNonlinearContactForm();
+    SetupBilinearViscosityForm();
+    SetupLinearRhsForm();
   };
 
   virtual void SetParameters(double const& fac0,

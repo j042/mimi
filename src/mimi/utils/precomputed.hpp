@@ -98,12 +98,12 @@ public:
   /// reference -> quadrature
   /// physical -> current
   mimi::utils::Vector<std::shared_ptr<mfem::IsoparametricTransformation>>
-      target_to_reference_element_trans_;
+      reference_to_target_element_trans_;
 
   /// @brief size == n_elem, can share as long as each are separately accessed
   mimi::utils::Vector<
       std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>
-      target_to_reference_boundary_trans_;
+      reference_to_target_boundary_trans_;
 
   /// @brief
   std::unordered_map<std::string,
@@ -138,8 +138,8 @@ public:
     fe_collections_.clear();
     v_dofs_.clear();
     elements_.clear();
-    target_to_reference_element_trans_.clear();
-    target_to_reference_boundary_trans_.clear();
+    reference_to_target_element_trans_.clear();
+    reference_to_target_boundary_trans_.clear();
 
     scalars_.clear();
     vectors_.clear();
@@ -164,10 +164,10 @@ public:
     other->boundary_v_dofs_ = boundary_v_dofs_;
     other->elements_ = elements_;
     other->boundary_elements_ = boundary_elements_;
-    other->target_to_reference_element_trans_ =
-        target_to_reference_element_trans_;
-    other->target_to_reference_boundary_trans_ =
-        target_to_reference_boundary_trans_;
+    other->reference_to_target_element_trans_ =
+        reference_to_target_element_trans_;
+    other->reference_to_target_boundary_trans_ =
+        reference_to_target_boundary_trans_;
   }
 
   virtual void Setup(const mfem::FiniteElementSpace& fe_space,
@@ -214,8 +214,8 @@ public:
     boundary_v_dofs_.resize(n_b_elem);
     elements_.resize(n_elem);
     boundary_elements_.resize(n_b_elem);
-    target_to_reference_element_trans_.resize(n_elem);
-    target_to_reference_boundary_trans_.resize(n_b_elem);
+    reference_to_target_element_trans_.resize(n_elem);
+    reference_to_target_boundary_trans_.resize(n_b_elem);
 
     auto process_elems =
         [&](const int begin, const int end, const int i_thread) {
@@ -229,7 +229,7 @@ public:
             auto& elem = elements_[i];
             elem = CreatFiniteElement(dim); // make_shared
 
-            auto& e_tr = target_to_reference_element_trans_[i];
+            auto& e_tr = reference_to_target_element_trans_[i];
             e_tr = CreateTransformation(); // make_shared
 
             // process/set FE
@@ -269,7 +269,7 @@ public:
         // get bdr element
         fes.GetNURBSext()->LoadBE(i, b_el.get());
 
-        auto& b_tr = target_to_reference_boundary_trans_[i];
+        auto& b_tr = reference_to_target_boundary_trans_[i];
         b_tr = CreateFaceTransformation();
 
         // this is extended function mainly to
@@ -278,7 +278,7 @@ public:
         // we overwrite some pointers to our own copies
         // this is mask 1 - related elem
         // set
-        b_tr->Elem1 = target_to_reference_element_trans_[b_tr->Elem1No].get();
+        b_tr->Elem1 = reference_to_target_element_trans_[b_tr->Elem1No].get();
 
         // this is mask 16 - related face elem
         // we need to create b_elem of our own
