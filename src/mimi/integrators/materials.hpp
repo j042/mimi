@@ -410,7 +410,7 @@ public:
   /// gives hint to integrator, which stress is implemented we need
   virtual bool UsesCauchy() const {
     MIMI_FUNC()
-    return true;
+    return false;
   }
 
   virtual void Setup(const int dim, const int nthread) {
@@ -480,7 +480,7 @@ public:
     if (phi > 0.) {
       // 7.207
       const double plastic_strain_inc =
-          phi / (3. * G_ * kinematic_hardening_ + isotropic_hardening_);
+          phi / (3. * G_ + kinematic_hardening_ + isotropic_hardening_);
 
       // normalize eta in-place as we don't need it anymore
       eta *= 1. / eta_norm;

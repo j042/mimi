@@ -9,17 +9,21 @@ nl = mimi.PyNonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
-nl.subdivide(2)
+nl.subdivide(3)
 
 # create material
 mat = mimi.PyJ2()
 mat.density = 1
 mat.viscosity = -1
-mat.lambda_ = 50
-mat.mu = 200
-mat.isotropic_hardening = 100
-mat.kinematic_hardening = 200
-mat.sigma_y = 300
+mat.lambda_ = 790000 - (79000 * 2 / 3)
+mat.mu = 79000
+
+mat.lambda_ = 500
+mat.mu = 2000
+
+mat.isotropic_hardening = 0
+mat.kinematic_hardening = 0
+mat.sigma_y = 165 * 3 ** (0.5)
 nl.set_material(mat)
 
 # create splinepy nurbs to show
@@ -29,7 +33,8 @@ s.cps[:] = s.cps[to_s]
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
-bc.initial.body_force(1, -1)
+# bc.initial.body_force(1, -1000)
+bc.initial.traction(3, 1, -1)
 
 nl.boundary_condition = bc
 
