@@ -29,6 +29,9 @@ public:
   virtual void Setup(const int nthreads = -1) {
     MIMI_FUNC()
 
+    // make sure static variable is set to false at the beginning
+    mimi::integrators::MaterialState::freeze_ = false;
+
     // quick 0 and -1 filtering
     const int n_threads = (nthreads < 1) ? 1 : nthreads;
 

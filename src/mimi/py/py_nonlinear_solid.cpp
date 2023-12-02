@@ -1,6 +1,12 @@
 // mimi
 #include "mimi/py/py_nonlinear_solid.hpp"
 
+// we need to initialize static variable in non-header file.
+// keep it here until we separate cpp
+namespace mimi::integrators {
+bool MaterialState::freeze_ = false;
+}
+
 namespace mimi::py {
 
 namespace py = pybind11;

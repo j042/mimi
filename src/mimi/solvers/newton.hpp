@@ -2,6 +2,7 @@
 
 #include <mfem.hpp>
 
+#include "mimi/integrators/materials.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::solvers {
@@ -94,6 +95,8 @@ public:
       }
 
       // now, line search
+      // turn off the (plastic) state accumulation
+      mimi::integrators::MaterialState::freeze_ = true;
       mfem::Vector tmp_x(x); // copy init
 
       // full step
@@ -114,6 +117,9 @@ public:
         Base_::r -= b;
       }
       const double q2 = Base_::Norm(Base_::r);
+
+      // line search mult finished - unfreeze
+      mimi::integrators::MaterialState::freeze_ = false;
 
       const double eps =
           (3.0 * q1 - 4.0 * q2 + q3) / (4.0 * (q1 - 2.0 * q2 + q3));
