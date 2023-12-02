@@ -154,7 +154,7 @@ public:
   /// gives hint to integrator, which stress is implemented we need
   virtual bool UsesCauchy() const {
     MIMI_FUNC()
-    return false;
+    return true;
   }
 
   virtual void Setup(const int dim, const int nthread) {

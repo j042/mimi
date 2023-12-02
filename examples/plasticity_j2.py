@@ -14,7 +14,7 @@ nl.subdivide(3)
 # create material
 mat = mimi.PyJ2()
 mat.density = 1
-mat.viscosity = -1
+mat.viscosity = 10
 mat.lambda_ = 790000 - (79000 * 2 / 3)
 mat.mu = 79000
 
@@ -34,7 +34,7 @@ s.cps[:] = s.cps[to_s]
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
 # bc.initial.body_force(1, -1000)
-bc.initial.traction(3, 1, -20)
+bc.initial.traction(3, 1, -25)
 
 nl.boundary_condition = bc
 
@@ -63,7 +63,7 @@ for i in range(10000):
             interactive=False,
         )
     # remove body force
-    if i == 300:
+    if i == 200:
         rhs[:] = 0.0
     nl.step_time2()
 
