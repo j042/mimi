@@ -18,8 +18,8 @@ mat.viscosity = -1
 mat.lambda_ = 790000 - (79000 * 2 / 3)
 mat.mu = 79000
 
-mat.lambda_ = 500
-mat.mu = 2000
+# mat.lambda_ = 500
+# mat.mu = 2000
 
 mat.isotropic_hardening = 0
 mat.kinematic_hardening = 0
@@ -34,7 +34,7 @@ s.cps[:] = s.cps[to_s]
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
 # bc.initial.body_force(1, -1000)
-bc.initial.traction(3, 1, -1)
+bc.initial.traction(3, 1, -20)
 
 nl.boundary_condition = bc
 
@@ -63,8 +63,8 @@ for i in range(10000):
             interactive=False,
         )
     # remove body force
-    # if i == 300:
-    #    rhs[:] = 0.
+    if i == 300:
+        rhs[:] = 0.0
     nl.step_time2()
 
 gus.show(s, vedoplot=plt, interactive=True)

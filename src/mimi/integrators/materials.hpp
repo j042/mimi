@@ -17,6 +17,10 @@ struct MaterialState {
   Vector_<mfem::DenseMatrix> matrices_;
   Vector_<mfem::Vector> vectors_;
   Vector_<double> scalars_;
+
+  /// flag to notify non-accumulation
+  /// use during in FD and line search
+  bool freeze_{false};
 };
 
 /// Material base.
@@ -487,9 +491,13 @@ public:
 
       // return mapping
       s.Add(-sqrt_6_ * G_ * plastic_strain_inc, eta);
-      accumulated_plastic_strain += plastic_strain_inc;
-      plastic_strain.Add(sqrt_3_2_ * plastic_strain_inc, eta);
-      beta.Add(sqrt_2_3_ * kinematic_hardening_ * plastic_strain_inc, eta);
+
+      // this part should only be done at stepping.
+      if (!state->freeze_) {
+        accumulated_plastic_strain += plastic_strain_inc;
+        plastic_strain.Add(sqrt_3_2_ * plastic_strain_inc, eta);
+        beta.Add(sqrt_2_3_ * kinematic_hardening_ * plastic_strain_inc, eta);
+      }
     }
 
     // returning s + p * I
