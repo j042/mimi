@@ -468,11 +468,11 @@ public:
 
     // precompute aux values
     // eps, p, s, eta, q, phi
-    ElasticStrain(F, state->matrices_, dim_, eps);
+    ElasticStrain(F, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
     mfem::Add(s, beta, -1., eta);
-    const double eta_norm = Norm(eta, dim_ * dim_);
+    const double eta_norm = Norm(eta);
     const double q = sqrt_3_2_ * eta_norm;
     const double phi =
         q - (sigma_y_ + isotropic_hardening_ * accumulated_plastic_strain);
