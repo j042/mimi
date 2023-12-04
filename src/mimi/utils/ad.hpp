@@ -83,8 +83,6 @@ public:
                          mimi::utils::Data<Scalar_>,
                          std::array<Scalar_, number_of_derivatives>>;
 
-  friend class ADVector;
-
 private:
   /*!
    * Constructor which initializes all member variables directly.
@@ -108,6 +106,9 @@ private:
   DerivType_ d_;
 
 public:
+  constexpr Scalar& ValueReadWrite() { return v_; }
+  constexpr DerivType_& DerivativeReadWrite() { return d_; }
+
   /// Default Copy Constructor
   constexpr ADScalar(const ADT_& rhs) = default;
 
@@ -123,7 +124,7 @@ public:
   ADScalar(const Scalar_& value, const IndexingType_& n_derivatives)
       : v_{value} {
     d_.Reallocate(n_derivatives);
-    d_.Fill(Scalar_{})
+    d_.Fill(Scalar_{});
   } // d_{size} initializes to Scalar{}
 
   /// Scalar Constructor without Derivative
@@ -327,137 +328,137 @@ public:
    */
 
   /// Simple Default Output stream overload
-  template<typename ScalarF, std::size_t number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
   friend std::ostream&
   operator<<(std::ostream& os,
-             const ADScalar<ScalarF, number_of_derivatives>& a);
+             const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Addition
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   operator+(const ScalarF& a,
-            const ADScalar<ScalarF, number_of_derivatives>& b);
+            const ADScalar<ScalarF, number_of_derivativesF>& b);
 
   /// Subtraction
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   operator-(const ScalarF& a,
-            const ADScalar<ScalarF, number_of_derivatives>& b);
+            const ADScalar<ScalarF, number_of_derivativesF>& b);
 
   /// Multiplication
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   operator*(const ScalarF& a,
-            const ADScalar<ScalarF, number_of_derivatives>& b);
+            const ADScalar<ScalarF, number_of_derivativesF>& b);
 
   /// Division
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   operator/(const ScalarF& a,
-            const ADScalar<ScalarF, number_of_derivatives>& b);
+            const ADScalar<ScalarF, number_of_derivativesF>& b);
 
   /// Natural exponent of ADScalar (e.g. \f$ \exp{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  exp(const ADScalar<ScalarF, number_of_derivatives>& exponent);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  exp(const ADScalar<ScalarF, number_of_derivativesF>& exponent);
 
   /// Absolute Value
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  abs(const ADScalar<ScalarF, number_of_derivatives>& base);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  abs(const ADScalar<ScalarF, number_of_derivativesF>& base);
 
   /// Power of ADScalar (e.g. \f$ (x_i)^a \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  pow(const ADScalar<ScalarF, number_of_derivatives>& base,
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  pow(const ADScalar<ScalarF, number_of_derivativesF>& base,
       const ScalarF& power);
 
   /// Power of ADScalar (using \f$ (x)^y = exp(ln(x)y) \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  pow(const ADScalar<ScalarF, number_of_derivatives>& base,
-      const ADScalar<ScalarF, number_of_derivatives>& power);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  pow(const ADScalar<ScalarF, number_of_derivativesF>& base,
+      const ADScalar<ScalarF, number_of_derivativesF>& power);
 
   /// Square root of ADScalar (e.g. \f$ \sqrt{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  sqrt(const ADScalar<ScalarF, number_of_derivatives>& radicand);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  sqrt(const ADScalar<ScalarF, number_of_derivativesF>& radicand);
 
   /// Natural logarithm of ADScalar (e.g. \f$ \log{x_i} \f$ )
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  log(const ADScalar<ScalarF, number_of_derivatives>& xi);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  log(const ADScalar<ScalarF, number_of_derivativesF>& xi);
 
   /// Logarithm to base 10 of ADScalar (e.g. \f$ \log_{10}{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  log10(const ADScalar<ScalarF, number_of_derivatives>& a);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  log10(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Cosine function of ADScalar (e.g. \f$ \cos{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  cos(const ADScalar<ScalarF, number_of_derivatives>& a);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  cos(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Sine function of ADScalar (e.g. \f$ \sin{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  sin(const ADScalar<ScalarF, number_of_derivatives>& a);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  sin(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Tangent function of ADScalar (e.g. \f$ \tan{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  tan(const ADScalar<ScalarF, number_of_derivatives>& a);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  tan(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Inverse Cosine function of ADScalar (e.g. \f$ \acos{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  acos(const ADScalar<ScalarF, number_of_derivatives>& a);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  acos(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Inverse Sine function of ADScalar (e.g. \f$ \asin{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  asin(const ADScalar<ScalarF, number_of_derivatives>& a);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  asin(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Inverse Tangent function of ADScalar (e.g. \f$ \atan{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivatives>
-  friend constexpr ADScalar<ScalarF, number_of_derivatives>
-  atan(const ADScalar<ScalarF, number_of_derivatives>& a);
+  template<typename ScalarF, std::size_t number_of_derivativesF>
+  friend constexpr ADScalar<ScalarF, number_of_derivativesF>
+  atan(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Greater operator with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
   friend constexpr bool
   operator>(const ScalarF& scalar,
-            const ADScalar<ScalarF, number_of_derivatives>& adt);
+            const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Greater equal operator  with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
   friend constexpr bool
   operator>=(const ScalarF& scalar,
-             const ADScalar<ScalarF, number_of_derivatives>& adt);
+             const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Smaller operator with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
   friend constexpr bool
   operator<(const ScalarF& scalar,
-            const ADScalar<ScalarF, number_of_derivatives>& adt);
+            const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Smaller equal operator  with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
   friend constexpr bool
   operator<=(const ScalarF& scalar,
-             const ADScalar<ScalarF, number_of_derivatives>& adt);
+             const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Equal operator with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
   friend constexpr bool
   operator==(const ScalarF& scalar,
-             const ADScalar<ScalarF, number_of_derivatives>& adt);
+             const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Unequal operator  with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivatives>
+  template<typename ScalarF, std::size_t number_of_derivativesF>
   friend constexpr bool
   operator!=(const ScalarF& scalar,
-             const ADScalar<ScalarF, number_of_derivatives>& adt);
+             const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /** @} */ // End of Friend Injections
 
@@ -477,9 +478,9 @@ public:
   ADVector(const int n) : Base_(n) {
     // loop each element and initialize
     for (IndexType_ i{}; i < n; ++i) {
-      auto& i_data = data_[i];
+      auto& i_data = Base_::data_[i];
 
-      i_data.d_.Reallocate(n);
+      i_data.DerivativeReadWrite().Reallocate(n);
       i_data.SetActiveComponent(i); // this calls fill()
     }
   }
@@ -488,15 +489,15 @@ public:
   ADVector(const mfem::Vector& m_vec) {
     const int n = m_vec.Size();
     for (IndexType_ i{}; i < n; ++i) {
-      auto& ad_data = data_[i];
+      auto& i_data = Base_::data_[i];
       i_data.v_ = m_vec[i];
-      i_data.d_.Reallocate(n);
+      i_data.DerivativeReadWrite().Reallocate(n);
       i_data.SetActiveComponent(i); // this calls fill()
     }
   }
 
-  using Base_::opeartor[];
-  using Base_::opeartor();
+  using Base_::operator[];
+  using Base_::operator();
 };
 
 } // namespace mimi::utils
