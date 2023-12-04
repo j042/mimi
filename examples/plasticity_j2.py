@@ -39,13 +39,12 @@ bc.initial.traction(3, 1, -25)
 nl.boundary_condition = bc
 
 nl.setup(4)
-nl.configure_newton("nonlinear_solid", 1e-8, 1e-12, 80, False)
+nl.configure_newton("nonlinear_solid", 1e-12, 1e-10, 120, False)
 
 rhs = nl.linear_form_view2("rhs")
 print(rhs)
 
 nl.time_step_size = 0.005
-
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
 s.show_options["control_points"] = False
