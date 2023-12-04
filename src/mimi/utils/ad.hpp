@@ -467,9 +467,10 @@ public:
 
 // now vector style wrapper expecially for FWDJAC
 // full runtime
-class ADVector : public mimi::utils::Data<ADScalar<double, 0>> {
+template<int dim = 0>
+class ADVector : public mimi::utils::Data<ADScalar<double, dim>> {
 public:
-  using Base_ = mimi::utils::Data<ADScalar<double, 0>>;
+  using Base_ = mimi::utils::Data<ADScalar<double, dim>>;
   using IndexType_ = int;
 
   // size based
