@@ -480,7 +480,11 @@ public:
     for (IndexType_ i{}; i < n; ++i) {
       auto& i_data = Base_::data_[i];
 
-      i_data.DerivativeReadWrite().Reallocate(n);
+      // we need to manually Reallocate, only if this is dynamic
+      if constexpr (dim == 0) {
+        i_data.DerivativeReadWrite().Reallocate(n);
+      }
+
       i_data.SetActiveComponent(i); // this calls fill()
     }
   }
@@ -488,16 +492,107 @@ public:
   // similar to size based, but copies value
   ADVector(const mfem::Vector& m_vec) {
     const int n = m_vec.Size();
+
+    // allocate space
+    Base_::Reallocate(n);
+
+    // loop any coly
     for (IndexType_ i{}; i < n; ++i) {
       auto& i_data = Base_::data_[i];
       i_data.v_ = m_vec[i];
-      i_data.DerivativeReadWrite().Reallocate(n);
+
+      if constexpr (dim == 0) {
+        i_data.DerivativeReadWrite().Reallocate(n);
+      }
+
       i_data.SetActiveComponent(i); // this calls fill()
     }
   }
 
+  /// use base's operator[] and operator()
   using Base_::operator[];
   using Base_::operator();
+};
+
+/// Similar to vector, but matrix
+/// This is F-continugous layout, which is consistent with mfem
+/// again, Column-Major Matrix!
+template<int size = 0>
+class ADMatrix : public mimi::utils::Data<ADScalar<double, size>, 2> {
+public:
+  using value_type = ADScalar<double, size>;
+  using Type_ = value_type;
+  using Base_ = mimi::utils::Data<ADScalar<double, size>, 2>;
+  using IndexType_ = int;
+
+  /// COLUMN MAJOR!
+  constexpr Type_& operator()(const int& i, const int& j) {
+    assert(data_);
+    return data_[j * Base_::strides_[0] + i];
+  }
+
+  /// again, COLUMN MAJOR!
+  constexpr const Type_& operator()(const int& i, const int& j) const {
+    assert(data_);
+    return data_[j * Base_::strides_[0] + i];
+  }
+
+  /// use base's operator[]. operator() is overriden above
+  using Base_::operator[];
+
+  // shape based ctor
+  ADMatrix(const int h, const int w) : {
+    // get size
+    const int n = h * w;
+
+    // set shape
+    Base_::Reallocate(n);
+    Base_::SetShape(h, w);
+
+    // loop each element and initialize
+    for (IndexType_ i{}; i < n; ++i) {
+      auto& i_data = Base_::data_[i];
+
+      // we need to manually Reallocate, only if this is dynamic
+      if constexpr (size == 0) {
+        i_data.DerivativeReadWrite().Reallocate(n);
+      } else {
+        assert(size == n);
+      }
+
+      i_data.SetActiveComponent(i); // this calls fill()
+    }
+  }
+
+  // similar to shape based, but copies value
+  ADMatrix(const mfem::DenseMatrix& m_mat) {
+    const int h = m_mat.Height();
+    const int w = m_mat.Width();
+    const int n = h * w;
+
+    // allocate space
+    Base_::Reallocate(n);
+    Base_::SetShape(h, w);
+
+    // loop and copy - this transposes the layout and wenn we copy back, we will
+    // have to transpose this again, dam
+
+    // loop any copy
+    const double* m_mat_data = m_mat.GetData();
+    for (IndexType_ i{}; i < n; ++i) {
+      auto& i_data = Base_::data_[i];
+
+      i_data.v_ = m_mat_data[i];
+
+      if constexpr (size == 0) {
+        i_data.DerivativeReadWrite().Reallocate(n);
+      } else {
+        assert(size == n);
+      }
+
+      i_data.SetActiveComponent(i); // this calls fill()
+    }
+  }
 };
 
 } // namespace mimi::utils
