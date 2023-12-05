@@ -34,7 +34,7 @@ s.cps[:] = s.cps[to_s]
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
 # bc.initial.body_force(1, -1000)
-bc.initial.traction(3, 1, -25)
+bc.initial.traction(3, 1, -30)
 
 nl.boundary_condition = bc
 
@@ -44,7 +44,7 @@ nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, False)
 rhs = nl.linear_form_view2("rhs")
 print(rhs)
 
-nl.time_step_size = 0.005
+nl.time_step_size = 0.01
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
 s.show_options["control_points"] = False
