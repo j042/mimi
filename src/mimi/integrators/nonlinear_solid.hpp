@@ -254,6 +254,7 @@ public:
   /// currently copy of AssemblyDomainResidual.
   /// meant to be used for FD
   /// or, AD, where we can assemble both LHS and RHS contributions
+  /// As we currently use for FD, we will turn off state accumulation
   virtual void AssembleElementResidual(const mfem::Vector& input_element_x,
                                        const int& i_elem,
                                        const int& i_thread,
@@ -520,7 +521,9 @@ public:
       }
     };
 
+    MaterialState::freeze_ = true;
     mimi::utils::NThreadExe(fd_grad, element_matrices_->size(), n_threads_);
+    MaterialState::freeze_ = false;
   }
 };
 

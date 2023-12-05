@@ -60,7 +60,7 @@ public:
   using Base_ = mfem::GeneralizedAlpha2Solver;
 
   GeneralizedAlpha2(mfem::SecondOrderTimeDependentOperator& oper,
-                    double rho_inf = 1.0)
+                    double rho_inf = 0.5)
       : Base_(rho_inf) {
     Base_::Init(oper);
 
