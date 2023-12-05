@@ -39,7 +39,7 @@ protected:
 
 public:
   /// material states (n_elements * n_quads)
-  Vector_<Vector_<MaterialState>> material_states_;
+  Vector_<Vector_<std::shared_ptr<MaterialState>>> material_states_;
 
   /// for smooth nthread exe with FD or AD, we need element assembly
   /// that we can call element wise. So here, we will save
@@ -133,6 +133,7 @@ public:
     quadrature_orders_.resize(n_elements);
 
     // material states - this is per elements per quad points
+    // as this is share_ptr, we can just call copy constructor.
     material_states_.resize(n_elements);
 
     auto precompute_at_elements_and_quads = [&](const int el_begin,
@@ -157,6 +158,7 @@ public:
         auto& i_deformation_gradient_inverses =
             deformation_gradient_inverses[i];
         auto& i_deformation_gradient_weights = deformation_gradient_weights[i];
+        auto& i_material_states = material_states_[i];
 
         // get quad order
         const int q_order = (quadrature_order < 0) ? i_el->GetOrder() * 2 + 3
@@ -172,10 +174,6 @@ public:
         const int n_quad = ir.GetNPoints();
         const int n_dof = i_el->GetDof();
 
-        // allocate state. maybe we want to value initialize here.
-        // default init for now (this is default_init_vector)
-        material_states_[i].resize(n_quad);
-
         // now, allocate space
         i_d_shapes.resize(n_quad);
         i_target_d_shapes.resize(n_quad);
@@ -184,6 +182,7 @@ public:
         i_deformation_gradients.resize(n_quad);
         i_deformation_gradient_inverses.resize(n_quad);
         i_deformation_gradient_weights.resize(n_quad);
+        i_material_states.resize(n_quad);
 
         // also allocate element based vectors and matrix (assembly output)
         element_vectors_->operator[](i).SetSize(n_dof * dim_);
@@ -203,12 +202,17 @@ public:
               i_deformation_gradients[j];
           mfem::DenseMatrix& j_deformation_gradient_inverse =
               i_deformation_gradient_inverses[j];
+          std::shared_ptr<MaterialState>& j_material_state =
+              i_material_states[j];
+
           j_d_shape.SetSize(n_dof, dim_);
           j_target_d_shape.SetSize(n_dof, dim_);
           j_target_to_reference_jacobian.SetSize(dim_, dim_);
           // here, we just allocate the matrix
           j_deformation_gradient.SetSize(dim_, dim_);
           j_deformation_gradient_inverse.SetSize(dim_, dim_);
+          // this needs to be done individually
+          j_material_state = material_->CreateState();
 
           //  Calc
           i_el->CalcDShape(ip, j_d_shape);
@@ -250,6 +254,7 @@ public:
   /// currently copy of AssemblyDomainResidual.
   /// meant to be used for FD
   /// or, AD, where we can assemble both LHS and RHS contributions
+  /// As we currently use for FD, we will turn off state accumulation
   virtual void AssembleElementResidual(const mfem::Vector& input_element_x,
                                        const int& i_elem,
                                        const int& i_thread,
@@ -516,7 +521,9 @@ public:
       }
     };
 
+    MaterialState::freeze_ = true;
     mimi::utils::NThreadExe(fd_grad, element_matrices_->size(), n_threads_);
+    MaterialState::freeze_ = false;
   }
 };
 
