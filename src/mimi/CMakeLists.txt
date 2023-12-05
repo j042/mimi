@@ -6,7 +6,7 @@ set(SRCS
     py/py_nonlinear_form.cpp
     py/py_material.cpp
     py/py_nonlinear_solid.cpp
-    py/py_ad.cpp
+#    py/py_ad.cpp
     py/mimi.cpp)
 
 pybind11_add_module(mimi ${SRCS})
