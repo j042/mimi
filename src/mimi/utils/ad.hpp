@@ -212,6 +212,11 @@ public:
   /// Getter derivative
   constexpr DerivType_ GetDerivatives() const { return d_; }
 
+  constexpr Scalar GetDerivatives(const int i) const {
+    MIMI_FUNC()
+    return d_[i];
+  }
+
   /*!
    * Returns the spatial dimensionality of vector \f$ x \f$
    * @return     The value of the template parameter n_derivs
