@@ -528,20 +528,20 @@ public:
   /// COLUMN MAJOR!
   constexpr Type_& operator()(const int& i, const int& j) {
     assert(data_);
-    return data_[j * Base_::strides_[0] + i];
+    return Base_::data_[j * Base_::strides_[0] + i];
   }
 
   /// again, COLUMN MAJOR!
   constexpr const Type_& operator()(const int& i, const int& j) const {
     assert(data_);
-    return data_[j * Base_::strides_[0] + i];
+    return Base_::data_[j * Base_::strides_[0] + i];
   }
 
   /// use base's operator[]. operator() is overriden above
   using Base_::operator[];
 
   // shape based ctor
-  ADMatrix(const int h, const int w) : {
+  ADMatrix(const int h, const int w) {
     // get size
     const int n = h * w;
 
