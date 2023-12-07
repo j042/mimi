@@ -4,6 +4,8 @@
 
 #include <mfem.hpp>
 
+#include "mimi/solvers/newton.hpp"
+#include "mimi/utils/ad.hpp"
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
 
@@ -508,10 +510,17 @@ public:
 
 struct HardeningBase {
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
-  virtual ADScalar_ Evaluate(const double accumulated_plastic_strain) const {
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("HardeningBase::Evaluate not overriden");
+    return {};
   }
-  virtual double SigmaY() const { MIMI_FUNC() }
+  virtual double SigmaY() const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("HardeningBase::SigmaY not overriden");
+    return -1.0;
+  }
 };
 
 struct PowerLawHardening : public HardeningBase {
@@ -522,11 +531,11 @@ struct PowerLawHardening : public HardeningBase {
   double n_;
   double eps0_;
 
-  virtual ADScalar_ Evaluate(const double accumulated_plastic_strain) const {
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
 
-    return sigma_y_
-           * std::pow(1.0 + accumulated_plastic_strain / eps0_, 1.0 / n_);
+    return sigma_y_ * pow(1.0 + accumulated_plastic_strain / eps0_, 1.0 / n_);
   }
 
   virtual double SigmaY() const { return sigma_y_; }
@@ -540,13 +549,13 @@ struct VoceHardening : public HardeningBase {
   double sigma_sat_;
   double strain_constant_;
 
-  virtual ADScalar_ Evaluate(const double accumulated_plastic_strain) const {
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
 
     return sigma_sat_
            - (sigma_sat_ - sigma_y_)
-                 * std::exp(-ADScalar_(accumulated_plastic_strain, 0)
-                            / strain_constant_);
+                 * exp(-accumulated_plastic_strain / strain_constant_);
   }
 
   virtual double SigmaY() const { return sigma_y_; }
@@ -689,9 +698,8 @@ public:
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    auto residual =
-        [eqps_old, G_, &hardening_](const double delta_eqps,
-                                    const double trial_mises) -> ADScalar_ {
+    auto residual = [eqps_old, *this](auto delta_eqps,
+                                      auto trial_mises) -> ADScalar_ {
       return trial_mises - 3.0 * G_ * delta_eqps
              - hardening_->Evaluate(eqps_old + delta_eqps);
     };
