@@ -506,7 +506,7 @@ public:
   }
 };
 
-struct Hardening {
+struct HardeningBase {
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
   virtual ADScalar_ Evaluate(const double accumulated_plastic_strain) const {
     MIMI_FUNC()
@@ -514,8 +514,8 @@ struct Hardening {
   virtual double SigmaY() const { MIMI_FUNC() }
 };
 
-struct PowerLawHardening : public Hardening {
-  using Base_ = Hardening;
+struct PowerLawHardening : public HardeningBase {
+  using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
   double sigma_y_;
@@ -532,8 +532,8 @@ struct PowerLawHardening : public Hardening {
   virtual double SigmaY() const { return sigma_y_; }
 };
 
-struct VoceHardening : public Hardening {
-  using Base_ = Hardening;
+struct VoceHardening : public HardeningBase {
+  using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
   double sigma_y_;
@@ -552,8 +552,8 @@ struct VoceHardening : public Hardening {
   virtual double SigmaY() const { return sigma_y_; }
 };
 
-struct JohnsonCookHardening : public Hardening {
-  using Base_ = Hardening;
+struct JohnsonCookHardening : public HardeningBase {
+  using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
   double A_;
@@ -578,12 +578,12 @@ struct JohnsonCookHardening : public Hardening {
 /// s: stress deviator
 /// Implementation reference from serac
 /// Considers nonlinear Isotropic hardening
-class J2NonlinearHardening : public MaterialBase {
+class J2NonlinearIsotropicHardening : public MaterialBase {
 public:
   using Base_ = MaterialBase;
   using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
-  using HardeningPtr_ = std::shared_ptr<Hardening>;
-  using ADScalar_ = typename Hardening::ADScalar_;
+  using HardeningPtr_ = std::shared_ptr<HardeningBase>;
+  using ADScalar_ = typename HardeningBase::ADScalar_;
 
   // additional parameters
   HardeningPtr_ hardening_;
