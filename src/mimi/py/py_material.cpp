@@ -68,7 +68,7 @@ void init_py_material(py::module_& m) {
   voce_h.def(py::init<>())
       .def_readwrite("sigma_y", &VoceHardening::sigma_y_)
       .def_readwrite("sigma_sat", &VoceHardening::sigma_sat_)
-      .def_readwrite("stain_constant", &VoceHardening::strain_constant_);
+      .def_readwrite("strain_constant", &VoceHardening::strain_constant_);
 
   py::class_<JCHardening, std::shared_ptr<JCHardening>, HardeningBase> jc_h(
       m,
