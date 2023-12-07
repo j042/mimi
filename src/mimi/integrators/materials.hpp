@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 
 #include <mfem.hpp>
@@ -569,10 +570,14 @@ struct JohnsonCookHardening : public HardeningBase {
   double B_;
   double n_;
 
-  virtual ADScalar_ Evaluate(const double accumulated_plastic_strain) const {
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
+    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
+      return ADScalar_(A_);
+    }
 
-    return A_ + B_ * pow(ADScalar_(accumulated_plastic_strain, 0), n_);
+    return A_ + B_ * pow(accumulated_plastic_strain, n_);
   }
 
   virtual double SigmaY() const { return A_; }
@@ -708,9 +713,9 @@ public:
 
     if (residual(0.0, q) > tolerance) {
       /// return mapping
-      mimi::solvers::ScalarSolverOptions opts{.xtol = 0,
+      mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
                                               .rtol = tolerance,
-                                              .max_iter = 25};
+                                              .max_iter = 100};
 
       const double lower_bound = 0.0;
       const double upper_bound =
