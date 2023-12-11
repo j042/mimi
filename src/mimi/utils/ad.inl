@@ -25,7 +25,7 @@ SOFTWARE.
 #pragma once
 
 // Addition
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator+(
     const ADScalar<Scalar, number_of_derivatives>& b) const {
@@ -34,7 +34,7 @@ ADScalar<Scalar, number_of_derivatives>::operator+(
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>&
 ADScalar<Scalar, number_of_derivatives>::operator+=(
     const ADScalar<Scalar, number_of_derivatives>& b) {
@@ -46,7 +46,7 @@ ADScalar<Scalar, number_of_derivatives>::operator+=(
   return (*this);
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator+(const Scalar& b) const {
   ADT_ result_value{(*this)};
@@ -54,7 +54,7 @@ ADScalar<Scalar, number_of_derivatives>::operator+(const Scalar& b) const {
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>&
 ADScalar<Scalar, number_of_derivatives>::operator+=(const Scalar& b) {
   v_ += b;
@@ -62,7 +62,7 @@ ADScalar<Scalar, number_of_derivatives>::operator+=(const Scalar& b) {
 }
 
 // Substraction and negation
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator-() const {
   ADT_ result_value{(*this)};
@@ -73,7 +73,7 @@ ADScalar<Scalar, number_of_derivatives>::operator-() const {
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator-(
     const ADScalar<Scalar, number_of_derivatives>& b) const {
@@ -83,7 +83,7 @@ ADScalar<Scalar, number_of_derivatives>::operator-(
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>&
 ADScalar<Scalar, number_of_derivatives>::operator-=(
     const ADScalar<Scalar, number_of_derivatives>& b) {
@@ -93,7 +93,7 @@ ADScalar<Scalar, number_of_derivatives>::operator-=(
   }
   return (*this);
 }
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator-(const Scalar& b) const {
   ADT_ result_value{(*this)};
@@ -101,7 +101,7 @@ ADScalar<Scalar, number_of_derivatives>::operator-(const Scalar& b) const {
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>&
 ADScalar<Scalar, number_of_derivatives>::operator-=(const Scalar& b) {
   v_ -= b;
@@ -109,7 +109,7 @@ ADScalar<Scalar, number_of_derivatives>::operator-=(const Scalar& b) {
 }
 
 // Multiplication
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator*(
     const ADScalar<Scalar, number_of_derivatives>& b) const {
@@ -118,7 +118,7 @@ ADScalar<Scalar, number_of_derivatives>::operator*(
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>&
 ADScalar<Scalar, number_of_derivatives>::operator*=(
     const ADScalar<Scalar, number_of_derivatives>& b) {
@@ -131,7 +131,7 @@ ADScalar<Scalar, number_of_derivatives>::operator*=(
   return (*this);
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator*(const Scalar& b) const {
   ADT_ result_value{(*this)};
@@ -139,7 +139,7 @@ ADScalar<Scalar, number_of_derivatives>::operator*(const Scalar& b) const {
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>&
 ADScalar<Scalar, number_of_derivatives>::operator*=(const Scalar& b) {
   v_ *= b;
@@ -150,7 +150,7 @@ ADScalar<Scalar, number_of_derivatives>::operator*=(const Scalar& b) {
 }
 
 // Division
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator/(
     const ADScalar<Scalar, number_of_derivatives>& b) const {
@@ -159,7 +159,7 @@ ADScalar<Scalar, number_of_derivatives>::operator/(
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>&
 ADScalar<Scalar, number_of_derivatives>::operator/=(
     const ADScalar<Scalar, number_of_derivatives>& b) {
@@ -173,7 +173,7 @@ ADScalar<Scalar, number_of_derivatives>::operator/=(
   return (*this);
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 ADScalar<Scalar, number_of_derivatives>::operator/(const Scalar& b) const {
   ADT_ result_value{(*this)};
@@ -181,7 +181,7 @@ ADScalar<Scalar, number_of_derivatives>::operator/(const Scalar& b) const {
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>&
 ADScalar<Scalar, number_of_derivatives>::operator/=(const Scalar& b) {
   const Scalar inverse_b{1 / b};
@@ -196,45 +196,45 @@ ADScalar<Scalar, number_of_derivatives>::operator/=(const Scalar& b) {
 // Friend Functions
 //////////////////////////////
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 std::ostream& operator<<(std::ostream& os,
                          const ADScalar<Scalar, number_of_derivatives>& a) {
   os << a.v_;
   return os;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 operator+(const Scalar& a, const ADScalar<Scalar, number_of_derivatives>& b) {
   return b + a;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 operator-(const Scalar& a, const ADScalar<Scalar, number_of_derivatives>& b) {
   return (-b) + a;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 operator*(const Scalar& a, const ADScalar<Scalar, number_of_derivatives>& b) {
   return b * a;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 operator/(const Scalar& a, const ADScalar<Scalar, number_of_derivatives>& b) {
   ADScalar<Scalar, number_of_derivatives> result_value{b};
   Scalar deriv = -a / (b.v_ * b.v_);
   result_value.v_ *= -deriv;
-  for (std::size_t i{}; i < result_value.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < result_value.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= deriv;
   }
 
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 exp(const ADScalar<Scalar, number_of_derivatives>& exponent) {
   Scalar tmp;
@@ -250,13 +250,13 @@ exp(const ADScalar<Scalar, number_of_derivatives>& exponent) {
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 abs(const ADScalar<Scalar, number_of_derivatives>& base) {
   return base.v_ > 0.0 ? base : (-base);
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 pow(const ADScalar<Scalar, number_of_derivatives>& base, const Scalar& power) {
   Scalar tmp;
@@ -268,20 +268,20 @@ pow(const ADScalar<Scalar, number_of_derivatives>& base, const Scalar& power) {
   }
   ADScalar<Scalar, number_of_derivatives> result_value{base};
   result_value.v_ *= tmp;
-  for (std::size_t i{}; i < base.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < base.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= power * tmp;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 pow(const ADScalar<Scalar, number_of_derivatives>& base,
     const ADScalar<Scalar, number_of_derivatives>& power) {
   return exp(log(base) * power);
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 sqrt(const ADScalar<Scalar, number_of_derivatives>& radicand) {
   Scalar root;
@@ -294,13 +294,13 @@ sqrt(const ADScalar<Scalar, number_of_derivatives>& radicand) {
   const Scalar& half_inverse_root = 0.5 / root;
   ADScalar<Scalar, number_of_derivatives> result_value{radicand};
   result_value.v_ = root;
-  for (std::size_t i{}; i < radicand.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < radicand.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= half_inverse_root;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 log(const ADScalar<Scalar, number_of_derivatives>& xi) {
   using namespace std;              // required for intrinsic types
@@ -312,13 +312,13 @@ log(const ADScalar<Scalar, number_of_derivatives>& xi) {
   } else {
     result_value.v_ = log(xi.v_);
   }
-  for (std::size_t i{}; i < xi.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < xi.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= temp;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 log10(const ADScalar<Scalar, number_of_derivatives>& a) {
   using namespace std; // requ ired for intrinsic types
@@ -330,7 +330,7 @@ log10(const ADScalar<Scalar, number_of_derivatives>& a) {
   } else {
     result_value.v_ = log10(a.v_);
   }
-  for (std::size_t i{}; i < a.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < a.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= temp;
   }
   return result_value;
@@ -339,7 +339,7 @@ log10(const ADScalar<Scalar, number_of_derivatives>& a) {
 /////////
 // Trigonometric functions
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 cos(const ADScalar<Scalar, number_of_derivatives>& rad) {
   ADScalar<Scalar, number_of_derivatives> result_value{rad};
@@ -352,13 +352,13 @@ cos(const ADScalar<Scalar, number_of_derivatives>& rad) {
     sin_of_angle = -sin(rad.v_);
     result_value.v_ = cos(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < rad.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= sin_of_angle;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 sin(const ADScalar<Scalar, number_of_derivatives>& rad) {
   ADScalar<Scalar, number_of_derivatives> result_value{rad};
@@ -371,13 +371,13 @@ sin(const ADScalar<Scalar, number_of_derivatives>& rad) {
     cos_of_angle = cos(rad.v_);
     result_value.v_ = sin(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < rad.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= cos_of_angle;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 tan(const ADScalar<Scalar, number_of_derivatives>& rad) {
   ADScalar<Scalar, number_of_derivatives> result_value{rad};
@@ -392,13 +392,13 @@ tan(const ADScalar<Scalar, number_of_derivatives>& rad) {
     auxiliary_value *= auxiliary_value;
     result_value.v_ = tan(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < rad.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= auxiliary_value;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 acos(const ADScalar<Scalar, number_of_derivatives>& rad) {
   ADScalar<Scalar, number_of_derivatives> result_value{rad};
@@ -411,13 +411,13 @@ acos(const ADScalar<Scalar, number_of_derivatives>& rad) {
     auxiliary_value = -1. / sqrt(1 - rad.v_ * rad.v_);
     result_value.v_ = cos(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < rad.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= auxiliary_value;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 asin(const ADScalar<Scalar, number_of_derivatives>& rad) {
   ADScalar<Scalar, number_of_derivatives> result_value{rad};
@@ -430,13 +430,13 @@ asin(const ADScalar<Scalar, number_of_derivatives>& rad) {
     auxiliary_value = 1. / std::sqrt(1 - rad.v_ * rad.v_);
     result_value.v_ = asin(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < rad.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= auxiliary_value;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr ADScalar<Scalar, number_of_derivatives>
 atan(const ADScalar<Scalar, number_of_derivatives>& rad) {
   ADScalar<Scalar, number_of_derivatives> result_value{rad};
@@ -447,43 +447,43 @@ atan(const ADScalar<Scalar, number_of_derivatives>& rad) {
   } else {
     result_value.v_ = atan(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (int i{}; i < rad.GetNumberOfDerivatives(); i++) {
     result_value.d_[i] *= auxiliary_value;
   }
   return result_value;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr bool operator>(const Scalar& scalar,
                          const ADScalar<Scalar, number_of_derivatives>& adt) {
   return adt < scalar;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr bool operator>=(const Scalar& scalar,
                           const ADScalar<Scalar, number_of_derivatives>& adt) {
   return adt <= scalar;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr bool operator<(const Scalar& scalar,
                          const ADScalar<Scalar, number_of_derivatives>& adt) {
   return adt > scalar;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr bool operator<=(const Scalar& scalar,
                           const ADScalar<Scalar, number_of_derivatives>& adt) {
   return adt >= scalar;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr bool operator==(const Scalar& scalar,
                           const ADScalar<Scalar, number_of_derivatives>& adt) {
   return adt == scalar;
 }
 
-template<typename Scalar, std::size_t number_of_derivatives>
+template<typename Scalar, int number_of_derivatives>
 constexpr bool operator!=(const Scalar& scalar,
                           const ADScalar<Scalar, number_of_derivatives>& adt) {
   return !(adt == scalar);

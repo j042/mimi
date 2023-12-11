@@ -65,7 +65,7 @@ namespace mimi::utils {
  *                     derivative components
  * @tparam number_of_derivatives
  */
-template<typename Scalar, std::size_t number_of_derivatives = 0>
+template<typename Scalar, int number_of_derivatives = 0>
 class ADScalar {
 public:
   /// Alias for the intrinsic scalar data type
@@ -79,7 +79,7 @@ public:
 
   /// Alias for the data type storing the gradient
   using DerivType_ =
-      std::conditional_t<number_of_derivatives == 0,
+      std::conditional_t<(number_of_derivatives < 0),
                          mimi::utils::Data<Scalar_>,
                          std::array<Scalar_, number_of_derivatives>>;
 
@@ -119,7 +119,7 @@ public:
   ADScalar() : v_{}, d_{} {}
 
   /// Scalar Constructor without Derivative
-  template<std::size_t dummy = number_of_derivatives,
+  template<int dummy = number_of_derivatives,
            typename std::enable_if_t<dummy == 0>* = nullptr>
   ADScalar(const Scalar_& value, const IndexingType_& n_derivatives)
       : v_{value} {
@@ -128,7 +128,7 @@ public:
   } // d_{size} initializes to Scalar{}
 
   /// Scalar Constructor without Derivative
-  template<std::size_t dummy = number_of_derivatives,
+  template<int dummy = number_of_derivatives,
            typename std::enable_if_t<dummy != 0>* = nullptr>
   ADScalar(const Scalar_& value)
       : v_{value},
@@ -144,7 +144,7 @@ public:
    * e_i \f$, which corresponds to the component with respect to which the
    * derivative is supposed to be computed.
    */
-  template<std::size_t dummy = number_of_derivatives,
+  template<int dummy = number_of_derivatives,
            typename std::enable_if_t<dummy == 0>* = nullptr>
   ADScalar(const Scalar& value,
            const IndexingType_& n_derivatives,
@@ -164,7 +164,7 @@ public:
    * e_i \f$, which corresponds to the component with respect to which the
    * derivative is supposed to be computed.
    */
-  template<std::size_t dummy = number_of_derivatives,
+  template<int dummy = number_of_derivatives,
            typename std::enable_if_t<dummy != 0>* = nullptr>
   ADScalar(const Scalar& value, const IndexingType_ active_component)
       : v_{value},
@@ -333,134 +333,134 @@ public:
    */
 
   /// Simple Default Output stream overload
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend std::ostream&
   operator<<(std::ostream& os,
              const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Addition
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   operator+(const ScalarF& a,
             const ADScalar<ScalarF, number_of_derivativesF>& b);
 
   /// Subtraction
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   operator-(const ScalarF& a,
             const ADScalar<ScalarF, number_of_derivativesF>& b);
 
   /// Multiplication
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   operator*(const ScalarF& a,
             const ADScalar<ScalarF, number_of_derivativesF>& b);
 
   /// Division
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   operator/(const ScalarF& a,
             const ADScalar<ScalarF, number_of_derivativesF>& b);
 
   /// Natural exponent of ADScalar (e.g. \f$ \exp{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   exp(const ADScalar<ScalarF, number_of_derivativesF>& exponent);
 
   /// Absolute Value
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   abs(const ADScalar<ScalarF, number_of_derivativesF>& base);
 
   /// Power of ADScalar (e.g. \f$ (x_i)^a \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   pow(const ADScalar<ScalarF, number_of_derivativesF>& base,
       const ScalarF& power);
 
   /// Power of ADScalar (using \f$ (x)^y = exp(ln(x)y) \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   pow(const ADScalar<ScalarF, number_of_derivativesF>& base,
       const ADScalar<ScalarF, number_of_derivativesF>& power);
 
   /// Square root of ADScalar (e.g. \f$ \sqrt{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   sqrt(const ADScalar<ScalarF, number_of_derivativesF>& radicand);
 
   /// Natural logarithm of ADScalar (e.g. \f$ \log{x_i} \f$ )
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   log(const ADScalar<ScalarF, number_of_derivativesF>& xi);
 
   /// Logarithm to base 10 of ADScalar (e.g. \f$ \log_{10}{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   log10(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Cosine function of ADScalar (e.g. \f$ \cos{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   cos(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Sine function of ADScalar (e.g. \f$ \sin{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   sin(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Tangent function of ADScalar (e.g. \f$ \tan{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   tan(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Inverse Cosine function of ADScalar (e.g. \f$ \acos{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   acos(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Inverse Sine function of ADScalar (e.g. \f$ \asin{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   asin(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Inverse Tangent function of ADScalar (e.g. \f$ \atan{x_i} \f$)
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr ADScalar<ScalarF, number_of_derivativesF>
   atan(const ADScalar<ScalarF, number_of_derivativesF>& a);
 
   /// Greater operator with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr bool
   operator>(const ScalarF& scalar,
             const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Greater equal operator  with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr bool
   operator>=(const ScalarF& scalar,
              const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Smaller operator with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr bool
   operator<(const ScalarF& scalar,
             const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Smaller equal operator  with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr bool
   operator<=(const ScalarF& scalar,
              const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Equal operator with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr bool
   operator==(const ScalarF& scalar,
              const ADScalar<ScalarF, number_of_derivativesF>& adt);
 
   /// Unequal operator  with a Scalar
-  template<typename ScalarF, std::size_t number_of_derivativesF>
+  template<typename ScalarF, int number_of_derivativesF>
   friend constexpr bool
   operator!=(const ScalarF& scalar,
              const ADScalar<ScalarF, number_of_derivativesF>& adt);
@@ -471,133 +471,150 @@ public:
 
 #include "mimi/utils/ad.inl"
 
-// now vector style wrapper expecially for FWDJAC
-// full runtime
-template<int dim = 0>
-class ADVector : public mimi::utils::Data<ADScalar<double, dim>> {
-public:
-  using Base_ = mimi::utils::Data<ADScalar<double, dim>>;
-  using IndexType_ = int;
-
-  // size based
-  ADVector(const int n) : Base_(n) {
-    // loop each element and initialize
-    for (IndexType_ i{}; i < n; ++i) {
-      auto& i_data = Base_::data_[i];
-
-      // we need to manually Reallocate, only if this is dynamic
-      if constexpr (dim == 0) {
-        i_data.DerivativeReadWrite().Reallocate(n);
-      }
-
-      i_data.SetActiveComponent(i); // this calls fill()
-    }
-  }
-
-  // similar to size based, but copies value
-  ADVector(const mfem::Vector& m_vec) {
-    const int n = m_vec.Size();
-
-    // allocate space
-    Base_::Reallocate(n);
-
-    // loop any coly
-    for (IndexType_ i{}; i < n; ++i) {
-      auto& i_data = Base_::data_[i];
-      i_data.v_ = m_vec[i];
-
-      if constexpr (dim == 0) {
-        i_data.DerivativeReadWrite().Reallocate(n);
-      }
-
-      i_data.SetActiveComponent(i); // this calls fill()
-    }
-  }
-
-  /// use base's operator[] and operator()
-  using Base_::operator[];
-  using Base_::operator();
-};
-
-/// Similar to vector, but matrix
-/// This is F-continugous layout, which is consistent with mfem
+/// This is F-continugous layout, which is consistent with mfem.
 /// again, Column-Major Matrix!
-template<int size = 0>
-class ADMatrix : public mimi::utils::Data<ADScalar<double, size>, 2> {
+/// I am probably going to regret this, but
+/// default is dynamic
+template<int height = -1, int width = -1>
+class ADMatrix {
 public:
-  using value_type = ADScalar<double, size>;
-  using Type_ = value_type;
-  using Base_ = mimi::utils::Data<ADScalar<double, size>, 2>;
+  using value_type = ADScalar<double, size_>; // set to zero
+  using ContainerType_ =
+      std::conditional_t<(height * width > 0) ? false : true,
+                         mimi::utils::Data<value_type>,
+                         std::array<value_type, number_of_derivatives>>;
   using IndexType_ = int;
+
+protected:
+  ContainerType_ data_;
+
+public:
+  static constexpr const int kHeight = height;
+  static constexpr const int kWidth = width;
+  static constexpr const int kSize = height * width;
+  static constexpr const bool kDynamic = (kSize > 0) ? false : true;
+
+  // these values are set dynamically
+  int h_;
+  int w_;
+  int s_; //
+
+  constexpr const int& Height() const {
+    if constexpr (kDynamic) {
+      return h_;
+    } else {
+      return kHeight;
+    }
+  }
+
+  constexpr const int& Width() const {
+    if constexpr (kDynamic) {
+      return w_;
+    } else {
+      return kWidth;
+    }
+  }
+
+  constexpr const int& Size() const {
+    if constexpr (kDynamic) {
+      return s_;
+    } else {
+      return kSize;
+    }
+  }
 
   /// COLUMN MAJOR!
   constexpr Type_& operator()(const int& i, const int& j) {
-    assert(data_);
-    return Base_::data_[j * Base_::strides_[0] + i];
+    assert(j * Height() + i < Size());
+    return data_[j * Height() + i];
   }
 
-  /// again, COLUMN MAJOR!
+  /// COLUMN MAJOR!
   constexpr const Type_& operator()(const int& i, const int& j) const {
-    assert(data_);
-    return Base_::data_[j * Base_::strides_[0] + i];
+    assert(j * Height() + i < Size());
+    return data_[j * Height() + i];
   }
 
-  /// use base's operator[]. operator() is overriden above
-  using Base_::operator[];
+  constexpr Type_& operator[](const int& i) {
+    assert(i < Size());
+    return data_[i];
+  }
 
-  // shape based ctor
-  ADMatrix(const int h, const int w) {
-    // get size
-    const int n = h * w;
+  constexpr const Type_& operator[](const int& i) const {
+    assert(i < Size());
+    return data_[i];
+  }
 
-    // set shape
-    Base_::Reallocate(n);
-    Base_::SetShape(h, w);
+  constexpr ContainerType_::value_type* DataReadWrite() { return data_.data(); }
 
-    // loop each element and initialize
-    for (IndexType_ i{}; i < n; ++i) {
-      auto& i_data = Base_::data_[i];
+  constexpr void Reset() {
+    for (IndexType_ i{}; i < Size(); ++i) {
+      auto& i_data = data_[i];
 
-      // we need to manually Reallocate, only if this is dynamic
-      if constexpr (size == 0) {
-        i_data.DerivativeReadWrite().Reallocate(n);
-      } else {
-        assert(size == n);
-      }
-
+      i_data.ValueReadWrite() = 0.0;
       i_data.SetActiveComponent(i); // this calls fill()
     }
   }
 
   // similar to shape based, but copies value
   ADMatrix(const mfem::DenseMatrix& m_mat) {
-    const int h = m_mat.Height();
-    const int w = m_mat.Width();
-    const int n = h * w;
+    if constexpr (kDynamic) {
+      h_ = m_mat.Height();
+      w_ = m_mat.Width();
+      s_ = h_ * w_;
+    } else {
+      assert(height == m_mat.Height());
+      assert(width == m_mat.Width());
+    }
 
-    // allocate space
-    Base_::Reallocate(n);
-    Base_::SetShape(h, w);
+    // loop and copy
+    const double* m_mat_data = m_mat.GetData();
+    for (IndexType_ i{}; i < Size(); ++i) {
+      auto& i_data = data_[i];
 
-    // loop and copy - this transposes the layout and wenn we copy back, we will
-    // have to transpose this again, dam
+      if constexpr (kDynamic) {
+        i_data.DerivativeReadWrite().Reallocate(Size());
+      }
+      i_data.ValueReadWrite() = m_mat_data[i];
+      i_data.SetActiveComponent(i); // this calls fill()
+    }
+  }
+
+  ADMatrix(const mfem::Vector& m_vec, const int h, const int w) {
+    if constexpr (kDynamic) {
+      h_ = h;
+      w_ = w;
+      s_ = h_ * w_;
+    } else {
+      assert(Size() == m_vec.Size());
+    }
+    // loop any copy
+    const double* m_mat_data = m_vec.GetData();
+    for (IndexType_ i{}; i < Size(); ++i) {
+      auto& i_data = data_[i];
+
+      if constexpr (kDynamic) {
+        i_data.DerivativeReadWrite().Reallocate(Size());
+      }
+      i_data.ValueReadWrite() = m_mat_data[i];
+      i_data.SetActiveComponent(i); // this calls fill()
+    }
+  }
+
+  ADMatrix(const mfem::Vector& m_vec) {
+    static_assert(!kDynamic, "Non dynamic matrix requires h, w");
 
     // loop any copy
     const double* m_mat_data = m_mat.GetData();
-    for (IndexType_ i{}; i < n; ++i) {
-      auto& i_data = Base_::data_[i];
+    for (IndexType_ i{}; i < Size(); ++i) {
+      auto& i_data = data_[i];
 
-      i_data.v_ = m_mat_data[i];
-
-      if constexpr (size == 0) {
-        i_data.DerivativeReadWrite().Reallocate(n);
-      } else {
-        assert(size == n);
-      }
-
+      i_data.ValueReadWrite() = m_mat_data[i];
       i_data.SetActiveComponent(i); // this calls fill()
     }
   }
 };
+
+/* from here, implement frequently used linalg operations, similar to MFEM */
 
 } // namespace mimi::utils
