@@ -81,6 +81,12 @@ public:
     return false;
   }
 
+  ///
+  virtual bool UseAD() const {
+    MIMI_FUNC()
+    return false;
+  }
+
   /// each material that needs states can implement this.
   /// else, just nullptr
   virtual MaterialStatePtr_ CreateState() const { return MaterialStatePtr_{}; };
@@ -291,7 +297,7 @@ inline void Dev(const mfem::DenseMatrix& A,
     return;
   } else {
     const double& A_0 = A_data[0];
-    const double& A_4 = A_data[3];
+    const double& A_4 = A_data[4];
     const double& A_8 = A_data[8];
     const double tr_A_over_dim = (A_0 + A_4 + A_8) / dim;
 

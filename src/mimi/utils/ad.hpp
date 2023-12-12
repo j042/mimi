@@ -475,10 +475,13 @@ public:
 /// again, Column-Major Matrix!
 /// I am probably going to regret this, but
 /// default is dynamic
-template<int height = -1, int width = -1>
+template<int height = -1,
+         int width = -1,
+         typename ADType = mimi::utils::ADScalar<double, height * width>>
 class ADMatrix {
 public:
-  using value_type = ADScalar<double, size_>; // set to zero
+  using value_type = ADType;
+  using ADType_ = ADType;
   using ContainerType_ =
       std::conditional_t<(height * width > 0) ? false : true,
                          mimi::utils::Data<value_type>,
@@ -515,6 +518,8 @@ public:
     }
   }
 
+  /// the notion of Size() is different here and in MFEM
+  /// don't use this for template based implementation
   constexpr const int& Size() const {
     if constexpr (kDynamic) {
       return s_;
@@ -522,6 +527,8 @@ public:
       return kSize;
     }
   }
+
+  constexpr bool IsDynamic const { return kDyanamic; }
 
   /// COLUMN MAJOR!
   constexpr Type_& operator()(const int& i, const int& j) {
@@ -546,18 +553,66 @@ public:
   }
 
   constexpr ContainerType_::value_type* DataReadWrite() { return data_.data(); }
+  constexpr const ContainerType_::value_type* DataReadWrite() const {
+    return data_.data();
+  }
 
-  constexpr void Reset() {
+  /// to have some sort of general behavior, we allow non-dynamic types to call
+  /// this that will assert
+  constexpr void Reallocate(const int h, const int w, const int n_wrt = -1) {
+    if constexpr (!kDynamic) {
+      if (h != height || w != weight) {
+        mimi::utils::PrintAndThrowError("h and w doesn't match static size");
+      }
+      return;
+    }
+
+    // save size values only if it differs from current size
+    if (h != h_ || w != w_) {
+      h_ = h;
+      w_ = w;
+      s_ = h * w;
+
+      // reallocate data
+      data_.Reallocate(s_);
+    }
+
+    // we only call reallocate if n_wrt is positive
+    if (n_wrt > 0) {
+      for (auto& d : data_) {
+        // reallocate data's derivatives.
+        if (d.DerivativeReadWrite().size() != n_wrt) {
+          d.DerivativeReadWrite().Reallocate(n_wrt);
+        }
+      }
+    }
+  }
+
+  // reset with fill value
+  constexpr void Reset(const double value = 0.0) {
     for (IndexType_ i{}; i < Size(); ++i) {
       auto& i_data = data_[i];
 
-      i_data.ValueReadWrite() = 0.0;
+      i_data.ValueReadWrite() = value;
       i_data.SetActiveComponent(i); // this calls fill()
     }
   }
 
+  /// reset while copying values
+  constexpr void Reset(const double* from_data) {
+    for (IndexType_ i{}; i < Size(); ++i) {
+      auto& i_data = data_[i];
+
+      i_data.ValueReadWrite() = from_data[i];
+      i_data.SetActiveComponent(i); // this calls fill()
+    }
+  }
+
+  /// this is probably the most frequently used ctor
+  constexpr ADMatrix() = default;
+
   // similar to shape based, but copies value
-  ADMatrix(const mfem::DenseMatrix& m_mat) {
+  constexpr ADMatrix(const mfem::DenseMatrix& m_mat) {
     if constexpr (kDynamic) {
       h_ = m_mat.Height();
       w_ = m_mat.Width();
@@ -580,7 +635,7 @@ public:
     }
   }
 
-  ADMatrix(const mfem::Vector& m_vec, const int h, const int w) {
+  constexpr ADMatrix(const mfem::Vector& m_vec, const int h, const int w) {
     if constexpr (kDynamic) {
       h_ = h;
       w_ = w;
@@ -601,7 +656,7 @@ public:
     }
   }
 
-  ADMatrix(const mfem::Vector& m_vec) {
+  constexpr ADMatrix(const mfem::Vector& m_vec) {
     static_assert(!kDynamic, "Non dynamic matrix requires h, w");
 
     // loop any copy
@@ -613,8 +668,240 @@ public:
       i_data.SetActiveComponent(i); // this calls fill()
     }
   }
+
+  constexpr ADType_ Det() const {
+    MIMI_FUNC()
+
+    // square
+    assert(Width() == Height());
+    if (Width() == 2) {
+      auto back_slash = data_[0];
+      back_slash *= data_[3];
+      auto slash = data_[1];
+      slash *= data_[2];
+
+      back_slash -= slash;
+
+      return bask_slash;
+    } else {
+      // this is from mfem - saves some ops
+      //  const double *d = data;
+      //  return
+      //     d[0] * (d[4] * d[8] - d[5] * d[7]) +
+      //     d[3] * (d[2] * d[7] - d[1] * d[8]) +
+      //     d[6] * (d[1] * d[5] - d[2] * d[4]);
+
+      // very first term is out;
+      /* first */
+      auto out = data_[4];
+      out *= data_[8];
+      auto tmp2 = data_[5];
+      tmp2 *= data_[7];
+      out -= tmp2;
+      out *= data_[0];
+
+      /* second */
+      auto tmp1 = data_[2];
+      tmp1 *= data_[7];
+      tmp2 = data_[1];
+      tmp2 *= data_[8];
+      tmp1 -= tmp2;
+      tmp1 *= data_[3];
+
+      // first + second
+      out += tmp1;
+
+      /* third */
+      tmp1 = data_[1];
+      tmp1 *= data_[5];
+      tmp2 = data_[2];
+      tmp2 *= data_[4];
+      tmp1 -= tmp2;
+      tmp1 *= data_[6];
+
+      out += tmp1;
+
+      return out;
+    }
+
+    mimi::utils::PrintAndThrowError("Det() went wrong");
+    return {}
+  }
 };
 
-/* from here, implement frequently used linalg operations, similar to MFEM */
+/* implements frequently used vector/matrix/linalg operations, follows
+ * MFEM's function naming */
+
+/// Initializes with sub vector
+/// this resets derivatives and copies values.
+template<typename MatrixType>
+GetSubVector(const mfem::Vector& m_vec,
+             const mfem::Array<int>& v_dof,
+             MatrixType& ad_mat) {
+  MIMI_FUNC()
+
+  assert(v_dof.Size() == ad_mat.Size());
+
+  const double* m_data = m_vec.GetData();
+  auto* ad_data = ad_mat.DataReadWrite();
+
+  int i {}
+  for (const int& v : v_dof) {
+    ad_data->ValueReadWrite() = m_data[v];
+    ad_data->SetActiveComponent(i);
+
+    ++i;
+    ++ad_data;
+  }
+}
+
+template<typename MatA, typename MatB, typename MatAtB>
+void MultAtB(const MatA& a, const MatB& b, MatAtB& atb) {
+  MIMI_FUNC()
+
+  assert(a.Width() == atb.Height() && b.Width() == atb.Width()
+         && a.Height() == b.Height());
+  int const& a_h = a.Height();
+  int const& a_w = a.Width();
+  int const& b_w = b.Width();
+
+  // create tmp
+  for (int i{}; i < a_w; ++i) {
+    for (int j{}; j < b_w; ++j) {
+      // get column start
+      const auto* a_col = &a(0, i);
+      const auto* b_col = &b(0, j);
+      // creat tmp
+      auto tmp = (*a_col++) * (*b_col++);
+      // iterate col and accumulate tmp
+      for (int k{1}; k < a_h; ++k) {
+        tmp += (*a_col++) * (*b_col++);
+      }
+
+      // set atb
+      atb(i, j) = std::move(tmp);
+    }
+  }
+}
+
+template<typename MatA, typename DetType, typename MatInv>
+void CalcInverse(const MatA& a, const DetType* a_det, MatInv& b) {
+  MIMI_FUNC()
+
+  // square
+  assert(a.Width() == a.Height());
+  // io size match
+  assert(a.Height() == b.Height());
+  assert(a.Width() == b.Width());
+
+  int const& d = a.Width();
+
+  if (d == 2) {
+    b(0, 0) = a(1, 1);
+    b(1, 1) = a(0, 0);
+    b(0, 1) = -a(0, 1);
+    b(1, 0) = -a(1, 0);
+
+    if (a_det) {
+      b *= 1.0 / (*a_det);
+    } else {
+      b *= 1.0 / a.Det();
+    }
+  } else if (d == 3) {
+    b(0, 0) = a(1, 1) * a(2, 2) - a(1, 2) * a(2, 1); // ei-fh
+    b(0, 1) = a(0, 2) * a(2, 1) - a(0, 1) * a(2, 2); // ch-bi
+    b(0, 2) = a(0, 1) * a(1, 2) - a(0, 2) * a(1, 1); // bf-ce
+    b(1, 0) = a(1, 2) * a(2, 0) - a(1, 0) * a(2, 2); // fg-di
+    b(1, 1) = a(0, 0) * a(2, 2) - a(0, 2) * a(2, 0); // ai-cg
+    b(1, 2) = a(0, 2) * a(1, 0) - a(0, 0) * a(1, 2); // cd-af
+    b(2, 0) = a(1, 0) * a(2, 1) - a(1, 1) * a(2, 0); // dh-eg
+    b(2, 1) = a(0, 1) * a(2, 0) - a(0, 0) * a(2, 1); // bg-ah
+    b(2, 2) = a(0, 0) * a(1, 1) - a(0, 1) * a(1, 0); // ae-bd
+
+    if (a_det) {
+      b *= 1.0 / (*a_det);
+    } else {
+      b *= 1.0 / a.Det();
+    }
+  }
+
+  mimi::utils::PrintAndThrowError("CalcInverse() went wrong.");
+}
+
+/// AB = A @ B
+template<typename MatA, typename MatB, typename MatAB>
+void Mult(const MatA& A, const MatB& B, MatAB& AB) {
+  MIMI_FUNC()
+
+  // size check
+  assert(A.Width() == B.Height());
+  assert(A.Height() == AB.Height());
+  assert(B.Width() == AB.Width());
+
+  for (int i{}; i < B.Width(); ++i) {
+    for (int j{}; j < A.Height(); ++j) {
+      const auto* b_col = &B(0, i);
+      auto tmp = (*b_col++) * A(j, 0);
+      for (int k{1}; k < A.Width(); ++k) {
+        tmp += (*b_col++) * A(j, k);
+      }
+      aAB(j, i) = std::move(tmp);
+    }
+  }
+}
+
+template<typename ScalarA, typename MatA, typename MatB, typename Mat_aAB>
+void AddMult_a(const ScalarA& a, const MatA& A, const MatB& B, Mat_aAB& aAB) {
+  MIMI_FUNC()
+
+  // size check
+  assert(A.Width() == B.Height());
+  assert(A.Height() == aAB.Height());
+  assert(B.Width() == aAB.Width());
+
+  for (int i{}; i < B.Width(); ++i) {
+    for (int j{}; j < A.Height(); ++j) {
+      const auto* b_col = &B(0, i);
+      auto tmp = (*b_col++) * A(j, 0);
+      for (int k{1}; k < A.Width(); ++k) {
+        tmp += (*b_col++) * A(j, k);
+      }
+      tmp *= a;
+      AB(j, i) += tmp;
+    }
+  }
+}
+
+template<typename ScalarA, typename MatA, typename MatB, typename Mat_aAB>
+void AddMult_a_ABt(const ScalarA& a,
+                   const MatA& A,
+                   const MatB& B,
+                   Mat_aAB& aABt) {
+  MIMI_FUNC()
+
+  // size check
+  assert(A.Width() == B.Width());
+  assert(A.Height() == aABt.Height());
+  assert(B.Height() == aABt.Width());
+
+  const int& a_h = A.Height();
+  const int& b_h = B.Height();
+
+  const auto* a_data = A.GetData();
+  const auto* b_data = B.GetData();
+  auto* aabt_begin = aABt.GetData();
+
+  for (int i{}; i < A.Width(); ++i) {
+    auto* aabt_data = aabt_begin;
+    for (int j{}; j < b.Height(); ++j) {
+      auto tmp = a * b_data[j];
+      for (int k{}; k < A.Height(); ++k) {
+        (*aabt_data++) += a_data[k] * tmp;
+      }
+    }
+    a_data += a_h;
+    b_data += b_h;
+  }
+}
 
 } // namespace mimi::utils
