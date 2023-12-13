@@ -1,9 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 
 #include <mfem.hpp>
 
+#include "mimi/solvers/newton.hpp"
+#include "mimi/utils/ad.hpp"
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
 
@@ -498,6 +501,246 @@ public:
         accumulated_plastic_strain += plastic_strain_inc;
         plastic_strain.Add(sqrt_3_2_ * plastic_strain_inc, eta);
         beta.Add(sqrt_2_3_ * kinematic_hardening_ * plastic_strain_inc, eta);
+      }
+    }
+
+    // returning s + p * I
+    mfem::Add(s, I_, p, sigma);
+  }
+};
+
+struct HardeningBase {
+  using ADScalar_ = mimi::utils::ADScalar<double, 1>;
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("HardeningBase::Evaluate not overriden");
+    return {};
+  }
+  virtual double SigmaY() const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("HardeningBase::SigmaY not overriden");
+    return -1.0;
+  }
+};
+
+struct PowerLawHardening : public HardeningBase {
+  using Base_ = HardeningBase;
+  using ADScalar_ = Base_::ADScalar_;
+
+  double sigma_y_;
+  double n_;
+  double eps0_;
+
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
+    MIMI_FUNC()
+
+    return sigma_y_ * pow(1.0 + accumulated_plastic_strain / eps0_, 1.0 / n_);
+  }
+
+  virtual double SigmaY() const { return sigma_y_; }
+};
+
+struct VoceHardening : public HardeningBase {
+  using Base_ = HardeningBase;
+  using ADScalar_ = Base_::ADScalar_;
+
+  double sigma_y_;
+  double sigma_sat_;
+  double strain_constant_;
+
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
+    MIMI_FUNC()
+
+    return sigma_sat_
+           - (sigma_sat_ - sigma_y_)
+                 * exp(-accumulated_plastic_strain / strain_constant_);
+  }
+
+  virtual double SigmaY() const { return sigma_y_; }
+};
+
+struct JohnsonCookHardening : public HardeningBase {
+  using Base_ = HardeningBase;
+  using ADScalar_ = Base_::ADScalar_;
+
+  double A_;
+  double B_;
+  double n_;
+
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
+    MIMI_FUNC()
+    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
+      return ADScalar_(A_);
+    }
+
+    return A_ + B_ * pow(accumulated_plastic_strain, n_);
+  }
+
+  virtual double SigmaY() const { return A_; }
+};
+
+/// @brief Computational Methods for plasticity p260, box 7.5
+/// This one excludes kinematic hardening,
+/// which eliminates beta.
+/// Then eta = s, instead of eta = s - beta
+/// eta: relative stress
+/// beta: backstress tensor
+/// s: stress deviator
+/// Implementation reference from serac
+/// Considers nonlinear Isotropic hardening
+class J2NonlinearIsotropicHardening : public MaterialBase {
+public:
+  using Base_ = MaterialBase;
+  using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
+  using HardeningPtr_ = std::shared_ptr<HardeningBase>;
+  using ADScalar_ = typename HardeningBase::ADScalar_;
+
+  // additional parameters
+  HardeningPtr_ hardening_;
+
+  /// @brief Bulk Modulus (lambda + 2 / 3 mu)
+  double K_; // K
+  /// shear modulus (=mu)
+  double G_;
+
+  static constexpr const double k_tol{1.e-10};
+
+  struct State : public MaterialState {
+    static constexpr const int k_state_matrices{1};
+    static constexpr const int k_state_scalars{1};
+    /// matrix indices
+    static constexpr const int k_plastic_strain{0};
+    /// scalar indices
+    static constexpr const int k_accumulated_plastic_strain{0};
+  };
+
+protected:
+  /// I am thread-safe. Don't touch me after Setup
+  mfem::DenseMatrix I_;
+
+  /// some constants
+  const double sqrt_3_2_ = std::sqrt(3.0 / 2.0);
+
+  /// lookup index for matrix
+  /// elastic strain
+  static constexpr const int k_eps{0};
+  /// stress deviator
+  static constexpr const int k_s{1};
+  /// N_p
+  static constexpr const int k_N_p{2};
+
+public:
+  virtual std::string Name() const { return "J2"; }
+
+  /// gives hint to integrator, which stress is implemented we need
+  virtual bool UsesCauchy() const {
+    MIMI_FUNC()
+    return false;
+  }
+
+  virtual void Setup(const int dim, const int nthread) {
+    MIMI_FUNC()
+
+    /// base setup for conversions and dim, nthread
+    Base_::Setup(dim, nthread);
+
+    // I
+    I_.Diag(1., dim);
+
+    // match variable name with the literature
+    K_ = lambda_ + (2 * mu_ / 3);
+    G_ = mu_;
+
+    /// make space for du_dX
+    aux_matrices_.resize(
+        n_threads_,
+        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+  }
+
+  virtual MaterialStatePtr_ CreateState() const {
+    MIMI_FUNC();
+
+    std::shared_ptr<State> state = std::make_shared<State>();
+    // create 2 matrices with the size of dim x dim and zero initialize
+    state->matrices_.resize(state->k_state_matrices);
+    for (mfem::DenseMatrix& mat : state->matrices_) {
+      mat.SetSize(dim_, dim_);
+      mat = 0.;
+    }
+    // one scalar, also zero
+    state->scalars_.resize(state->k_state_scalars, 0.);
+    return state;
+  };
+
+  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
+                              const int& i_thread,
+                              MaterialStatePtr_& state,
+                              mfem::DenseMatrix& sigma) {
+    MIMI_FUNC()
+
+    // get aux
+    auto& i_aux = aux_matrices_[i_thread];
+    mfem::DenseMatrix& eps = i_aux[k_eps];
+    mfem::DenseMatrix& s = i_aux[k_s];
+    mfem::DenseMatrix& N_p = i_aux[k_N_p];
+
+    // get states
+    mfem::DenseMatrix& plastic_strain =
+        state->matrices_[State::k_plastic_strain];
+    double& accumulated_plastic_strain =
+        state->scalars_[State::k_accumulated_plastic_strain];
+
+    // precompute aux values
+    // eps, p, s, eta, q, phi
+    ElasticStrain(F, plastic_strain, eps);
+    const double p = K_ * eps.Trace();
+    Dev(eps, dim_, 2.0 * G_, s);
+    const double q = sqrt_3_2_ * Norm(s);
+
+    // admissibility
+    const double eqps_old = accumulated_plastic_strain;
+    auto residual = [eqps_old, *this](auto delta_eqps,
+                                      auto trial_mises) -> ADScalar_ {
+      return trial_mises - 3.0 * G_ * delta_eqps
+             - hardening_->Evaluate(eqps_old + delta_eqps);
+    };
+
+    const double tolerance = hardening_->SigmaY() * k_tol;
+
+    if (residual(0.0, q) > tolerance) {
+      /// return mapping
+      mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
+                                              .rtol = tolerance,
+                                              .max_iter = 100};
+
+      const double lower_bound = 0.0;
+      const double upper_bound =
+          (q - hardening_->Evaluate(eqps_old).GetValue() / (3.0 * G_));
+      const double delta_eqps = mimi::solvers::ScalarSolve(residual,
+                                                           0.0,
+                                                           lower_bound,
+                                                           upper_bound,
+                                                           opts,
+                                                           q);
+      // compute sqrt(3/2) * eta / norm(eta)
+      // this term is use for both s and plastic strain
+      // this is equivalent to
+      // s = eta (see above)
+      // 3/2 * s / q = 3/2 * s * sqrt(2/3) / norm(s)
+      // didn't quite get why this is called Np yet,
+      // but as this references serac's implementation
+      // here it goes
+      // we can directly incorperate this into s, but
+      N_p.Set(1.5 / q, s);
+
+      s.Add(-2.0 * G_ * delta_eqps, N_p);
+      if (!MaterialState::freeze_) {
+        accumulated_plastic_strain += delta_eqps;
+        plastic_strain.Add(delta_eqps, N_p);
       }
     }
 

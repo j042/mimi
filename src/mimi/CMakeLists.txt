@@ -1,4 +1,5 @@
 set(SRCS
+    solvers/newton.cpp
     py/py_boundary_conditions.cpp
     py/py_solid.cpp
     py/py_linear_elasticity.cpp
