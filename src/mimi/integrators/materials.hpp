@@ -12,6 +12,9 @@
 
 namespace mimi::integrators {
 
+using ADMatrix =
+    mimi::utils::ADMatrix<-1, -1, mimi::utils::ADScalar<double, 0>>;
+
 template<typename T>
 using Vector_ = mimi::utils::Vector<T>;
 
@@ -686,6 +689,78 @@ public:
                               const int& i_thread,
                               MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
+    MIMI_FUNC()
+
+    // get aux
+    auto& i_aux = aux_matrices_[i_thread];
+    mfem::DenseMatrix& eps = i_aux[k_eps];
+    mfem::DenseMatrix& s = i_aux[k_s];
+    mfem::DenseMatrix& N_p = i_aux[k_N_p];
+
+    // get states
+    mfem::DenseMatrix& plastic_strain =
+        state->matrices_[State::k_plastic_strain];
+    double& accumulated_plastic_strain =
+        state->scalars_[State::k_accumulated_plastic_strain];
+
+    // precompute aux values
+    // eps, p, s, eta, q, phi
+    ElasticStrain(F, plastic_strain, eps);
+    const double p = K_ * eps.Trace();
+    Dev(eps, dim_, 2.0 * G_, s);
+    const double q = sqrt_3_2_ * Norm(s);
+
+    // admissibility
+    const double eqps_old = accumulated_plastic_strain;
+    auto residual = [eqps_old, *this](auto delta_eqps,
+                                      auto trial_mises) -> ADScalar_ {
+      return trial_mises - 3.0 * G_ * delta_eqps
+             - hardening_->Evaluate(eqps_old + delta_eqps);
+    };
+
+    const double tolerance = hardening_->SigmaY() * k_tol;
+
+    if (residual(0.0, q) > tolerance) {
+      /// return mapping
+      mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
+                                              .rtol = tolerance,
+                                              .max_iter = 100};
+
+      const double lower_bound = 0.0;
+      const double upper_bound =
+          (q - hardening_->Evaluate(eqps_old).GetValue() / (3.0 * G_));
+      const double delta_eqps = mimi::solvers::ScalarSolve(residual,
+                                                           0.0,
+                                                           lower_bound,
+                                                           upper_bound,
+                                                           opts,
+                                                           q);
+      // compute sqrt(3/2) * eta / norm(eta)
+      // this term is use for both s and plastic strain
+      // this is equivalent to
+      // s = eta (see above)
+      // 3/2 * s / q = 3/2 * s * sqrt(2/3) / norm(s)
+      // didn't quite get why this is called Np yet,
+      // but as this references serac's implementation
+      // here it goes
+      // we can directly incorperate this into s, but
+      N_p.Set(1.5 / q, s);
+
+      s.Add(-2.0 * G_ * delta_eqps, N_p);
+      if (!MaterialState::freeze_) {
+        accumulated_plastic_strain += delta_eqps;
+        plastic_strain.Add(delta_eqps, N_p);
+      }
+    }
+
+    // returning s + p * I
+    mfem::Add(s, I_, p, sigma);
+  }
+
+  virtual void EvaluateCauchy(const ADMatrix& F,
+                              const int& i_thread,
+                              MaterialStatePtr_& state,
+                              ADMatrix& sigma) {
     MIMI_FUNC()
 
     // get aux
