@@ -291,7 +291,7 @@ inline void Dev(const mfem::DenseMatrix& A,
     return;
   } else {
     const double& A_0 = A_data[0];
-    const double& A_4 = A_data[3];
+    const double& A_4 = A_data[4];
     const double& A_8 = A_data[8];
     const double tr_A_over_dim = (A_0 + A_4 + A_8) / dim;
 
