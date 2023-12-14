@@ -309,6 +309,7 @@ inline void Dev(const mfem::DenseMatrix& A,
 }
 
 /// sym(F - I) - plastic strain
+/// or , sym(F) - I - plastic strain
 inline void ElasticStrain(const mfem::DenseMatrix& F,
                           const mfem::DenseMatrix& plastic_strain,
                           mfem::DenseMatrix& elastic_strain) {
@@ -320,15 +321,15 @@ inline void ElasticStrain(const mfem::DenseMatrix& F,
   // first, use space of e to copy F
   std::copy_n(F_data, dim * dim, e_data);
 
+  // symmetrize
+  elastic_strain.Symmetrize();
+
   // substract I
   for (int i{}; i < dim; ++i) {
     e_data[(dim + 1) * i] -= 1;
   }
 
-  // symmetrize
-  elastic_strain.Symmetrize();
-
-  // subtract
+  // subtract plastic_strain
   for (int i{}; i < dim * dim; ++i) {
     e_data[i] -= p_data[i];
   }
