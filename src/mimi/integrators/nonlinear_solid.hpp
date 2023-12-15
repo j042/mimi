@@ -19,40 +19,81 @@ public:
   using QuadratureMatrices_ = Vector_<Vector_<mfem::DenseMatrix>>;
   using QuadratureScalars_ = Vector_<Vector_<double>>;
 
-protected:
+  /// precomputed data at quad points
+  struct QuadData {
+    mfem::DenseMatrix dN_dxi_; // don't really need to save this
+    mfem::DenseMatrix dN_dX_;
+    double det_dX_dxi_;
+    mfem::DenseMatrix dxi_dX_; // J_target_to_reference
+    std::shared_ptr<MaterialState> material_state_;
+  }
+
+  struct ElementData {
+    int quadrature_order_;
+    int geometry_type_;
+    int n_quad_;
+    int n_dof_; // this is not true dof
+
+    std::shared_ptr<mfem::Array<int>> v_dofs_;
+    mfem::DenseMatrix residual_view_; // we always assemble at the same place
+    mfem::DenseMatrix grad_view_;     // we always assemble at the same place
+
+    Vector_<QuaData> quad_data_;
+
+    /// pointer to element and eltrans. don't need it,
+    /// but maybe for further processing or something
+    std::shared_ptr<mfem::NURBSFiniteElement> element_;
+    std::shared_ptr<mfem::IsoparametricTransformation> element_trans_;
+
+    /// pointers to corresponding Base_::element_vectors_
+    mfem::Vector* element_residual_;
+    /// and Base_::element_matrices_
+    mfem::DenseMatrix* element_grad_;
+
+    const mfem::IntegrationRule&
+    GetIntRule(mfem::IntegrationRules& thread_int_rules) const {
+      return thread_int_rules.Get(geometry_type, quadrature_order_);
+    }
+  }
+
   /// temporary containers required in element assembly
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
-  struct Temporary {
-    mfem::DenseMatrix residual_matrix_view_;
-    mfem::Vector element_vector_copies_;
-    mfem::DenseMatrix element_vector_matrix_view_;
+  struct TemporaryData {
+    /// allocate some static space
+    double F_data_[9];
+    double F_inv_data_[9];
+    double stress_data_[9];
+
+    /// set max dof. maybe you will have to change
+    constexpr static const int kMaxTrueDof = 50;
+    double element_state_data_[kMaxTrueDof];
+    double dN_dx_data_[kMaxTrueDof];
+
+    /// wraps element_state_data_
+    mfem::Vector element_state_;
+    /// wraps element_state_
+    mfem::DenseMatrix element_state_view_;
+    /// wraps stress_data_
     mfem::DenseMatrix stress_;
+    /// wraps dN_dx_data_
     mfem::DenseMatrix dN_dx_;
+    /// wraps F_data_
+    mfem::DenseMatrix F_;
+    /// wraps F_inv_
+    mfem::DenseMatrix F_inv_;
   };
 
-  Vector_<Temporary> thread_local_temporaries_;
+protected:
+  Vector_<TemporaryData> thread_local_temporaries_;
 
   int n_threads_;
 
   std::shared_ptr<MaterialBase> material_;
 
+  Vector_<ElementData> element_data_;
+
 public:
-  /// material states (n_elements * n_quads)
-  Vector_<Vector_<std::shared_ptr<MaterialState>>> material_states_;
-
-  /// for smooth nthread exe with FD or AD, we need element assembly
-  /// that we can call element wise. So here, we will save
-  /// pointers to precomputed entities for direct access
-  const QuadratureMatrices_* precomputed_dN_dxi_;
-  const QuadratureMatrices_* precomputed_dN_dX_;
-  const QuadratureScalars_* precomputed_det_J_reference_to_target_;
-  const QuadratureMatrices_* precomputed_J_target_to_reference_;
-
-  QuadratureMatrices_* current_F_;
-  QuadratureMatrices_* current_F_inv_;
-  QuadratureScalars_* current_det_F_;
-
   NonlinearSolid(
       const std::string& name,
       const std::shared_ptr<MaterialBase>& material,
@@ -87,54 +128,11 @@ public:
     element_vectors_ =
         std::make_unique<mimi::utils::Data<mfem::Vector>>(n_elements);
 
-    // DShape - you get derivatives per dim. This is at reference
-    auto& d_shapes = precomputed_->matrices_["d_shapes"];
-    d_shapes.resize(n_elements);
-
-    // target DShape
-    auto& target_d_shapes = precomputed_->matrices_["target_d_shapes"];
-    target_d_shapes.resize(n_elements);
-
-    // element reference_to_target weight
-    auto& reference_to_target_weights =
-        precomputed_->scalars_["reference_to_target_weights"];
-    reference_to_target_weights.resize(n_elements);
-
-    // element target_to_reference jacobian (inverse of reference_to_target
-    // jacobian)
-    auto& target_to_reference_jacobians =
-        precomputed_->matrices_["target_to_reference_jacobians"];
-    target_to_reference_jacobians.resize(n_elements);
-
-    // deformation gradient is saved from the latest residual calculation
-    // we save this, as gradient call comes right after the first residual
-    // calculation this is F = dx/dX
-    auto& deformation_gradients =
-        precomputed_->matrices_["deformation_gradients"];
-    deformation_gradients.resize(n_elements);
-
-    // deformation gradient inverse is also saved
-    // TODO check if we really need to save this. For example, for Grad
-    // F^-1
-    // this is used in
-    auto& deformation_gradient_inverses =
-        precomputed_->matrices_["deformation_gradient_inverses"];
-    deformation_gradient_inverses.resize(n_elements);
-
-    // det(F)
-    auto& deformation_gradient_weights =
-        precomputed_->scalars_["deformation_gradient_weights"];
-    deformation_gradient_weights.resize(n_elements);
-
     // extract element geometry type
     geometry_type_ = precomputed_->elements_[0]->GetGeomType();
 
-    // quadrature orders - this is per elements
-    quadrature_orders_.resize(n_elements);
-
-    // material states - this is per elements per quad points
-    // as this is share_ptr, we can just call copy constructor.
-    material_states_.resize(n_elements);
+    // allocate element data
+    element_data_.resize(n_elements);
 
     auto precompute_at_elements_and_quads = [&](const int el_begin,
                                                 const int el_end,
@@ -144,76 +142,63 @@ public:
 
       // element loop
       for (int i{el_begin}; i < el_end; ++i) {
-        // deref i-th element of
-        // elements, eltrans
-        // std::vectors of mfem::Vector and mfem::DenseMatrix
-        const auto& i_el = precomputed_->elements_[i];
-        auto& i_el_trans = *precomputed_->reference_to_target_element_trans_[i];
-        auto& i_d_shapes = d_shapes[i];
-        auto& i_target_d_shapes = target_d_shapes[i];
-        auto& i_reference_to_target_weights = reference_to_target_weights[i];
-        auto& i_target_to_reference_jacobians =
-            target_to_reference_jacobians[i];
-        auto& i_deformation_gradients = deformation_gradients[i];
-        auto& i_deformation_gradient_inverses =
-            deformation_gradient_inverses[i];
-        auto& i_deformation_gradient_weights = deformation_gradient_weights[i];
-        auto& i_material_states = material_states_[i];
+        // prepare element level data
+        auto& i_el_data = element_data_[i];
 
-        // get quad order
-        const int q_order = (quadrature_order < 0) ? i_el->GetOrder() * 2 + 3
-                                                   : quadrature_order;
+        // save (shared) pointers to element and el_trans
+        i_el_data.element_ = precomputed_->elements_[i];
+        i_el_data.geometry_type_ = i_el_data.element_->GetGeomType();
+        i_el_data.element_trans_ =
+            precomputed_->reference_to_target_element_trans_[i];
+        i_el_data.n_dof_ = i_el_data.element_->GetDof();
+        i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
 
-        // save this quad order
-        quadrature_orders_[i] = q_order;
-
-        // get int rule
-        const mfem::IntegrationRule& ir =
-            int_rules.Get(i_el->GetGeomType(), q_order);
-        // prepare quad loop
-        const int n_quad = ir.GetNPoints();
-        const int n_dof = i_el->GetDof();
-
-        // now, allocate space
-        i_d_shapes.resize(n_quad);
-        i_target_d_shapes.resize(n_quad);
-        i_reference_to_target_weights.resize(n_quad);
-        i_target_to_reference_jacobians.resize(n_quad);
-        i_deformation_gradients.resize(n_quad);
-        i_deformation_gradient_inverses.resize(n_quad);
-        i_deformation_gradient_weights.resize(n_quad);
-        i_material_states.resize(n_quad);
+        // check suitability of temp data
+        // for structure simulations, tdof and vdof are the same
+        const int n_tdof = i_el_data.n_dof_ * dim_;
+        if (TemporaryData::kMaxTrueDof < n_tdof) {
+          mimi::utils::PrintAndThrowError(
+              "TemporaryData::kMaxTrueDof smaller than required space.",
+              "Please recompile after setting a bigger number");
+        }
 
         // also allocate element based vectors and matrix (assembly output)
-        element_vectors_->operator[](i).SetSize(n_dof * dim_);
-        element_matrices_->operator[](i).SetSize(n_dof * dim_, n_dof * dim_);
+        i_el_data.element_residual_ = &(*element_vectors_)[i];
+        i_el_data.element_residual_->SetSize(n_tdof);
+        i_el_data.residual_view_.UseExternalData(
+            i_el_data.element_residual_->GetData(),
+            i_el_data.n_dof_,
+            dim_);
+        i_el_data.element_grad_ = &(*element_matrices_)[i];
+        i_el_data.element_grad_->SetSize(n_tdof, n_tdof);
+        i_el_data.grad_view_.UseExternalData(i_el_data.element_grad_->GetData(),
+                                             n_tdof);
+
+        // get quad order
+        i_el_data.quadrature_order_ =
+            (quadrature_order < 0) ? i_el_data.element_->GetOrder() * 2 + 3
+                                   : quadrature_order;
+
+        // get int rule
+        const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);
+
+        // prepare quad loop
+        i_el_data.n_quad_ = ir.GetNPoints();
+        quad_data_.resize(i_el_data.n_quad_);
 
         for (int j{}; j < n_quad; ++j) {
           // get int point - this is just look up within ir
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
-          i_el_trans.SetIntPoint(&ip);
+          i_el_data.element_trans_.SetIntPoint(&ip);
 
-          // get d shapes
-          mfem::DenseMatrix& j_d_shape = i_d_shapes[j];
-          mfem::DenseMatrix& j_target_d_shape = i_target_d_shapes[j];
-          mfem::DenseMatrix& j_target_to_reference_jacobian =
-              i_target_to_reference_jacobians[j];
-          mfem::DenseMatrix& j_deformation_gradient =
-              i_deformation_gradients[j];
-          mfem::DenseMatrix& j_deformation_gradient_inverse =
-              i_deformation_gradient_inverses[j];
-          std::shared_ptr<MaterialState>& j_material_state =
-              i_material_states[j];
+          auto& q_data = i_el_data.quad_data_[j];
 
-          j_d_shape.SetSize(n_dof, dim_);
-          j_target_d_shape.SetSize(n_dof, dim_);
-          j_target_to_reference_jacobian.SetSize(dim_, dim_);
-          // here, we just allocate the matrix
-          j_deformation_gradient.SetSize(dim_, dim_);
-          j_deformation_gradient_inverse.SetSize(dim_, dim_);
-          // this needs to be done individually
-          j_material_state = material_->CreateState();
+          q_data.dN_dxi_.SetSize(i_el_data.n_dof_, dim_);
+          q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
+          q_data.dxi_dX_.SetSize(dim_, dim_);
+          q_data.material_state_ = material_->CreateState();
 
+          i_el_data.element_->CalcDShape(ip, q_data.dN_dxi_);
           //  Calc
           i_el->CalcDShape(ip, j_d_shape);
           mfem::CalcInverse(i_el_trans.Jacobian(),
