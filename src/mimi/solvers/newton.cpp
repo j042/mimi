@@ -77,7 +77,9 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
 
     // now, line search
     // turn off the (plastic) state accumulation
-    mimi::integrators::MaterialState::freeze_ = true;
+    if (nl_oper_) {
+      nl_oper_->LineSearchOn();
+    }
     mfem::Vector tmp_x(x); // copy init
 
     // full step
@@ -100,7 +102,9 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     const double q2 = Base_::Norm(Base_::r);
 
     // line search mult finished - unfreeze
-    mimi::integrators::MaterialState::freeze_ = false;
+    if (nl_oper_) {
+      nl_oper_->LineSearchOff();
+    }
 
     const double eps =
         (3.0 * q1 - 4.0 * q2 + q3) / (4.0 * (q1 - 2.0 * q2 + q3));

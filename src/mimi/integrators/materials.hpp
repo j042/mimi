@@ -23,8 +23,7 @@ struct MaterialState {
 
   /// flag to notify non-accumulation
   /// use during in FD and line search
-  /// currently best solution to keep it static.
-  static bool freeze_;
+  bool freeze_;
 };
 
 /// Material base.
@@ -498,7 +497,7 @@ public:
       s.Add(-sqrt_6_ * G_ * plastic_strain_inc, eta);
 
       // this part should only be done at stepping.
-      if (!MaterialState::freeze_) {
+      if (!state->freeze_) {
         accumulated_plastic_strain += plastic_strain_inc;
         plastic_strain.Add(sqrt_3_2_ * plastic_strain_inc, eta);
         beta.Add(sqrt_2_3_ * kinematic_hardening_ * plastic_strain_inc, eta);
@@ -739,7 +738,7 @@ public:
       N_p.Set(1.5 / q, s);
 
       s.Add(-2.0 * G_ * delta_eqps, N_p);
-      if (!MaterialState::freeze_) {
+      if (!state->freeze_) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
       }

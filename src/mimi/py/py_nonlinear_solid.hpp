@@ -272,6 +272,8 @@ public:
 
     // setup a newton solver
     auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
+    // give pointer of nl oper to control line search assembly
+    newton->SetNonlinearOperator(&nl_oper);
     Base_::newton_solvers_["nonlinear_solid"] = newton;
     // basic config. you can change this using ConfigureNewton()
     newton->iterative_mode = false;

@@ -31,6 +31,18 @@ public:
 
   virtual std::string Name() const { return "NonlinearViscoSolid"; }
 
+  /// set flags to nonlinear forms to inform that following "mult" will be for
+  /// line search
+  virtual void LineSearchOn() {
+    MIMI_FUNC()
+    nonlinear_visco_stiffness_->LineSearchOn();
+  }
+
+  virtual void LineSearchOff() {
+    MIMI_FUNC()
+    nonlinear_visco_stiffness_->LineSearchOff();
+  }
+
   virtual void Setup() {
     MIMI_FUNC()
 

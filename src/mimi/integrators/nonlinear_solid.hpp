@@ -21,6 +21,9 @@ public:
   using QuadratureMatrices_ = Vector_<Vector_<mfem::DenseMatrix>>;
   using QuadratureScalars_ = Vector_<Vector_<double>>;
 
+  /// flag to know when to freeze material state accumulation
+  bool line_search_assembly_{false};
+
   /// precomputed data at quad points
   struct QuadData {
     double integration_weight_;
@@ -29,19 +32,20 @@ public:
     double det_dX_dxi_;
     mfem::DenseMatrix dxi_dX_; // J_target_to_reference
     std::shared_ptr<MaterialState> material_state_;
-  }
+  };
 
   struct ElementData {
     int quadrature_order_;
     int geometry_type_;
     int n_quad_;
     int n_dof_; // this is not true dof
+    int n_tdof_;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
     mfem::DenseMatrix residual_view_; // we always assemble at the same place
     mfem::DenseMatrix grad_view_;     // we always assemble at the same place
 
-    Vector_<QuaData> quad_data_;
+    Vector_<QuadData> quad_data_;
 
     /// pointer to element and eltrans. don't need it,
     /// but maybe for further processing or something
@@ -55,9 +59,27 @@ public:
 
     const mfem::IntegrationRule&
     GetIntRule(mfem::IntegrationRules& thread_int_rules) const {
+      MIMI_FUNC()
+
       return thread_int_rules.Get(geometry_type, quadrature_order_);
     }
-  }
+
+    void FreezeStates() {
+      MIMI_FUNC()
+
+      for (auto& q : quad_data_) {
+        q.material_state_->freeze_ = true;
+      }
+    }
+
+    void MeltStates() {
+      MIMI_FUNC()
+
+      for (auto& q : quad_data_) {
+        q.material_state_->freeze_ = false;
+      }
+    }
+  };
 
   /// temporary containers required in element assembly
   /// mfem performs some fancy checks for allocating memories.
@@ -75,12 +97,25 @@ public:
     mfem::DenseMatrix F_;
     /// wraps F_inv_
     mfem::DenseMatrix F_inv_;
+    /// wraps forward_residual data
+    mfem::DenseMatrix forward_residual_;
+    /// wraps backward residual data
+    mfem::DenseMatrix backward_residual_;
 
+    /// @brief
+    /// @param element_state_data
+    /// @param stress_data
+    /// @param dN_dx_data
+    /// @param F_data
+    /// @param F_inv_data
+    /// @param dim
     void SetData(double* element_state_data,
                  double* stress_data,
                  double* dN_dx_data,
                  double* F_data,
                  double* F_inv_data,
+                 double* forward_residual_data,
+                 double* backward_residual_data,
                  const int dim) {
       MIMI_FUNC()
 
@@ -90,6 +125,8 @@ public:
       dN_dx_.UseExternalData(dN_dx_data, kMaxTrueDof, 1);
       F_.UseExternalData(F_data, dim, dim);
       F_inv_.UseExternalData(F_inv_data, dim, dim);
+      forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
+      backward_residual_.UseExternalData(back_residual_data, kMaxTrueDof, 1);
     }
 
     void SetShape(const int n_dof, const int dim) {
@@ -181,6 +218,7 @@ public:
         // check suitability of temp data
         // for structure simulations, tdof and vdof are the same
         const int n_tdof = i_el_data.n_dof_ * dim_;
+        i_el_data.n_tdof_ = n_tdof;
         if (kMaxTrueDof < n_tdof) {
           mimi::utils::PrintAndThrowError(
               "kMaxTrueDof smaller than required space.",
@@ -197,6 +235,7 @@ public:
         i_el_data.element_grad_ = &(*element_matrices_)[i];
         i_el_data.element_grad_->SetSize(n_tdof, n_tdof);
         i_el_data.grad_view_.UseExternalData(i_el_data.element_grad_->GetData(),
+                                             n_tdof,
                                              n_tdof);
 
         // get quad order
@@ -241,7 +280,6 @@ public:
   /// Performs quad loop with element data and temporary data
   void QuadLoop(const mfem::DenseMatrix& x,
                 const int i_thread,
-                MaterialBase& material,
                 Vector_<QuadData>& q_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) {
@@ -252,7 +290,7 @@ public:
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
 
       // currently we will just use PK1
-      material.EvaluatePK1(tmp.F_, i_thread, q.material_state_, tmp.stress_);
+      material_->EvaluatePK1(tmp.F_, i_thread, q.material_state_, tmp.stress_);
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,
                           tmp.stress_,
@@ -277,6 +315,9 @@ public:
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
+    // if this call isn't for line search, assembly grad at the same time
+    bool assemble_grad = !line_search_assembly_;
+
     // lambda for nthread assemble
     auto assemble_element_residual_and_maybe_grad =
         [&](const int begin, const int end, const int i_thread) {
@@ -287,11 +328,15 @@ public:
           double dN_dx_data[kMaxTrueDof];
           double F_data[kDimDim];
           double F_inv_data[kDimDim];
+          double fd_forward_data[kMaxTrueDof];
+          double fd_backward_data[kMaxTrueDof];
           tmp.SetData(element_state_data,
                       stress_data,
                       dN_dx_data,
                       F_data,
                       F_inv_data,
+                      fd_forward_data,
+                      fd_backward_data,
                       dim_);
 
           for (int i{begin}; i < end; ++i) {
@@ -306,12 +351,64 @@ public:
             mfem::DenseMatrix& current_solution =
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
+            // if this is line search, we freeze state
+            if (line_search_assembly_) {
+              e.FreezeStates();
+            } // else {e.MeltStates();}
+
+            // assemble residual
             QuadLoop(current_solution,
                      i_thread,
                      *material_,
                      e.quad_data_,
                      tmp,
                      e.residual_view);
+
+            // if this was for line search, melt
+            if (line_search_assembly_) {
+              e.MeltStates();
+              continue;
+            }
+
+            // assembly grad
+            if (assemble_grad) {
+              e.FreezeStates();
+
+              constexpr const double diff_step = 1.0e-10;
+              constexpr const double two_diff_step_inv = 1. / 2.0e-10;
+
+              double* grad_data = e.grad_view_.GetData();
+              double* solution_data = current_solution.GetData();
+              for (int j{}; j < e.n_tdof_; ++j) {
+                double& with_respect_to = *solution_data++;
+                const double orig_wrt = with_respect_to;
+
+                with_respect_to = orig_wrt + diff_step;
+                QuadLoop(current_solution,
+                         i_thread,
+                         *material_,
+                         e.quad_data_,
+                         tmp,
+                         tmp.forward_residual_);
+
+                with_respect_to = orig_wrt - diff_step;
+                QuadLoop(current_solution,
+                         i_thread,
+                         *material_,
+                         e.quad_data_,
+                         tmp,
+                         tmp.backward_residual_);
+
+                for (int k{}; k < e.n_tdof_; ++k) {
+                  *grad_data++ = (fd_forward_data[k] - fd_backward_data[k])
+                                 * two_diff_step_inv;
+                }
+
+                with_respect_to = orig_wrt;
+              }
+
+              e.MeltStates();
+            }
           }
         };
 
@@ -320,64 +417,7 @@ public:
                             n_threads_);
   }
 
-  virtual void AssembleDomainGrad(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-
-    constexpr const double diff_step = 1.0e-8;
-    constexpr const double two_diff_step = 2.0e-8;
-
-    // currently we do FD. Maybe we will have AD, maybe manually.
-    // central difference
-    auto fd_grad = [&](const int start, const int end, const int i_thread) {
-      mfem::Vector element_vector;
-      mfem::Vector forward_element_residual;
-      mfem::Vector backward_element_residual;
-      for (int i{start}; i < end; ++i) {
-        // copy element matrix
-        current_x.GetSubVector(*precomputed_->v_dofs_[i], element_vector);
-
-        // output matrix
-        mfem::DenseMatrix& i_grad_mat = element_matrices_->operator[](i);
-
-        const int n_dof = element_vector.Size();
-        forward_element_residual.SetSize(n_dof);
-        backward_element_residual.SetSize(n_dof);
-        for (int j{}; j < n_dof; ++j) {
-          double& with_respect_to = element_vector[j];
-          const double orig_wrt = with_respect_to;
-          // one step forward
-          with_respect_to = orig_wrt + diff_step;
-          AssembleElementResidual(element_vector,
-                                  i,
-                                  i_thread,
-                                  forward_element_residual);
-          // one step back
-          with_respect_to = orig_wrt - diff_step;
-          AssembleElementResidual(element_vector,
-                                  i,
-                                  i_thread,
-                                  backward_element_residual);
-
-          // (forward - backward) /  (2 * step)
-          // with pointer
-          double* grad_col = &i_grad_mat(0, j);
-          const double* f_res = forward_element_residual.GetData();
-          const double* b_res = backward_element_residual.GetData();
-          const double* f_res_end = f_res + n_dof;
-          for (; f_res != f_res_end;) {
-            *grad_col++ = ((*f_res++) - (*b_res++)) / two_diff_step;
-          }
-
-          // reset with respect to
-          with_respect_to = orig_wrt;
-        }
-      }
-    };
-
-    MaterialState::freeze_ = true;
-    mimi::utils::NThreadExe(fd_grad, element_matrices_->size(), n_threads_);
-    MaterialState::freeze_ = false;
-  }
+  virtual void AssembleDomainGrad(const mfem::Vector& current_x) { MIMI_FUNC() }
 };
 
 } // namespace mimi::integrators

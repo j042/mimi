@@ -20,6 +20,26 @@ public:
   /// same ctor as base
   using Base_::Base_;
 
+  virtual void LineSearchOn() {
+    MIMI_FUNC()
+    for (auto& dnfi : domain_nfi_) {
+      dnfi->line_search_assembly_ = true;
+    }
+    for (auto& bnfi : boundary_face_nfi_) {
+      bnfi->line_search_assembly_ = true;
+    }
+  }
+
+  virtual void LineSearchOff() {
+    MIMI_FUNC()
+    for (auto& dnfi : domain_nfi_) {
+      dnfi->line_search_assembly_ = false;
+    }
+    for (auto& bnfi : boundary_face_nfi_) {
+      bnfi->line_search_assembly_ = false;
+    }
+  }
+
   /// we skip a lot of checks that's performed by base here
   virtual void Mult(const mfem::Vector& current_x,
                     mfem::Vector& residual) const {

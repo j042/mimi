@@ -2,6 +2,7 @@
 
 #include <mfem.hpp>
 
+#include "mimi/operators/nonlinear_solid.hpp"
 #include "mimi/utils/ad.hpp"
 #include "mimi/utils/print.hpp"
 
@@ -15,6 +16,9 @@ public:
   using Base_ = Newton;
 
   using Base_::Base_;
+
+  /// pointer to nl oper to
+  mimi::operators::NonlinearSolid* nl_oper_{nullptr};
 
   /// @brief implements scaling factor usine line search adapted from
   /// https://github.com/LLNL/ExaConstit/blob/exaconstit-dev/src/mechanics_solver.cpp
