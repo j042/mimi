@@ -532,13 +532,13 @@ public:
 
   /// COLUMN MAJOR!
   constexpr Type_& operator()(const int& i, const int& j) {
-    assert(data_);
+    assert(Base_::data_);
     return Base_::data_[j * Base_::strides_[0] + i];
   }
 
   /// again, COLUMN MAJOR!
   constexpr const Type_& operator()(const int& i, const int& j) const {
-    assert(data_);
+    assert(Base_::data_);
     return Base_::data_[j * Base_::strides_[0] + i];
   }
 

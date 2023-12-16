@@ -37,6 +37,7 @@ public:
     int n_quad_;
     int n_dof_; // this is not true dof
     int n_tdof_;
+    bool has_states_ = false;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
     mfem::DenseMatrix residual_view_; // we always assemble at the same place
@@ -64,6 +65,9 @@ public:
     void FreezeStates() {
       MIMI_FUNC()
 
+      if (!has_states_)
+        return;
+
       for (auto& q : quad_data_) {
         q.material_state_->freeze_ = true;
       }
@@ -71,6 +75,9 @@ public:
 
     void MeltStates() {
       MIMI_FUNC()
+
+      if (!has_states_)
+        return;
 
       for (auto& q : quad_data_) {
         q.material_state_->freeze_ = false;
@@ -133,6 +140,8 @@ public:
 
       element_state_view_.SetSize(n_dof, dim);
       dN_dx_.SetSize(n_dof, dim);
+      forward_residual_.SetSize(n_dof, dim);
+      backward_residual_.SetSize(n_dof, dim);
     }
 
     mfem::DenseMatrix&
@@ -268,6 +277,12 @@ public:
           mfem::Mult(q_data.dN_dxi_, q_data.dxi_dX_, q_data.dN_dX_);
           q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
         }
+
+        if (!i_el_data.quad_data_[0].material_state_) {
+          i_el_data.has_states_ = false;
+        } else {
+          i_el_data.has_states_ = true;
+        }
       }
     };
 
@@ -294,6 +309,9 @@ public:
                           q.dN_dX_,
                           tmp.stress_,
                           residual_matrix);
+
+      std::cout << "stress\n";
+      tmp.stress_.PrintMatlab();
 
       // alternatively, this. But, this does not converge.
       // check what's wrong with this
@@ -372,8 +390,8 @@ public:
             if (assemble_grad) {
               e.FreezeStates();
 
-              constexpr const double diff_step = 1.0e-10;
-              constexpr const double two_diff_step_inv = 1. / 2.0e-10;
+              constexpr const double diff_step = 1.0e-8;
+              constexpr const double two_diff_step_inv = 1. / 2.0e-8;
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_solution.GetData();
@@ -399,9 +417,9 @@ public:
                   *grad_data++ = (fd_forward_data[k] - fd_backward_data[k])
                                  * two_diff_step_inv;
                 }
-
                 with_respect_to = orig_wrt;
               }
+              e.grad_view_.PrintMatlab();
 
               e.MeltStates();
             }
