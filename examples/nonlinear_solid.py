@@ -9,11 +9,12 @@ nl = mimi.PyNonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
-nl.subdivide(1)
+nl.subdivide(0)
 
 # create material
 # PyMaterial is platzhalter
 mat = mimi.PyStVenantKirchhoff()
+mat = mimi.PyCompressibleOgdenNeoHookean()
 mat.density = 1
 mat.viscosity = -1
 mat.lambda_ = 50
@@ -34,6 +35,7 @@ bc.initial.body_force(1, -1)
 nl.boundary_condition = bc
 
 nl.setup(2)
+nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 1, False)
 
 rhs = nl.linear_form_view2("rhs")
 
@@ -55,5 +57,8 @@ for i in range(10000):
             interactive=False,
         )
     nl.step_time2()
+
+    if i == 0:
+        exit()
 
 gus.show(s, vedoplot=plt, interactive=True)
