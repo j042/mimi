@@ -392,12 +392,12 @@ public:
               constexpr const double diff_step = 1.0e-8;
               constexpr const double two_diff_step_inv = 1. / 2.0e-8;
 
-              tmp.forward_residual_ = 0.0;
-              tmp.backward_residual_ = 0.0;
-
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_solution.GetData();
               for (int j{}; j < e.n_tdof_; ++j) {
+                tmp.forward_residual_ = 0.0;
+                tmp.backward_residual_ = 0.0;
+
                 double& with_respect_to = *solution_data++;
                 const double orig_wrt = with_respect_to;
 
