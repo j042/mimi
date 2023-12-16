@@ -369,9 +369,6 @@ public:
             if (assemble_grad) {
               e.FreezeStates();
 
-              constexpr const double diff_step = 1.0e-8;
-              constexpr const double two_diff_step_inv = 1. / 2.0e-8;
-
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_solution.GetData();
               for (int j{}; j < e.n_tdof_; ++j) {
@@ -380,6 +377,8 @@ public:
 
                 double& with_respect_to = *solution_data++;
                 const double orig_wrt = with_respect_to;
+                const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+                const double two_diff_step_inv = 1. / (2.0 * diff_step);
 
                 with_respect_to = orig_wrt + diff_step;
                 QuadLoop(current_solution,
