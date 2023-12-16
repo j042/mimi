@@ -20,23 +20,45 @@ public:
   /// same ctor as base
   using Base_::Base_;
 
-  virtual void LineSearchOn() {
+  virtual void AssembleGradOn() {
     MIMI_FUNC()
     for (auto& dnfi : domain_nfi_) {
-      dnfi->line_search_assembly_ = true;
+      dnfi->assemble_grad_ = true;
     }
     for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->line_search_assembly_ = true;
+      bnfi->assemble_grad_ = true;
     }
   }
 
-  virtual void LineSearchOff() {
+  virtual void AssembleGradOff() {
     MIMI_FUNC()
     for (auto& dnfi : domain_nfi_) {
-      dnfi->line_search_assembly_ = false;
+      dnfi->assemble_grad_ = false;
     }
     for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->line_search_assembly_ = false;
+      bnfi->assemble_grad_ = false;
+    }
+  }
+
+  virtual void FreezeStates() {
+    MIMI_FUNC()
+
+    for (auto& dnfi : domain_nfi_) {
+      dnfi->frozen_state_ = true;
+    }
+    for (auto& bnfi : boundary_face_nfi_) {
+      bnfi->frozen_state_ = true;
+    }
+  }
+
+  virtual void MeltStates() {
+    MIMI_FUNC()
+
+    for (auto& dnfi : domain_nfi_) {
+      dnfi->frozen_state_ = false;
+    }
+    for (auto& bnfi : boundary_face_nfi_) {
+      bnfi->frozen_state_ = false;
     }
   }
 

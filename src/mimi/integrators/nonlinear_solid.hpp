@@ -38,6 +38,7 @@ public:
     int n_dof_; // this is not true dof
     int n_tdof_;
     bool has_states_ = false;
+    bool frozen_ = false;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
     mfem::DenseMatrix residual_view_; // we always assemble at the same place
@@ -68,9 +69,14 @@ public:
       if (!has_states_)
         return;
 
+      if (frozen_)
+        return;
+
       for (auto& q : quad_data_) {
         q.material_state_->freeze_ = true;
       }
+
+      frozen_ = true;
     }
 
     void MeltStates() {
@@ -79,9 +85,14 @@ public:
       if (!has_states_)
         return;
 
+      if (!frozen_)
+        return;
+
       for (auto& q : quad_data_) {
         q.material_state_->freeze_ = false;
       }
+
+      frozen_ = false;
     }
   };
 
@@ -329,9 +340,6 @@ public:
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
-    // if this call isn't for line search, assembly grad at the same time
-    bool assemble_grad = !line_search_assembly_;
-
     // lambda for nthread assemble
     auto assemble_element_residual_and_maybe_grad =
         [&](const int begin, const int end, const int i_thread) {
@@ -365,9 +373,15 @@ public:
             mfem::DenseMatrix& current_solution =
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
-            // assembly grad
-            if (assemble_grad) {
+            if (frozen_state_) {
               e.FreezeStates();
+            } else {
+              e.MeltStates();
+            }
+
+            // assembly grad
+            if (assemble_grad_) {
+              assert(frozen_state_);
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_solution.GetData();
@@ -400,14 +414,7 @@ public:
                 }
                 with_respect_to = orig_wrt;
               }
-
-              e.MeltStates();
             }
-
-            // if this is line search, we freeze state
-            if (line_search_assembly_) {
-              e.FreezeStates();
-            } // else { e.MeltStates(); }
 
             // assemble residual
             QuadLoop(current_solution,
@@ -415,12 +422,6 @@ public:
                      e.quad_data_,
                      tmp,
                      e.residual_view_);
-
-            // if this was for line search, melt
-            if (line_search_assembly_) {
-              e.MeltStates();
-              continue;
-            }
           }
         };
 
