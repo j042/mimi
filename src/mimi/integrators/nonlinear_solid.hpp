@@ -310,9 +310,6 @@ public:
                           tmp.stress_,
                           residual_matrix);
 
-      std::cout << "stress\n";
-      tmp.stress_.PrintMatlab();
-
       // alternatively, this. But, this does not converge.
       // check what's wrong with this
       //
@@ -371,7 +368,9 @@ public:
             // if this is line search, we freeze state
             if (line_search_assembly_) {
               e.FreezeStates();
-            } // else {e.MeltStates();}
+            } else {
+              e.MeltStates();
+            }
 
             // assemble residual
             QuadLoop(current_solution,
@@ -392,6 +391,9 @@ public:
 
               constexpr const double diff_step = 1.0e-8;
               constexpr const double two_diff_step_inv = 1. / 2.0e-8;
+
+              tmp.forward_residual_ = 0.0;
+              tmp.backward_residual_ = 0.0;
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_solution.GetData();
