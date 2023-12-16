@@ -132,10 +132,6 @@ public:
       Base_::Grad->EliminateRowCol(tdof);
     }
 
-    auto* dense = Base_::Grad->ToDenseMatrix();
-    dense->PrintMatlab();
-    delete dense;
-
     return *Base_::Grad;
   }
 

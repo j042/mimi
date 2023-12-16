@@ -365,26 +365,6 @@ public:
             mfem::DenseMatrix& current_solution =
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
-            // if this is line search, we freeze state
-            if (line_search_assembly_) {
-              e.FreezeStates();
-            } else {
-              e.MeltStates();
-            }
-
-            // assemble residual
-            QuadLoop(current_solution,
-                     i_thread,
-                     e.quad_data_,
-                     tmp,
-                     e.residual_view_);
-
-            // if this was for line search, melt
-            if (line_search_assembly_) {
-              e.MeltStates();
-              continue;
-            }
-
             // assembly grad
             if (assemble_grad) {
               e.FreezeStates();
@@ -421,9 +401,26 @@ public:
                 }
                 with_respect_to = orig_wrt;
               }
-              e.grad_view_.PrintMatlab();
 
               e.MeltStates();
+            }
+
+            // if this is line search, we freeze state
+            if (line_search_assembly_) {
+              e.FreezeStates();
+            } // else { e.MeltStates(); }
+
+            // assemble residual
+            QuadLoop(current_solution,
+                     i_thread,
+                     e.quad_data_,
+                     tmp,
+                     e.residual_view_);
+
+            // if this was for line search, melt
+            if (line_search_assembly_) {
+              e.MeltStates();
+              continue;
             }
           }
         };
