@@ -1,6 +1,7 @@
 #include "mimi/solvers/newton.hpp"
 
 #include "mimi/integrators/materials.hpp"
+#include "mimi/operators/nonlinear_solid.hpp"
 
 namespace mimi::solvers {
 

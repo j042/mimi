@@ -29,9 +29,6 @@ public:
   virtual void Setup(const int nthreads = -1) {
     MIMI_FUNC()
 
-    // make sure static variable is set to false at the beginning
-    mimi::integrators::MaterialState::freeze_ = false;
-
     // quick 0 and -1 filtering
     const int n_threads = (nthreads < 1) ? 1 : nthreads;
 
@@ -273,7 +270,7 @@ public:
     // setup a newton solver
     auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
     // give pointer of nl oper to control line search assembly
-    newton->SetNonlinearOperator(&nl_oper);
+    newton->nl_oper_ = nl_oper.get();
     Base_::newton_solvers_["nonlinear_solid"] = newton;
     // basic config. you can change this using ConfigureNewton()
     newton->iterative_mode = false;

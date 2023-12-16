@@ -23,7 +23,7 @@ struct MaterialState {
 
   /// flag to notify non-accumulation
   /// use during in FD and line search
-  bool freeze_;
+  bool freeze_{false};
 };
 
 /// Material base.

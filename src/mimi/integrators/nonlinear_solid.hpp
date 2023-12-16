@@ -21,9 +21,6 @@ public:
   using QuadratureMatrices_ = Vector_<Vector_<mfem::DenseMatrix>>;
   using QuadratureScalars_ = Vector_<Vector_<double>>;
 
-  /// flag to know when to freeze material state accumulation
-  bool line_search_assembly_{false};
-
   /// precomputed data at quad points
   struct QuadData {
     double integration_weight_;
@@ -61,7 +58,7 @@ public:
     GetIntRule(mfem::IntegrationRules& thread_int_rules) const {
       MIMI_FUNC()
 
-      return thread_int_rules.Get(geometry_type, quadrature_order_);
+      return thread_int_rules.Get(geometry_type_, quadrature_order_);
     }
 
     void FreezeStates() {
@@ -119,14 +116,16 @@ public:
                  const int dim) {
       MIMI_FUNC()
 
-      element_state_.SetData(element_state_data, kMaxTrueDof);
+      element_state_.SetDataAndSize(element_state_data, kMaxTrueDof);
       element_state_view_.UseExternalData(element_state_data, kMaxTrueDof, 1);
       stress_.UseExternalData(stress_data, dim, dim);
       dN_dx_.UseExternalData(dN_dx_data, kMaxTrueDof, 1);
       F_.UseExternalData(F_data, dim, dim);
       F_inv_.UseExternalData(F_inv_data, dim, dim);
       forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
-      backward_residual_.UseExternalData(back_residual_data, kMaxTrueDof, 1);
+      backward_residual_.UseExternalData(backward_residual_data,
+                                         kMaxTrueDof,
+                                         1);
     }
 
     void SetShape(const int n_dof, const int dim) {
@@ -248,15 +247,15 @@ public:
 
         // prepare quad loop
         i_el_data.n_quad_ = ir.GetNPoints();
-        quad_data_.resize(i_el_data.n_quad_);
+        i_el_data.quad_data_.resize(i_el_data.n_quad_);
 
-        for (int j{}; j < n_quad; ++j) {
+        for (int j{}; j < i_el_data.n_quad_; ++j) {
           // get int point - this is just look up within ir
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
-          i_el_data.element_trans_.SetIntPoint(&ip);
+          i_el_data.element_trans_->SetIntPoint(&ip);
 
           auto& q_data = i_el_data.quad_data_[j];
-          q_data.integration_weight_ = ip.Weight();
+          q_data.integration_weight_ = ip.weight;
 
           q_data.dN_dxi_.SetSize(i_el_data.n_dof_, dim_);
           q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
@@ -264,10 +263,10 @@ public:
           q_data.material_state_ = material_->CreateState();
 
           i_el_data.element_->CalcDShape(ip, q_data.dN_dxi_);
-          mfem::CalcInverse(i_el_data.element_trans_.Jacobian(),
+          mfem::CalcInverse(i_el_data.element_trans_->Jacobian(),
                             q_data.dxi_dX_);
           mfem::Mult(q_data.dN_dxi_, q_data.dxi_dX_, q_data.dN_dX_);
-          q_data.det_dX_dxi_ = i_el_data.element_trans_.Weight();
+          q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
         }
       }
     };
@@ -341,7 +340,7 @@ public:
 
           for (int i{begin}; i < end; ++i) {
             // in
-            e = element_data_[i];
+            ElementData& e = element_data_[i];
             e.residual_view_ = 0.0;
 
             // set shape for tmp data
@@ -359,10 +358,9 @@ public:
             // assemble residual
             QuadLoop(current_solution,
                      i_thread,
-                     *material_,
                      e.quad_data_,
                      tmp,
-                     e.residual_view);
+                     e.residual_view_);
 
             // if this was for line search, melt
             if (line_search_assembly_) {
@@ -386,7 +384,6 @@ public:
                 with_respect_to = orig_wrt + diff_step;
                 QuadLoop(current_solution,
                          i_thread,
-                         *material_,
                          e.quad_data_,
                          tmp,
                          tmp.forward_residual_);
@@ -394,7 +391,6 @@ public:
                 with_respect_to = orig_wrt - diff_step;
                 QuadLoop(current_solution,
                          i_thread,
-                         *material_,
                          e.quad_data_,
                          tmp,
                          tmp.backward_residual_);
@@ -412,7 +408,7 @@ public:
           }
         };
 
-    mimi::utils::NThreadExe(assemble_element_residual,
+    mimi::utils::NThreadExe(assemble_element_residual_and_maybe_grad,
                             element_vectors_->size(),
                             n_threads_);
   }

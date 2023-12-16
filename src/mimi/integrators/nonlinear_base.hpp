@@ -22,6 +22,9 @@ public:
 
   std::string name_;
 
+  /// flag to know when to freeze material state accumulation
+  bool line_search_assembly_{false};
+
   /// marker for this bdr face integ
   const mfem::Array<int>* boundary_marker_ = nullptr;
 

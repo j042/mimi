@@ -2,9 +2,13 @@
 
 #include <mfem.hpp>
 
-#include "mimi/operators/nonlinear_solid.hpp"
+// #include "mimi/operators/nonlinear_solid.hpp"
 #include "mimi/utils/ad.hpp"
 #include "mimi/utils/print.hpp"
+
+namespace mimi::operators {
+class NonlinearSolid;
+}
 
 namespace mimi::solvers {
 
