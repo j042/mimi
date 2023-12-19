@@ -18,8 +18,6 @@ public:
   using Base_ = NonlinearBase;
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
-  using QuadratureMatrices_ = Vector_<Vector_<mfem::DenseMatrix>>;
-  using QuadratureScalars_ = Vector_<Vector_<double>>;
 
   /// precomputed data at quad points
   struct QuadData {
@@ -104,13 +102,13 @@ public:
     mfem::Vector element_state_;
     /// wraps element_state_
     mfem::DenseMatrix element_state_view_;
-    /// wraps stress_data_
+    /// wraps stress_data
     mfem::DenseMatrix stress_;
-    /// wraps dN_dx_data_
+    /// wraps dN_dx_data
     mfem::DenseMatrix dN_dx_;
-    /// wraps F_data_
+    /// wraps F_data
     mfem::DenseMatrix F_;
-    /// wraps F_inv_
+    /// wraps F_inv_data
     mfem::DenseMatrix F_inv_;
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
@@ -166,12 +164,11 @@ public:
   };
 
 protected:
-  Vector_<TemporaryData> thread_local_temporaries_;
-
+  /// number of threads for this system
   int n_threads_;
-
+  /// material related
   std::shared_ptr<MaterialBase> material_;
-
+  /// element data
   Vector_<ElementData> element_data_;
 
 public:
@@ -430,6 +427,9 @@ public:
                             n_threads_);
   }
 
+  /// @brief assembles grad. In fact, it is already done in domain residual and
+  /// this doesn't do anything.
+  /// @param current_x
   virtual void AssembleDomainGrad(const mfem::Vector& current_x) { MIMI_FUNC() }
 };
 

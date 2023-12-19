@@ -109,6 +109,25 @@ public:
     sigma *= 1. / F.Det();
   }
 
+  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
+                              const mfem::DenseMatrix& F_dot,
+                              const int& i_thread,
+                              MaterialStatePtr_& state,
+                              mfem::DenseMatrix& sigma) {
+    MIMI_FUNC()
+
+    // setup aux
+    auto& i_conv = stress_conversions_[i_thread];
+    mfem::DenseMatrix& P = i_conv[k_P];
+
+    EvaluatePK1(F, F_dot, i_thread, state, sigma);
+
+    // 1 / det(F) * P * F^T
+    // they don't have mfem::Mult_a_ABt();
+    mfem::MultABt(P, F, sigma);
+    sigma *= 1. / F.Det();
+  }
+
   /// @brief unless implemented, this will try to call evaluate sigma and
   /// transform if none of stress is implemented, you will be stuck in a
   /// neverending loop current implementation is not so memory efficient
@@ -125,6 +144,27 @@ public:
 
     // get sigma
     EvaluateCauchy(F, i_thread, state, sigma);
+
+    // P = det(F) * sigma * F^-T
+    mfem::CalcInverse(F, F_inv);
+    mfem::MultABt(sigma, F_inv, P);
+    P *= F.Det();
+  }
+
+  virtual void EvaluatePK1(const mfem::DenseMatrix& F,
+                           const mfem::DenseMatrix& F_dot,
+                           const int& i_thread,
+                           MaterialStatePtr_& state,
+                           mfem::DenseMatrix& P) {
+    MIMI_FUNC()
+
+    // setup aux
+    auto& i_conv = stress_conversions_[i_thread];
+    mfem::DenseMatrix& F_inv = i_conv[k_F_inv];
+    mfem::DenseMatrix& sigma = i_conv[k_sigma];
+
+    // get sigma
+    EvaluateCauchy(F, F_dot, i_thread, state, sigma);
 
     // P = det(F) * sigma * F^-T
     mfem::CalcInverse(F, F_inv);
