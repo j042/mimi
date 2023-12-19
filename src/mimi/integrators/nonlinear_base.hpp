@@ -22,6 +22,11 @@ public:
 
   std::string name_;
 
+  /// flag to know when to assembly grad.
+  bool assemble_grad_{false};
+  /// flag to know when not to accumulate
+  bool frozen_state_{false};
+
   /// marker for this bdr face integ
   const mfem::Array<int>* boundary_marker_ = nullptr;
 

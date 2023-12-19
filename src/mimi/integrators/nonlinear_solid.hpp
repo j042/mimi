@@ -11,48 +11,167 @@ namespace mimi::integrators {
 /// given current x coordinate (NOT displacement)
 /// Computes F and passes it to material
 class NonlinearSolid : public NonlinearBase {
+  constexpr static const int kMaxTrueDof = 50;
+  constexpr static const int kDimDim = 9;
 
 public:
   using Base_ = NonlinearBase;
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
-  using QuadratureMatrices_ = Vector_<Vector_<mfem::DenseMatrix>>;
-  using QuadratureScalars_ = Vector_<Vector_<double>>;
 
-protected:
+  /// precomputed data at quad points
+  struct QuadData {
+    double integration_weight_;
+    mfem::DenseMatrix dN_dxi_; // don't really need to save this
+    mfem::DenseMatrix dN_dX_;
+    double det_dX_dxi_;
+    mfem::DenseMatrix dxi_dX_; // J_target_to_reference
+    std::shared_ptr<MaterialState> material_state_;
+  };
+
+  struct ElementData {
+    int quadrature_order_;
+    int geometry_type_;
+    int n_quad_;
+    int n_dof_; // this is not true dof
+    int n_tdof_;
+    bool has_states_ = false;
+    bool frozen_ = false;
+
+    std::shared_ptr<mfem::Array<int>> v_dofs_;
+    mfem::DenseMatrix residual_view_; // we always assemble at the same place
+    mfem::DenseMatrix grad_view_;     // we always assemble at the same place
+
+    Vector_<QuadData> quad_data_;
+
+    /// pointer to element and eltrans. don't need it,
+    /// but maybe for further processing or something
+    std::shared_ptr<mfem::NURBSFiniteElement> element_;
+    std::shared_ptr<mfem::IsoparametricTransformation> element_trans_;
+
+    /// pointers to corresponding Base_::element_vectors_
+    mfem::Vector* element_residual_;
+    /// and Base_::element_matrices_
+    mfem::DenseMatrix* element_grad_;
+
+    const mfem::IntegrationRule&
+    GetIntRule(mfem::IntegrationRules& thread_int_rules) const {
+      MIMI_FUNC()
+
+      return thread_int_rules.Get(geometry_type_, quadrature_order_);
+    }
+
+    void FreezeStates() {
+      MIMI_FUNC()
+
+      if (!has_states_)
+        return;
+
+      if (frozen_)
+        return;
+
+      for (auto& q : quad_data_) {
+        q.material_state_->freeze_ = true;
+      }
+
+      frozen_ = true;
+    }
+
+    void MeltStates() {
+      MIMI_FUNC()
+
+      if (!has_states_)
+        return;
+
+      if (!frozen_)
+        return;
+
+      for (auto& q : quad_data_) {
+        q.material_state_->freeze_ = false;
+      }
+
+      frozen_ = false;
+    }
+  };
+
   /// temporary containers required in element assembly
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
-  struct Temporary {
-    mfem::DenseMatrix residual_matrix_view_;
-    mfem::Vector element_vector_copies_;
-    mfem::DenseMatrix element_vector_matrix_view_;
+  struct TemporaryData {
+    /// wraps element_state_data_
+    mfem::Vector element_x_;
+    /// wraps element_x_
+    mfem::DenseMatrix element_x_mat_;
+    /// wraps stress_data
     mfem::DenseMatrix stress_;
+    /// wraps dN_dx_data
     mfem::DenseMatrix dN_dx_;
+    /// wraps F_data
+    mfem::DenseMatrix F_;
+    /// wraps F_inv_data
+    mfem::DenseMatrix F_inv_;
+    /// wraps forward_residual data
+    mfem::DenseMatrix forward_residual_;
+    /// wraps backward residual data
+    mfem::DenseMatrix backward_residual_;
+
+    /// @brief
+    /// @param element_x_data
+    /// @param stress_data
+    /// @param dN_dx_data
+    /// @param F_data
+    /// @param F_inv_data
+    /// @param dim
+    void SetData(double* element_x_data,
+                 double* stress_data,
+                 double* dN_dx_data,
+                 double* F_data,
+                 double* F_inv_data,
+                 double* forward_residual_data,
+                 double* backward_residual_data,
+                 const int dim) {
+      MIMI_FUNC()
+
+      element_x_.SetDataAndSize(element_x_data, kMaxTrueDof);
+      element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
+      stress_.UseExternalData(stress_data, dim, dim);
+      dN_dx_.UseExternalData(dN_dx_data, kMaxTrueDof, 1);
+      F_.UseExternalData(F_data, dim, dim);
+      F_inv_.UseExternalData(F_inv_data, dim, dim);
+      forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
+      backward_residual_.UseExternalData(backward_residual_data,
+                                         kMaxTrueDof,
+                                         1);
+    }
+
+    void SetShape(const int n_dof, const int dim) {
+      MIMI_FUNC()
+
+      element_x_mat_.SetSize(n_dof, dim);
+      dN_dx_.SetSize(n_dof, dim);
+      forward_residual_.SetSize(n_dof, dim);
+      backward_residual_.SetSize(n_dof, dim);
+    }
+
+    mfem::DenseMatrix&
+    CurrentElementSolutionCopy(const mfem::Vector& current_all,
+                               const ElementData& elem_data) {
+      MIMI_FUNC()
+
+      current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
+      return element_x_mat_;
+    }
   };
 
-  Vector_<Temporary> thread_local_temporaries_;
-
+protected:
+  /// number of threads for this system
   int n_threads_;
-
+  /// material related
   std::shared_ptr<MaterialBase> material_;
+  /// element data
+  Vector_<ElementData> element_data_;
 
 public:
-  /// material states (n_elements * n_quads)
-  Vector_<Vector_<std::shared_ptr<MaterialState>>> material_states_;
-
-  /// for smooth nthread exe with FD or AD, we need element assembly
-  /// that we can call element wise. So here, we will save
-  /// pointers to precomputed entities for direct access
-  const QuadratureMatrices_* precomputed_dN_dxi_;
-  const QuadratureMatrices_* precomputed_dN_dX_;
-  const QuadratureScalars_* precomputed_det_J_reference_to_target_;
-  const QuadratureMatrices_* precomputed_J_target_to_reference_;
-
-  QuadratureMatrices_* current_F_;
-  QuadratureMatrices_* current_F_inv_;
-  QuadratureScalars_* current_det_F_;
-
   NonlinearSolid(
       const std::string& name,
       const std::shared_ptr<MaterialBase>& material,
@@ -87,54 +206,11 @@ public:
     element_vectors_ =
         std::make_unique<mimi::utils::Data<mfem::Vector>>(n_elements);
 
-    // DShape - you get derivatives per dim. This is at reference
-    auto& d_shapes = precomputed_->matrices_["d_shapes"];
-    d_shapes.resize(n_elements);
-
-    // target DShape
-    auto& target_d_shapes = precomputed_->matrices_["target_d_shapes"];
-    target_d_shapes.resize(n_elements);
-
-    // element reference_to_target weight
-    auto& reference_to_target_weights =
-        precomputed_->scalars_["reference_to_target_weights"];
-    reference_to_target_weights.resize(n_elements);
-
-    // element target_to_reference jacobian (inverse of reference_to_target
-    // jacobian)
-    auto& target_to_reference_jacobians =
-        precomputed_->matrices_["target_to_reference_jacobians"];
-    target_to_reference_jacobians.resize(n_elements);
-
-    // deformation gradient is saved from the latest residual calculation
-    // we save this, as gradient call comes right after the first residual
-    // calculation this is F = dx/dX
-    auto& deformation_gradients =
-        precomputed_->matrices_["deformation_gradients"];
-    deformation_gradients.resize(n_elements);
-
-    // deformation gradient inverse is also saved
-    // TODO check if we really need to save this. For example, for Grad
-    // F^-1
-    // this is used in
-    auto& deformation_gradient_inverses =
-        precomputed_->matrices_["deformation_gradient_inverses"];
-    deformation_gradient_inverses.resize(n_elements);
-
-    // det(F)
-    auto& deformation_gradient_weights =
-        precomputed_->scalars_["deformation_gradient_weights"];
-    deformation_gradient_weights.resize(n_elements);
-
     // extract element geometry type
     geometry_type_ = precomputed_->elements_[0]->GetGeomType();
 
-    // quadrature orders - this is per elements
-    quadrature_orders_.resize(n_elements);
-
-    // material states - this is per elements per quad points
-    // as this is share_ptr, we can just call copy constructor.
-    material_states_.resize(n_elements);
+    // allocate element data
+    element_data_.resize(n_elements);
 
     auto precompute_at_elements_and_quads = [&](const int el_begin,
                                                 const int el_end,
@@ -144,86 +220,76 @@ public:
 
       // element loop
       for (int i{el_begin}; i < el_end; ++i) {
-        // deref i-th element of
-        // elements, eltrans
-        // std::vectors of mfem::Vector and mfem::DenseMatrix
-        const auto& i_el = precomputed_->elements_[i];
-        auto& i_el_trans = *precomputed_->reference_to_target_element_trans_[i];
-        auto& i_d_shapes = d_shapes[i];
-        auto& i_target_d_shapes = target_d_shapes[i];
-        auto& i_reference_to_target_weights = reference_to_target_weights[i];
-        auto& i_target_to_reference_jacobians =
-            target_to_reference_jacobians[i];
-        auto& i_deformation_gradients = deformation_gradients[i];
-        auto& i_deformation_gradient_inverses =
-            deformation_gradient_inverses[i];
-        auto& i_deformation_gradient_weights = deformation_gradient_weights[i];
-        auto& i_material_states = material_states_[i];
+        // prepare element level data
+        auto& i_el_data = element_data_[i];
 
-        // get quad order
-        const int q_order = (quadrature_order < 0) ? i_el->GetOrder() * 2 + 3
-                                                   : quadrature_order;
+        // save (shared) pointers to element and el_trans
+        i_el_data.element_ = precomputed_->elements_[i];
+        i_el_data.geometry_type_ = i_el_data.element_->GetGeomType();
+        i_el_data.element_trans_ =
+            precomputed_->reference_to_target_element_trans_[i];
+        i_el_data.n_dof_ = i_el_data.element_->GetDof();
+        i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
 
-        // save this quad order
-        quadrature_orders_[i] = q_order;
-
-        // get int rule
-        const mfem::IntegrationRule& ir =
-            int_rules.Get(i_el->GetGeomType(), q_order);
-        // prepare quad loop
-        const int n_quad = ir.GetNPoints();
-        const int n_dof = i_el->GetDof();
-
-        // now, allocate space
-        i_d_shapes.resize(n_quad);
-        i_target_d_shapes.resize(n_quad);
-        i_reference_to_target_weights.resize(n_quad);
-        i_target_to_reference_jacobians.resize(n_quad);
-        i_deformation_gradients.resize(n_quad);
-        i_deformation_gradient_inverses.resize(n_quad);
-        i_deformation_gradient_weights.resize(n_quad);
-        i_material_states.resize(n_quad);
+        // check suitability of temp data
+        // for structure simulations, tdof and vdof are the same
+        const int n_tdof = i_el_data.n_dof_ * dim_;
+        i_el_data.n_tdof_ = n_tdof;
+        if (kMaxTrueDof < n_tdof) {
+          mimi::utils::PrintAndThrowError(
+              "kMaxTrueDof smaller than required space.",
+              "Please recompile after setting a bigger number");
+        }
 
         // also allocate element based vectors and matrix (assembly output)
-        element_vectors_->operator[](i).SetSize(n_dof * dim_);
-        element_matrices_->operator[](i).SetSize(n_dof * dim_, n_dof * dim_);
+        i_el_data.element_residual_ = &(*element_vectors_)[i];
+        i_el_data.element_residual_->SetSize(n_tdof);
+        i_el_data.residual_view_.UseExternalData(
+            i_el_data.element_residual_->GetData(),
+            i_el_data.n_dof_,
+            dim_);
+        i_el_data.element_grad_ = &(*element_matrices_)[i];
+        i_el_data.element_grad_->SetSize(n_tdof, n_tdof);
+        i_el_data.grad_view_.UseExternalData(i_el_data.element_grad_->GetData(),
+                                             n_tdof,
+                                             n_tdof);
 
-        for (int j{}; j < n_quad; ++j) {
+        // get quad order
+        i_el_data.quadrature_order_ =
+            (quadrature_order < 0) ? i_el_data.element_->GetOrder() * 2 + 3
+                                   : quadrature_order;
+
+        // get int rule
+        const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);
+
+        // prepare quad loop
+        i_el_data.n_quad_ = ir.GetNPoints();
+        i_el_data.quad_data_.resize(i_el_data.n_quad_);
+
+        for (int j{}; j < i_el_data.n_quad_; ++j) {
           // get int point - this is just look up within ir
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
-          i_el_trans.SetIntPoint(&ip);
+          i_el_data.element_trans_->SetIntPoint(&ip);
 
-          // get d shapes
-          mfem::DenseMatrix& j_d_shape = i_d_shapes[j];
-          mfem::DenseMatrix& j_target_d_shape = i_target_d_shapes[j];
-          mfem::DenseMatrix& j_target_to_reference_jacobian =
-              i_target_to_reference_jacobians[j];
-          mfem::DenseMatrix& j_deformation_gradient =
-              i_deformation_gradients[j];
-          mfem::DenseMatrix& j_deformation_gradient_inverse =
-              i_deformation_gradient_inverses[j];
-          std::shared_ptr<MaterialState>& j_material_state =
-              i_material_states[j];
+          auto& q_data = i_el_data.quad_data_[j];
+          q_data.integration_weight_ = ip.weight;
 
-          j_d_shape.SetSize(n_dof, dim_);
-          j_target_d_shape.SetSize(n_dof, dim_);
-          j_target_to_reference_jacobian.SetSize(dim_, dim_);
-          // here, we just allocate the matrix
-          j_deformation_gradient.SetSize(dim_, dim_);
-          j_deformation_gradient_inverse.SetSize(dim_, dim_);
-          // this needs to be done individually
-          j_material_state = material_->CreateState();
+          q_data.dN_dxi_.SetSize(i_el_data.n_dof_, dim_);
+          q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
+          q_data.dxi_dX_.SetSize(dim_, dim_);
+          q_data.material_state_ = material_->CreateState();
 
-          //  Calc
-          i_el->CalcDShape(ip, j_d_shape);
-          mfem::CalcInverse(i_el_trans.Jacobian(),
-                            j_target_to_reference_jacobian);
-          mfem::Mult(j_d_shape,                      // dN_dxi
-                     j_target_to_reference_jacobian, // dxi_dX
-                     j_target_d_shape);              // dN_dX
+          i_el_data.element_->CalcDShape(ip, q_data.dN_dxi_);
+          mfem::CalcInverse(i_el_data.element_trans_->Jacobian(),
+                            q_data.dxi_dX_);
+          mfem::Mult(q_data.dN_dxi_, q_data.dxi_dX_, q_data.dN_dX_);
+          q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
+        }
 
-          // at last, trans weight
-          i_reference_to_target_weights[j] = i_el_trans.Weight();
+        if (!i_el_data.quad_data_[0].material_state_) {
+          i_el_data.has_states_ = false;
+        } else {
+          i_el_data.has_states_ = true;
         }
       }
     };
@@ -231,300 +297,140 @@ public:
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
                             n_elements,
                             n_threads_);
-
-    // now, save pointers locally
-    precomputed_dN_dxi_ = &d_shapes;
-    precomputed_dN_dX_ = &target_d_shapes;
-    precomputed_det_J_reference_to_target_ = &reference_to_target_weights;
-    precomputed_J_target_to_reference_ = &target_to_reference_jacobians;
-
-    current_F_ = &deformation_gradients;
-    current_F_inv_ = &deformation_gradient_inverses;
-    current_det_F_ = &deformation_gradient_weights;
-
-    // thread safety committee
-    thread_local_temporaries_.resize(n_threads_);
-    // allocate stress
-    for (auto& tlt : thread_local_temporaries_) {
-      tlt.stress_.SetSize(dim_, dim_);
-    }
   }
 
-  /// element level assembly.
-  /// currently copy of AssemblyDomainResidual.
-  /// meant to be used for FD
-  /// or, AD, where we can assemble both LHS and RHS contributions
-  /// As we currently use for FD, we will turn off state accumulation
-  virtual void AssembleElementResidual(const mfem::Vector& input_element_x,
-                                       const int& i_elem,
-                                       const int& i_thread,
-                                       mfem::Vector& output_element_residual) {
+  /// Performs quad loop with element data and temporary data
+  void QuadLoop(const mfem::DenseMatrix& x,
+                const int i_thread,
+                Vector_<QuadData>& q_data,
+                TemporaryData& tmp,
+                mfem::DenseMatrix& residual_matrix) {
     MIMI_FUNC()
 
-    // deref thread local
-    auto& int_rules = precomputed_->int_rules_[i_thread];
-    const auto& int_rule =
-        int_rules.Get(geometry_type_, quadrature_orders_[i_elem]);
-    auto& tmp = thread_local_temporaries_[i_thread];
+    for (QuadData& q : q_data) {
+      // get dx_dX = x * dN_dX
+      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
 
-    // deref look ups
-    const auto& i_el = precomputed_->elements_[i_elem];
-    // const auto& i_dN_dxi = precomputed_dN_dxi_->operator[](i_elem);
-    const auto& i_dN_dX = precomputed_dN_dX_->operator[](i_elem);
-    const auto& i_det_J_reference_to_target =
-        precomputed_det_J_reference_to_target_->operator[](i_elem);
-    const auto& i_J_target_to_reference =
-        precomputed_J_target_to_reference_->operator[](i_elem);
+      // currently we will just use PK1
+      material_->EvaluatePK1(tmp.F_, i_thread, q.material_state_, tmp.stress_);
+      mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
+                          q.dN_dX_,
+                          tmp.stress_,
+                          residual_matrix);
 
-    // deref to-saves
-    auto& i_F = current_F_->operator[](i_elem);
-    auto& i_F_inv = current_F_inv_->operator[](i_elem);
-    auto& i_det_F = current_det_F_->operator[](i_elem);
-
-    // material states
-    auto& i_material_states = material_states_[i_elem];
-
-    // let's assemble
-    // 0.0 init output res
-    output_element_residual = 0.0;
-    // sizes
-    const int n_dof = i_el->GetDof();
-    // setup views in tmps
-    tmp.element_vector_matrix_view_.UseExternalData(input_element_x.GetData(),
-                                                    n_dof,
-                                                    dim_);
-    tmp.residual_matrix_view_.UseExternalData(output_element_residual.GetData(),
-                                              n_dof,
-                                              dim_);
-
-    // quad loop
-    for (int q{}; q < int_rule.GetNPoints(); ++q) {
-      const mfem::IntegrationPoint& ip = int_rule.IntPoint(q);
-      const auto& q_dN_dX = i_dN_dX[q];
-      const auto& q_det_J_reference_to_target = i_det_J_reference_to_target[q];
-      const auto& q_J_target_to_reference = i_J_target_to_reference[q];
-      auto& q_F = i_F[q];
-      auto& q_material_state = i_material_states[q];
-
-      // get dx_dX (=F)
-      mfem::MultAtB(tmp.element_vector_matrix_view_, q_dN_dX, q_F);
-
-      // check where this needs to be integrated
-      if (material_->UsesCauchy()) {
-        // get F^-1 and det(F)
-        auto& q_F_inv = i_F[q];
-        auto& q_det_F = i_det_F[q];
-        mfem::CalcInverse(q_F, q_F_inv);
-        q_det_F = q_F.Weight();
-
-        material_->EvaluateCauchy(q_F, i_thread, q_material_state, tmp.stress_);
-
-        tmp.dN_dx_.SetSize(n_dof, dim_);
-        mfem::Mult(q_dN_dX, q_F_inv, tmp.dN_dx_);
-        mfem::AddMult_a(q_det_F * ip.weight * q_det_J_reference_to_target,
-                        tmp.dN_dx_,
-                        tmp.stress_,
-                        tmp.residual_matrix_view_);
-      } else {
-        // call PK1
-        material_->EvaluatePK1(q_F, i_thread, q_material_state, tmp.stress_);
-        mfem::AddMult_a_ABt(ip.weight * q_det_J_reference_to_target,
-                            q_dN_dX,
-                            tmp.stress_,
-                            tmp.residual_matrix_view_);
-      }
+      // alternatively, this. But, this does not converge.
+      // check what's wrong with this
+      //
+      // material_->EvaluateCauchy(tmp.F_,
+      //                           i_thread,
+      //                           q.material_state_,
+      //                           tmp.stress_);
+      // mfem::CalcInverse(tmp.F_, tmp.F_inv_);
+      // mfem::Mult(q.dN_dX_, tmp.F_inv_, tmp.dN_dx_);
+      // mfem::AddMult_a(tmp.F_.Det() * q.integration_weight_ * q.det_dX_dxi_,
+      //                 tmp.dN_dx_,
+      //                 tmp.stress_,
+      //                 e.residual_view_);
     }
   }
 
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
-    // get related precomputed values
-    // d shapes are n_elem * n_quad (n_dof, n_dim)
-    const auto& d_shapes = precomputed_->matrices_["d_shapes"];
-    const auto& target_d_shapes = precomputed_->matrices_["target_d_shapes"];
-    // weights are n_elem * (n_quad)
-    const auto& reference_to_target_weights =
-        precomputed_->scalars_["reference_to_target_weights"];
-    // jacobians are n_elem * n_quad (n_dim, n_dim)
-    const auto& target_to_reference_jacobians =
-        precomputed_->matrices_["target_to_reference_jacobians"];
-    auto& deformation_gradients =
-        precomputed_->matrices_["deformation_gradients"];
-    // maybe we won't save those
-    auto& deformation_gradient_inverses =
-        precomputed_->matrices_["deformation_gradient_inverses"];
-    auto& deformation_gradient_weights =
-        precomputed_->scalars_["deformation_gradient_weights"];
-
     // lambda for nthread assemble
-    auto assemble_element_residual = [&](const int begin,
-                                         const int end,
-                                         const int i_thread) {
-      // for thread safety, each thread gets a thread-unsafe objects
-      auto& int_rules = precomputed_->int_rules_[i_thread];
+    auto assemble_element_residual_and_maybe_grad =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          // create some space in stack
+          double element_x_data[kMaxTrueDof];
+          double stress_data[kDimDim];
+          double dN_dx_data[kMaxTrueDof];
+          double F_data[kDimDim];
+          double F_inv_data[kDimDim];
+          double fd_forward_data[kMaxTrueDof];
+          double fd_backward_data[kMaxTrueDof];
+          tmp.SetData(element_x_data,
+                      stress_data,
+                      dN_dx_data,
+                      F_data,
+                      F_inv_data,
+                      fd_forward_data,
+                      fd_backward_data,
+                      dim_);
 
-      // views / temporary copies
-      mfem::DenseMatrix i_residual_mat_view; // matrix view of residual output
-      mfem::Vector
-          i_current_solution_vec; // contiguous copy of current solution
-      mfem::DenseMatrix
-          i_current_solution_mat_view; // matrix view of current solution
+          for (int i{begin}; i < end; ++i) {
+            // in
+            ElementData& e = element_data_[i];
+            e.residual_view_ = 0.0;
 
-      // temporary stress holder can be either PK1 or cauchy, based on material
-      mfem::DenseMatrix stress(dim_, dim_);
-      // gradients of basis in physical (current) configuration
-      mfem::DenseMatrix dN_dx;
+            // set shape for tmp data
+            tmp.SetShape(e.n_dof_, dim_);
 
-      for (int i{begin}; i < end; ++i) {
-        // in
-        const auto& i_el = precomputed_->elements_[i];
-        const auto& i_vdof = precomputed_->v_dofs_[i];
-        const auto& i_d_shapes = d_shapes[i];
-        const auto& i_target_d_shapes = target_d_shapes[i];
-        const auto& i_reference_to_target_weights =
-            reference_to_target_weights[i];
-        const auto& i_target_to_reference_jacobians =
-            target_to_reference_jacobians[i];
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, e);
 
-        // out / local save
-        auto& i_material_states = material_states_[i];
-        auto& i_deformation_gradients = deformation_gradients[i];
-        auto& i_deformation_gradient_inverses =
-            deformation_gradient_inverses[i];
-        auto& i_deformation_gradient_weights = deformation_gradient_weights[i];
-        auto& i_residual = Base_::element_vectors_->operator[](i);
-        i_residual = 0.0;
+            if (frozen_state_) {
+              e.FreezeStates();
+            } else {
+              e.MeltStates();
+            }
 
-        // sizes
-        const int n_dof = i_el->GetDof();
+            // assembly grad
+            if (assemble_grad_) {
+              assert(frozen_state_);
 
-        // copy current solution
-        current_x.GetSubVector(*i_vdof, i_current_solution_vec);
-        // create views
-        i_current_solution_mat_view.UseExternalData(
-            i_current_solution_vec.GetData(),
-            n_dof,
-            dim_);
-        i_residual_mat_view.UseExternalData(i_residual.GetData(), n_dof, dim_);
+              double* grad_data = e.grad_view_.GetData();
+              double* solution_data = current_element_x.GetData();
+              for (int j{}; j < e.n_tdof_; ++j) {
+                tmp.forward_residual_ = 0.0;
+                tmp.backward_residual_ = 0.0;
 
-        // quad loop
-        const auto& int_rule =
-            int_rules.Get(geometry_type_, quadrature_orders_[i]);
-        for (int q{}; q < int_rule.GetNPoints(); ++q) {
-          const mfem::IntegrationPoint& ip = int_rule.IntPoint(q);
-          const auto& q_target_d_shape = i_target_d_shapes[q]; // dN_dX
-          const auto& q_reference_to_target_weight =
-              i_reference_to_target_weights[q];
-          auto& q_deformation_gradient = i_deformation_gradients[q];
-          auto& q_material_state = i_material_states[q];
+                double& with_respect_to = *solution_data++;
+                const double orig_wrt = with_respect_to;
+                const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+                const double two_diff_step_inv = 1. / (2.0 * diff_step);
 
-          // get dx_dX
-          mfem::MultAtB(i_current_solution_mat_view,
-                        q_target_d_shape,
-                        q_deformation_gradient);
+                with_respect_to = orig_wrt + diff_step;
+                QuadLoop(current_element_x,
+                         i_thread,
+                         e.quad_data_,
+                         tmp,
+                         tmp.forward_residual_);
 
-          // check where this needs to be integrated
-          if (material_->UsesCauchy()) {
-            dN_dx.SetSize(n_dof, dim_);
-            // get F^-1 and det(F)
-            auto& q_deformation_gradient_inverse =
-                i_deformation_gradient_inverses[q];
-            auto& q_deformation_gradient_weight =
-                i_deformation_gradient_weights[q];
-            mfem::CalcInverse(q_deformation_gradient,
-                              q_deformation_gradient_inverse);
-            q_deformation_gradient_weight = q_deformation_gradient.Weight();
+                with_respect_to = orig_wrt - diff_step;
+                QuadLoop(current_element_x,
+                         i_thread,
+                         e.quad_data_,
+                         tmp,
+                         tmp.backward_residual_);
 
-            material_->EvaluateCauchy(q_deformation_gradient,
-                                      i_thread,
-                                      q_material_state,
-                                      stress);
+                for (int k{}; k < e.n_tdof_; ++k) {
+                  *grad_data++ = (fd_forward_data[k] - fd_backward_data[k])
+                                 * two_diff_step_inv;
+                }
+                with_respect_to = orig_wrt;
+              }
+            }
 
-            mfem::Mult(q_target_d_shape, q_deformation_gradient_inverse, dN_dx);
-            mfem::AddMult_a(q_deformation_gradient_weight * ip.weight
-                                * q_reference_to_target_weight,
-                            dN_dx,
-                            stress,
-                            i_residual_mat_view);
-          } else {
-            // call PK1
-            material_->EvaluatePK1(q_deformation_gradient,
-                                   i_thread,
-                                   q_material_state,
-                                   stress);
-            mfem::AddMult_a_ABt(ip.weight * q_reference_to_target_weight,
-                                q_target_d_shape,
-                                stress,
-                                i_residual_mat_view);
+            // assemble residual
+            QuadLoop(current_element_x,
+                     i_thread,
+                     e.quad_data_,
+                     tmp,
+                     e.residual_view_);
           }
-        }
-      }
-    };
+        };
 
-    mimi::utils::NThreadExe(assemble_element_residual,
+    mimi::utils::NThreadExe(assemble_element_residual_and_maybe_grad,
                             element_vectors_->size(),
                             n_threads_);
   }
 
-  virtual void AssembleDomainGrad(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-
-    constexpr const double diff_step = 1.0e-8;
-    constexpr const double two_diff_step = 2.0e-8;
-
-    // currently we do FD. Maybe we will have AD, maybe manually.
-    // central difference
-    auto fd_grad = [&](const int start, const int end, const int i_thread) {
-      mfem::Vector element_vector;
-      mfem::Vector forward_element_residual;
-      mfem::Vector backward_element_residual;
-      for (int i{start}; i < end; ++i) {
-        // copy element matrix
-        current_x.GetSubVector(*precomputed_->v_dofs_[i], element_vector);
-
-        // output matrix
-        mfem::DenseMatrix& i_grad_mat = element_matrices_->operator[](i);
-
-        const int n_dof = element_vector.Size();
-        forward_element_residual.SetSize(n_dof);
-        backward_element_residual.SetSize(n_dof);
-        for (int j{}; j < n_dof; ++j) {
-          double& with_respect_to = element_vector[j];
-          const double orig_wrt = with_respect_to;
-          // one step forward
-          with_respect_to = orig_wrt + diff_step;
-          AssembleElementResidual(element_vector,
-                                  i,
-                                  i_thread,
-                                  forward_element_residual);
-          // one step back
-          with_respect_to = orig_wrt - diff_step;
-          AssembleElementResidual(element_vector,
-                                  i,
-                                  i_thread,
-                                  backward_element_residual);
-
-          // (forward - backward) /  (2 * step)
-          // with pointer
-          double* grad_col = &i_grad_mat(0, j);
-          const double* f_res = forward_element_residual.GetData();
-          const double* b_res = backward_element_residual.GetData();
-          const double* f_res_end = f_res + n_dof;
-          for (; f_res != f_res_end;) {
-            *grad_col++ = ((*f_res++) - (*b_res++)) / two_diff_step;
-          }
-
-          // reset with respect to
-          with_respect_to = orig_wrt;
-        }
-      }
-    };
-
-    MaterialState::freeze_ = true;
-    mimi::utils::NThreadExe(fd_grad, element_matrices_->size(), n_threads_);
-    MaterialState::freeze_ = false;
-  }
+  /// @brief assembles grad. In fact, it is already done in domain residual and
+  /// this doesn't do anything.
+  /// @param current_x
+  virtual void AssembleDomainGrad(const mfem::Vector& current_x) { MIMI_FUNC() }
 };
 
 } // namespace mimi::integrators

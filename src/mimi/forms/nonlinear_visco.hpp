@@ -2,68 +2,28 @@
 
 #include <mfem.hpp>
 
-#include "mimi/integrators/nonlinear_base.hpp"
+#include "mimi/forms/nonlinear.hpp"
+#include "mimi/integrators/nonlinear_visco_solid.hpp"
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::forms {
 /* Extends Mult() to incorporate mimi::integrators::nonloinear_base */
-class Nonlinear : public mfem::NonlinearForm {
+class NonlinearVisco : public Nonlinear {
 public:
-  using Base_ = mfem::NonlinearForm;
-  using NFIPointer_ = std::shared_ptr<mimi::integrators::NonlinearBase>;
+  using Base_ = Nonlinear;
+  using NFVIPointer_ = std::shared_ptr<mimi::integrators::NonlinearViscoSolid>;
 
-  mimi::utils::Vector<NFIPointer_> domain_nfi_{};
-  mimi::utils::Vector<NFIPointer_> boundary_face_nfi_{};
+  mimi::utils::Vector<NFVIPointer_> domain_nfvi_{};
+  mimi::utils::Vector<NFVIPointer_> boundary_face_nfvi_{};
   mimi::utils::Vector<const mfem::Array<int>*> boundary_markers_{};
 
   /// same ctor as base
   using Base_::Base_;
 
-  virtual void AssembleGradOn() {
-    MIMI_FUNC()
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->assemble_grad_ = true;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->assemble_grad_ = true;
-    }
-  }
-
-  virtual void AssembleGradOff() {
-    MIMI_FUNC()
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->assemble_grad_ = false;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->assemble_grad_ = false;
-    }
-  }
-
-  virtual void FreezeStates() {
-    MIMI_FUNC()
-
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->frozen_state_ = true;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->frozen_state_ = true;
-    }
-  }
-
-  virtual void MeltStates() {
-    MIMI_FUNC()
-
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->frozen_state_ = false;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->frozen_state_ = false;
-    }
-  }
-
   /// we skip a lot of checks that's performed by base here
   virtual void Mult(const mfem::Vector& current_x,
+                    const mfem::Vector& current_v,
                     mfem::Vector& residual) const {
     MIMI_FUNC()
 
@@ -71,8 +31,8 @@ public:
 
     // we assemble all first - these will call nthreadexe
     // domain
-    for (auto& domain_integ : domain_nfi_) {
-      domain_integ->AssembleDomainResidual(current_x);
+    for (auto& domain_integ : domain_nfvi_) {
+      domain_integ->AssembleDomainResidual(current_x, current_v);
 
       // add to global
       const auto& el_vecs = *domain_integ->element_vectors_;
@@ -84,8 +44,8 @@ public:
     }
 
     // boundary
-    for (auto& boundary_integ : boundary_face_nfi_) {
-      boundary_integ->AssembleBoundaryResidual(current_x);
+    for (auto& boundary_integ : boundary_face_nfvi_) {
+      boundary_integ->AssembleBoundaryResidual(current_x, current_v);
 
       // add to global
       const auto& bel_vecs = *boundary_integ->boundary_element_vectors_;
@@ -103,7 +63,8 @@ public:
     }
   }
 
-  virtual mfem::Operator& GetGradient(const mfem::Vector& current_x) const {
+  virtual mfem::Operator& GetGradient(const mfem::Vector& current_x,
+                                      const mfem::Vector& current_v) const {
     MIMI_FUNC();
 
     if (Grad == NULL) {
@@ -114,7 +75,7 @@ public:
 
     // we assemble all first - these will call nthreadexe
     // domain
-    for (auto& domain_integ : domain_nfi_) {
+    for (auto& domain_integ : domain_nfvi_) {
       domain_integ->AssembleDomainGrad(current_x);
 
       // add to global
@@ -128,7 +89,7 @@ public:
     }
 
     // boundary
-    for (auto& boundary_integ : boundary_face_nfi_) {
+    for (auto& boundary_integ : boundary_face_nfvi_) {
       boundary_integ->AssembleBoundaryGrad(current_x);
 
       // add to global
@@ -157,17 +118,17 @@ public:
     return *Base_::Grad;
   }
 
-  void AddDomainIntegrator(const NFIPointer_& nlfi) {
+  void AddDomainIntegrator(const NFVIPointer_& nlfi) {
     MIMI_FUNC()
 
-    domain_nfi_.push_back(nlfi);
+    domain_nfvi_.push_back(nlfi);
   }
 
-  void AddBdrFaceIntegrator(const NFIPointer_& nlfi,
+  void AddBdrFaceIntegrator(const NFVIPointer_& nlfi,
                             const mfem::Array<int>* bdr_marker = nullptr) {
     MIMI_FUNC()
 
-    boundary_face_nfi_.push_back(nlfi);
+    boundary_face_nfvi_.push_back(nlfi);
     boundary_markers_.push_back(bdr_marker);
   }
 

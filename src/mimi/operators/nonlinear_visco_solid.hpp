@@ -2,20 +2,22 @@
 
 #include <mfem.hpp>
 
-#include "mimi/operators/linear_elasticity.hpp"
+#include "mimi/form/nonlinear_visco.hpp"
+#include "mimi/operators/nonlinear_solid.hpp"
 
 namespace mimi::operators {
 
-class NonlinearSolid : public LinearElasticity {
+class NonlinearViscoSolid : public NonlinearSolid {
 public:
-  using Base_ = LinearElasticity;
+  using Base_ = NonlinearSolid;
   using MimiBase_ = Base_::MimiBase_;
   using MfemBase_ = Base_::MfemBase_;
   using NonlinearFormPointer_ = MimiBase_::NonlinearFormPointer_;
 
 protected:
-  // nonlinear stiffness -> Base_::stiffness_ ist left untouched here
-  NonlinearFormPointer_ nonlinear_stiffness_;
+  // nonlinear visco stiffness -> Base_::nonlinear_stiffness_ is left untouched
+  // here
+  NonlinearFormPointer_ nonlinear_visco_stiffness_;
 
   // unlike base classes, we will keep one sparse matrix and initialize
   std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
@@ -25,13 +27,9 @@ protected:
   int mass_n_nonzeros_ = -1;
 
 public:
-  /// This is same as Base_'s ctor
-  NonlinearSolid(mfem::FiniteElementSpace& fe_space, mfem::GridFunction* x_ref)
-      : Base_(fe_space, x_ref) {
-    MIMI_FUNC()
-  }
+  using Base_::Base_;
 
-  virtual std::string Name() const { return "NonlinearSolid"; }
+  virtual std::string Name() const { return "NonlinearViscoSolid"; }
 
   /// flag to inform grad assembly is relevant
   virtual void AssembleGradOn() {
@@ -79,10 +77,11 @@ public:
       assert(Base_::viscosity_->SpMat().ColumnsAreSorted());
     }
 
-    nonlinear_stiffness_ =
-        MimiBase_::nonlinear_forms_.at("nonlinear_stiffness");
+    nonlinear_visco_stiffness_ =
+        MimiBase_::nonlinear_forms_.at("nonlinear_visco_stiffness");
 
     assert(!stiffness_);
+    assert(!nonlinear_stiffness_);
 
     // copy jacobian with mass matrix to initialize sparsity pattern
     // technically, we don't have to copy I & J;
@@ -103,8 +102,8 @@ public:
     // Temp vector - allocate
     mfem::Vector z(x.Size());
 
-    // unlike linear elasticity, we give x here
-    nonlinear_stiffness_->Mult(x, z);
+    // unlike nonlinear solids, we give x and x_dot here
+    nonlinear_visco_stiffness_->Mult(x, dx_dt, z);
 
     if (viscosity_) {
       viscosity_->AddMult(dx_dt, z);
@@ -114,11 +113,19 @@ public:
       contact_->AddMult(x, z);
     }
 
+    // substract rhs linear forms
+    if (rhs_) {
+      z += *rhs_;
+    }
+
+    // this is usually just for fsi
+    if (rhs_vector_) {
+      z += *rhs_vector_;
+    }
+
     z.Neg(); // flips sign inplace
 
     mass_inv_.Mult(z, d2x_dt2);
-
-    // TODO - Flo, I think I am missing rhs_ here?
   }
 
   /// @brief used by 2nd order implicit time stepper (ode solver)
@@ -154,13 +161,14 @@ public:
     mfem::Vector temp_x(x_->Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
+    mfem::Vector temp_v(v_->Size());
+    add(*v_, fac1_, d2x_dt2, temp_v);
+
     mass_->Mult(d2x_dt2, y);
 
-    nonlinear_stiffness_->AddMult(temp_x, y);
+    nonlinear_visco_stiffness_->AddMult(temp_x, temp_v, y);
 
     if (viscosity_) {
-      mfem::Vector temp_v(v_->Size());
-      add(*v_, fac1_, d2x_dt2, temp_v);
       viscosity_->AddMult(temp_v, y);
     }
 
@@ -187,6 +195,10 @@ public:
     mfem::Vector temp_x(d2x_dt2.Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
+    // if we just assemble grad during residual, we can remove this
+    mfem::Vector temp_v(v_->Size());
+    add(*v_, fac1_, d2x_dt2, temp_v);
+
     // NOTE, if all the values are sorted, we can do nthread local to global
     // update
 
@@ -195,9 +207,10 @@ public:
     std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
 
     // 2. nonlinear stiffness
-    jacobian_->Add(fac0_,
-                   *dynamic_cast<mfem::SparseMatrix*>(
-                       &nonlinear_stiffness_->GetGradient(temp_x)));
+    jacobian_->Add(
+        fac0_,
+        *dynamic_cast<mfem::SparseMatrix*>(
+            &nonlinear_visco_stiffness_->GetGradient(temp_x, temp_v)));
 
     // 3. viscosity
     if (viscosity_) {

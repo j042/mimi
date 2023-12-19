@@ -5,6 +5,10 @@
 #include "mimi/utils/ad.hpp"
 #include "mimi/utils/print.hpp"
 
+namespace mimi::operators {
+class NonlinearSolid;
+}
+
 namespace mimi::solvers {
 
 /// @brief alias to mfem's newton solver
@@ -16,7 +20,10 @@ public:
 
   using Base_::Base_;
 
-  /// @brief implements scaling factor usine line search adapted from
+  /// pointer to nl oper to
+  mimi::operators::NonlinearSolid* nl_oper_{nullptr};
+
+  /// @brief implements scaling factor using line search adapted from
   /// https://github.com/LLNL/ExaConstit/blob/exaconstit-dev/src/mechanics_solver.cpp
   /// @param x
   /// @param b

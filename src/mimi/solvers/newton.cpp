@@ -1,11 +1,17 @@
 #include "mimi/solvers/newton.hpp"
 
 #include "mimi/integrators/materials.hpp"
+#include "mimi/operators/nonlinear_solid.hpp"
 
 namespace mimi::solvers {
 
 void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
   MIMI_FUNC()
+
+  // now, line search
+  // turn off the (plastic) state accumulation
+  if (nl_oper_)
+    nl_oper_->FreezeStates();
 
   int it;
   double norm0, norm, norm_goal;
@@ -17,7 +23,12 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
   }
 
   // get residual
+  if (nl_oper_)
+    nl_oper_->AssembleGradOn();
   Base_::oper->Mult(x, Base_::r);
+  if (nl_oper_)
+    nl_oper_->AssembleGradOff();
+
   if (have_b) {
     r -= b;
   }
@@ -75,9 +86,6 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
       AdaptiveLinRtolPostSolve(c, Base_::r, it, norm);
     }
 
-    // now, line search
-    // turn off the (plastic) state accumulation
-    mimi::integrators::MaterialState::freeze_ = true;
     mfem::Vector tmp_x(x); // copy init
 
     // full step
@@ -98,9 +106,6 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
       Base_::r -= b;
     }
     const double q2 = Base_::Norm(Base_::r);
-
-    // line search mult finished - unfreeze
-    mimi::integrators::MaterialState::freeze_ = false;
 
     const double eps =
         (3.0 * q1 - 4.0 * q2 + q3) / (4.0 * (q1 - 2.0 * q2 + q3));
@@ -126,8 +131,12 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     // update solution
     add(x, -scale, Base_::c, x);
 
-    // get current residual
+    // get current residual - also one used for next iteration
+    if (nl_oper_)
+      nl_oper_->AssembleGradOn();
     Base_::oper->Mult(x, Base_::r);
+    if (nl_oper_)
+      nl_oper_->AssembleGradOff();
     if (have_b) {
       Base_::r -= b;
     }
@@ -135,6 +144,13 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     // current norm
     norm = Base_::Norm(Base_::r);
   }
+
+  // residual one last time -> This is going to the exactly the same as the last
+  // assembly, but this time, we accumulate state better to come up with more
+  // efficient way to do this
+  if (nl_oper_)
+    nl_oper_->MeltStates();
+  Base_::oper->Mult(x, Base_::r);
 
   Base_::final_iter = it;
   Base_::final_norm = norm;
