@@ -99,9 +99,9 @@ public:
   /// So we create one for each thread
   struct TemporaryData {
     /// wraps element_state_data_
-    mfem::Vector element_state_;
-    /// wraps element_state_
-    mfem::DenseMatrix element_state_view_;
+    mfem::Vector element_x_;
+    /// wraps element_x_
+    mfem::DenseMatrix element_x_mat_;
     /// wraps stress_data
     mfem::DenseMatrix stress_;
     /// wraps dN_dx_data
@@ -116,13 +116,13 @@ public:
     mfem::DenseMatrix backward_residual_;
 
     /// @brief
-    /// @param element_state_data
+    /// @param element_x_data
     /// @param stress_data
     /// @param dN_dx_data
     /// @param F_data
     /// @param F_inv_data
     /// @param dim
-    void SetData(double* element_state_data,
+    void SetData(double* element_x_data,
                  double* stress_data,
                  double* dN_dx_data,
                  double* F_data,
@@ -132,8 +132,8 @@ public:
                  const int dim) {
       MIMI_FUNC()
 
-      element_state_.SetDataAndSize(element_state_data, kMaxTrueDof);
-      element_state_view_.UseExternalData(element_state_data, kMaxTrueDof, 1);
+      element_x_.SetDataAndSize(element_x_data, kMaxTrueDof);
+      element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
       stress_.UseExternalData(stress_data, dim, dim);
       dN_dx_.UseExternalData(dN_dx_data, kMaxTrueDof, 1);
       F_.UseExternalData(F_data, dim, dim);
@@ -147,7 +147,7 @@ public:
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
 
-      element_state_view_.SetSize(n_dof, dim);
+      element_x_mat_.SetSize(n_dof, dim);
       dN_dx_.SetSize(n_dof, dim);
       forward_residual_.SetSize(n_dof, dim);
       backward_residual_.SetSize(n_dof, dim);
@@ -158,8 +158,8 @@ public:
                                const ElementData& elem_data) {
       MIMI_FUNC()
 
-      current_all.GetSubVector(*elem_data.v_dofs_, element_state_);
-      return element_state_view_;
+      current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
+      return element_x_mat_;
     }
   };
 
@@ -342,14 +342,14 @@ public:
         [&](const int begin, const int end, const int i_thread) {
           TemporaryData tmp;
           // create some space in stack
-          double element_state_data[kMaxTrueDof];
+          double element_x_data[kMaxTrueDof];
           double stress_data[kDimDim];
           double dN_dx_data[kMaxTrueDof];
           double F_data[kDimDim];
           double F_inv_data[kDimDim];
           double fd_forward_data[kMaxTrueDof];
           double fd_backward_data[kMaxTrueDof];
-          tmp.SetData(element_state_data,
+          tmp.SetData(element_x_data,
                       stress_data,
                       dN_dx_data,
                       F_data,
@@ -367,7 +367,7 @@ public:
             tmp.SetShape(e.n_dof_, dim_);
 
             // get current element solution as matrix
-            mfem::DenseMatrix& current_solution =
+            mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
             if (frozen_state_) {
@@ -381,7 +381,7 @@ public:
               assert(frozen_state_);
 
               double* grad_data = e.grad_view_.GetData();
-              double* solution_data = current_solution.GetData();
+              double* solution_data = current_element_x.GetData();
               for (int j{}; j < e.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
                 tmp.backward_residual_ = 0.0;
@@ -392,14 +392,14 @@ public:
                 const double two_diff_step_inv = 1. / (2.0 * diff_step);
 
                 with_respect_to = orig_wrt + diff_step;
-                QuadLoop(current_solution,
+                QuadLoop(current_element_x,
                          i_thread,
                          e.quad_data_,
                          tmp,
                          tmp.forward_residual_);
 
                 with_respect_to = orig_wrt - diff_step;
-                QuadLoop(current_solution,
+                QuadLoop(current_element_x,
                          i_thread,
                          e.quad_data_,
                          tmp,
@@ -414,7 +414,7 @@ public:
             }
 
             // assemble residual
-            QuadLoop(current_solution,
+            QuadLoop(current_element_x,
                      i_thread,
                      e.quad_data_,
                      tmp,

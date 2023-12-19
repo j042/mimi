@@ -23,7 +23,7 @@ public:
   /// pointer to nl oper to
   mimi::operators::NonlinearSolid* nl_oper_{nullptr};
 
-  /// @brief implements scaling factor usine line search adapted from
+  /// @brief implements scaling factor using line search adapted from
   /// https://github.com/LLNL/ExaConstit/blob/exaconstit-dev/src/mechanics_solver.cpp
   /// @param x
   /// @param b

@@ -19,16 +19,86 @@ public:
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
 
-  using Base_::Base_;
-
   struct TemporaryData : Base_::TemporaryData {
-    mfem::F_dot_;
+    using BaseTD_ = Base_::TemporaryData;
+    using BaseTD_::backward_residual_;
+    using BaseTD_::dN_dx_;
+    using BaseTD_::element_x_;     // x
+    using BaseTD_::element_x_mat_; // x as matrix
+    using BaseTD_::F_;
+    using BaseTD_::F_inv_;
+    using BaseTD_::forward_residual_;
+    using BaseTD_::stress_;
 
-    void SetData
+    mfem::Vector element_v_;          // v
+    mfem::DenseMatrix element_v_mat_; // v as matrix
+    mfem::DenseMatrix F_dot_;
 
-        using Base_::SetShape;
-    using Base_::CurrentElementSolutionCopy;
+    /// @brief
+    /// @param element_x_data
+    /// @param stress_data
+    /// @param dN_dx_data
+    /// @param F_data
+    /// @param F_inv_data
+    /// @param F_dot_data
+    /// @param dim
+    void SetData(double* element_x_data,
+                 double* element_v_data,
+                 double* stress_data,
+                 double* dN_dx_data,
+                 double* F_data,
+                 double* F_inv_data,
+                 double* F_dot_data,
+                 double* forward_residual_data,
+                 double* backward_residual_data,
+                 const int dim) {
+      MIMI_FUNC()
+
+      // use base' for overlapping variables
+      BaseTD_::SetData(element_x_data,
+                       stress_data,
+                       dN_dx_data,
+                       F_data,
+                       F_inv_data,
+                       forward_residual_data,
+                       backward_residual_data,
+                       dim);
+
+      element_v_.SetDataAndSize(element_v_data, kMaxTrueDof);
+      element_v_mat_.UseExternalData(element_v_data, kMaxTrueDof, 1);
+      F_dot_.UseExternalData(F_dot_data, dim, dim);
+    }
+
+    void SetShape(const int n_dof, const int dim) {
+      MIMI_FUNC()
+
+      element_x_mat_.SetSize(n_dof, dim);
+      element_v_mat_.SetSize(n_dof, dim);
+      dN_dx_.SetSize(n_dof, dim);
+      forward_residual_.SetSize(n_dof, dim);
+      backward_residual_.SetSize(n_dof, dim);
+    }
+
+    void CurrentElementSolutionCopy(const mfem::Vector& all_x,
+                                    const mfem::Vector& all_v,
+                                    const ElementData& elem_data) {
+      MIMI_FUNC()
+
+      const double* all_x_data = all_x.GetData();
+      const double* all_v_data = all_v.GetData();
+
+      double* elem_x_data = element_x_.GetData();
+      double* elem_v_data = element_v_.GetData();
+
+      for (const int& vdof : *elem_data.v_dofs_) {
+        *elem_x_data++ = all_x_data[vdof];
+        *elem_v_data++ = all_v_data[vdof];
+      }
+    }
   };
+
+  /// inherit ctor
+  Base_::Base_;
 
   /// This one needs / stores
   /// - basis(shape) function derivative (at reference)
@@ -61,6 +131,7 @@ public:
                              i_thread,
                              q.material_state_,
                              tmp.stress_);
+
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,
                           tmp.stress_,
@@ -72,7 +143,103 @@ public:
                                       const mfem::Vector& current_v) {
     MIMI_FUNC()
 
-    auto assemble_element_residual_and_maybe_grad
+    auto assemble_element_residual_and_maybe_grad =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          // create some space in stack
+          double element_x_data[kMaxTrueDof];
+          double element_v_data[kMaxTrueDof];
+          double stress_data[kDimDim];
+          double dN_dx_data[kMaxTrueDof];
+          double F_data[kDimDim];
+          double F_inv_data[kDimDim];
+          double F_dot_data[kDimDim];
+          double fd_forward_data[kMaxTrueDof];
+          double fd_backward_data[kMaxTrueDof];
+          tmp.SetData(element_x_data,
+                      element_v_data,
+                      stress_data,
+                      dN_dx_data,
+                      F_data,
+                      F_inv_data,
+                      F_dot_data,
+                      fd_forward_data,
+                      fd_backward_data,
+                      dim_);
+
+          for (int i{begin}; i < end; ++i) {
+            // in
+            ElementData& e = element_data_[i];
+            e.residual_view_ = 0.0;
+
+            // set shape for tmp data
+            tmp.SetShape(e.n_dof_, dim_);
+
+            // get current element solution as matrix
+            tmp.CurrentElementSolutionCopy(current_x, current_v, e);
+
+            // get element state view
+            mfem::DenseMatrix& current_element_x = tmp.element_x_mat_;
+            mfem::DenseMatrix& current_element_v = tmp.element_v_mat_;
+
+            if (frozen_state_) {
+              e.FreezeStates();
+            } else {
+              e.MeltStates();
+            }
+
+            // assembly grad with FD - currently we only change x value.
+            if (assemble_grad_) {
+              assert(frozen_state_);
+
+              double* grad_data = e.grad_view_.GetData();
+              double* solution_data = current_element_x.GetData();
+              for (int j{}; j < e.n_tdof_; ++j) {
+                tmp.forward_residual_ = 0.0;
+                tmp.backward_residual_ = 0.0;
+
+                double& with_respect_to = *solution_data++;
+                const double orig_wrt = with_respect_to;
+                const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+                const double two_diff_step_inv = 1. / (2.0 * diff_step);
+
+                with_respect_to = orig_wrt + diff_step;
+                QuadLoop(current_element_x,
+                         current_element_v,
+                         i_thread,
+                         e.quad_data_,
+                         tmp,
+                         tmp.forward_residual_);
+
+                with_respect_to = orig_wrt - diff_step;
+                QuadLoop(current_element_x,
+                         current_element_v,
+                         i_thread,
+                         e.quad_data_,
+                         tmp,
+                         tmp.backward_residual_);
+
+                for (int k{}; k < e.n_tdof_; ++k) {
+                  *grad_data++ = (fd_forward_data[k] - fd_backward_data[k])
+                                 * two_diff_step_inv;
+                }
+                with_respect_to = orig_wrt;
+              }
+            }
+
+            // assemble residual
+            QuadLoop(current_element_x,
+                     current_element_v,
+                     i_thread,
+                     e.quad_data_,
+                     tmp,
+                     e.residual_view_);
+          }
+        };
+
+    mimi::utils::NThreadExe(assemble_element_residual_and_maybe_grad,
+                            element_vectors_->size(),
+                            n_threads_);
   }
 };
 

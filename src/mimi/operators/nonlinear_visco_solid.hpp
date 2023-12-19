@@ -126,8 +126,6 @@ public:
     z.Neg(); // flips sign inplace
 
     mass_inv_.Mult(z, d2x_dt2);
-
-    // TODO - Flo, I think I am missing rhs_ here?
   }
 
   /// @brief used by 2nd order implicit time stepper (ode solver)
