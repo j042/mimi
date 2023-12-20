@@ -554,6 +554,19 @@ public:
 
 struct HardeningBase {
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
+
+  std::string Name() const { return "HardeningBase"; }
+
+  bool IsRateDependent() const { return false; }
+
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain,
+           const ADScalar_& equivalent_plastic_strain_rate) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "HardeningBase::Evaluate (rate-dependent) not overriden");
+    return {};
+  }
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
@@ -575,6 +588,8 @@ struct PowerLawHardening : public HardeningBase {
   double n_;
   double eps0_;
 
+  std::string Name() const { return "PowerLawHardening"; }
+
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
@@ -592,6 +607,8 @@ struct VoceHardening : public HardeningBase {
   double sigma_y_;
   double sigma_sat_;
   double strain_constant_;
+
+  std::string Name() const { return "VoceHardening"; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
@@ -612,6 +629,8 @@ struct JohnsonCookHardening : public HardeningBase {
   double A_;
   double B_;
   double n_;
+
+  std::string Name() const { return "JohnsonCookHardening"; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
@@ -792,6 +811,37 @@ public:
   }
 };
 
+struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
+  using Base_ = JohnsonCookHardening;
+  using ADScalar_ = Base_::ADScalar_;
+
+  using Base_::A_;
+  using Base_::B_;
+  using Base_::n_;
+  double C_;
+  // several ways to call this
+  // Jannis calls this reference strain rate
+  // wikipedia call this:
+  double effective_plastic_strain_rate_;
+
+  /// @brief  this is a long name for a hardening model
+  /// @return
+  std::string Name() const { return "JohnsonCookRateDependentHardening"; }
+
+  bool IsRateDependent() const { return true; }
+
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain,
+           const ADScalar_& equivalent_plastic_strain_rate) const {
+    MIMI_FUNC()
+    return Evaluate(accumulated_plastic_strain)
+           * (1.0
+              + (C_
+                 * std::log(equivalent_plastic_strain_rate
+                            / effective_plastic_strain_rate_)));
+  }
+};
+
 /// @brief Computational Methods for plasticity p260, box 7.5
 /// specialized for visco plasticity.
 /// Then eta = s, instead of eta = s - beta
@@ -862,6 +912,16 @@ public:
 
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
+
+    // check if this is an appropriate hardening.
+    if (hardening_) {
+      if (!hardening_->IsRateDependent()) {
+        mimi::utils::PrintAndThrowError(hardening_->Name(),
+                                        "is not rate-dependent.");
+      }
+    } else {
+      mimi::utils::PrintAndThrowError("hardening missing for", Name());
+    }
 
     // I
     I_.Diag(1., dim);
