@@ -271,13 +271,13 @@ public:
     // setup solvers
     // setup linear solver - should try SUNDIALS::SuperLU_mt
     auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
-    Base_::linear_solvers_["nonlinear_solid"] = lin_solver;
+    Base_::linear_solvers_["nonlinear_visco_solid"] = lin_solver;
 
     // setup a newton solver
     auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
     // give pointer of nl oper to control line search assembly
     newton->nl_oper_ = nl_oper.get();
-    Base_::newton_solvers_["nonlinear_solid"] = newton;
+    Base_::newton_solvers_["nonlinear_visco_solid"] = newton;
     // basic config. you can change this using ConfigureNewton()
     newton->iterative_mode = false;
     newton->SetOperator(*nl_oper);
