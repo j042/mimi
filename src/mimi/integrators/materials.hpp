@@ -842,6 +842,8 @@ protected:
   static constexpr const int k_s{1};
   /// N_p
   static constexpr const int k_N_p{2};
+  /// eps dot - strain rate
+  static constexpr const int k_eps_dot{3};
 
 public:
   virtual std::string Name() const { return "J2NonlinearVisco"; }
@@ -871,7 +873,7 @@ public:
     /// make space for du_dX
     aux_matrices_.resize(
         n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+        Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
