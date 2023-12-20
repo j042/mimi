@@ -17,7 +17,7 @@ public:
   /// @brief coefficient used for contact formulation
   double coefficient_{1e4};
   /// @brief tolerance for nearest search
-  double tolerance_{1e-12};
+  double tolerance_{1e-18};
   /// @brief parametric dimension of the scene
   int para_dim_{-1};
   /// @brief physical dimension of the scene
@@ -146,7 +146,7 @@ public:
           query.query_.data(),
           tolerance_,
           query.max_iterations_,
-          false, /* aggressive_bounds */
+          true, /* aggressive_bounds */
           results.parametric_.data(),
           results.physical_.data(),
           results.physical_minus_query_.data(),
