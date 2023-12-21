@@ -892,7 +892,7 @@ protected:
   static constexpr const int k_s{1};
   /// N_p
   static constexpr const int k_N_p{2};
-  /// eps dot - strain rate
+  /// eps dot (plastic strain rate)
   static constexpr const int k_eps_dot{3};
 
 public:
@@ -972,6 +972,7 @@ public:
     mfem::DenseMatrix& eps = i_aux[k_eps];
     mfem::DenseMatrix& s = i_aux[k_s];
     mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    mfem::DenseMatrix& eps_dot = i_aux[k_eps_dot];
 
     // get states
     mfem::DenseMatrix& plastic_strain =
