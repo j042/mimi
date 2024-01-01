@@ -15,10 +15,11 @@ nl.subdivide(3)
 mat = mimi.PyJ2NonlinearIsotropicHardening()
 mat.density = 1
 
-
 mat.viscosity = 10
-mat.lambda_ = 790000 - (79000 * 2 / 3)
-mat.mu = 79000
+#mat.lambda_ = 790000 - (79000 * 2 / 3)
+#mat.mu = 79000
+mat.poisson = 0.3
+mat.young = 200000
 
 mat.hardening = mimi.PyJohnsonCookHardening()
 mat.hardening.A = 100

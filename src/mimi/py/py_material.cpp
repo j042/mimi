@@ -31,6 +31,8 @@ void init_py_material(py::module_& m) {
       .def_readwrite("viscosity", &MaterialBase::viscosity_)
       .def_readwrite("lambda_", &MaterialBase::lambda_)
       .def_readwrite("mu", &MaterialBase::mu_)
+      .def_readwrite("young", &MaterialBase::young_)
+      .def_readwrite("poisson", &MaterialBase::poisson_)
       .def("uses_cauchy", &MaterialBase::UsesCauchy);
 
   py::class_<StVK, std::shared_ptr<StVK>, MaterialBase> stvk(
