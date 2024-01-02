@@ -832,7 +832,7 @@ struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
   Evaluate(const ADScalar_& accumulated_plastic_strain,
            const double& equivalent_plastic_strain_rate) const {
     MIMI_FUNC()
-    return Evaluate(accumulated_plastic_strain)
+    return Base_::Evaluate(accumulated_plastic_strain)
            * (1.0
               + (C_
                  * std::log(equivalent_plastic_strain_rate
@@ -1060,7 +1060,7 @@ public:
 
     const double tolerance = hardening_->SigmaY() * k_tol;
 
-    if (residual(0.0, q) > tolerance) {
+    if (residual(0.0) > tolerance) {
       /// return mapping
       mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
                                               .rtol = tolerance,
