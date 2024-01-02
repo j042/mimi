@@ -861,7 +861,7 @@ inline double EquivalentPlasticStrainRate2D(const mfem::DenseMatrix& F_dot) {
       + 1. / 3. * gamma * gamma);
 }
 
-/// @brief sqrt(3/2  s_ij  s_ij)
+/// @brief sqrt(2/3  s_dot_ij  s_dot_ij)
 /// @param F_dot
 /// @return
 inline double EquivalentPlasticStrainRate(const mfem::DenseMatrix& F_dot) {
