@@ -817,7 +817,7 @@ public:
 /// Considers nonlinear Isotropic hardening
 ///
 ///
-class linearVisco : public MaterialBase {
+class J2NonlinearVisco : public MaterialBase {
 public:
   using Base_ = MaterialBase;
   using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
@@ -859,7 +859,7 @@ protected:
   static constexpr const int k_N_p{2};
 
 public:
-  virtual std::string Name() const { return "linearVisco"; }
+  virtual std::string Name() const { return "J2NonlinearVisco"; }
 
   /// answers if this material is suitable for visco-solids.
   virtual bool IsRateDependent() const { return true; }
