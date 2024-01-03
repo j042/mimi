@@ -21,6 +21,48 @@ public:
   /// same ctor as base
   using Base_::Base_;
 
+  virtual void AssembleGradOn() {
+    MIMI_FUNC()
+    for (auto& dnfi : domain_nfvi_) {
+      dnfi->assemble_grad_ = true;
+    }
+    for (auto& bnfi : boundary_face_nfvi_) {
+      bnfi->assemble_grad_ = true;
+    }
+  }
+
+  virtual void AssembleGradOff() {
+    MIMI_FUNC()
+    for (auto& dnfi : domain_nfvi_) {
+      dnfi->assemble_grad_ = false;
+    }
+    for (auto& bnfi : boundary_face_nfvi_) {
+      bnfi->assemble_grad_ = false;
+    }
+  }
+
+  virtual void FreezeStates() {
+    MIMI_FUNC()
+
+    for (auto& dnfi : domain_nfvi_) {
+      dnfi->frozen_state_ = true;
+    }
+    for (auto& bnfi : boundary_face_nfvi_) {
+      bnfi->frozen_state_ = true;
+    }
+  }
+
+  virtual void MeltStates() {
+    MIMI_FUNC()
+
+    for (auto& dnfi : domain_nfvi_) {
+      dnfi->frozen_state_ = false;
+    }
+    for (auto& bnfi : boundary_face_nfvi_) {
+      bnfi->frozen_state_ = false;
+    }
+  }
+
   /// we skip a lot of checks that's performed by base here
   virtual void Mult(const mfem::Vector& current_x,
                     const mfem::Vector& current_v,

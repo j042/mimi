@@ -94,9 +94,9 @@ public:
     Base_::FindBoundaryDofIds();
 
     // creating operators
-    auto nl_oper =
-        std::make_unique<mimi::operators::NonlinearSolid>(*disp_fes.fe_space_,
-                                                          &x_ref);
+    auto nl_oper = std::make_unique<mimi::operators::NonlinearViscoSolid>(
+        *disp_fes.fe_space_,
+        &x_ref);
 
     // let's setup the system
     // create dummy sparse matrix - mfem just sets referencee, so no copies are
@@ -158,7 +158,7 @@ public:
 
     // nlform
     auto nonlinear_stiffness =
-        std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
+        std::make_shared<mimi::forms::NonlinearVisco>(disp_fes.fe_space_.get());
     // add it to operator
     nl_oper->AddNonlinearForm("nonlinear_visco_stiffness", nonlinear_stiffness);
     // create integrator

@@ -106,7 +106,7 @@ void init_py_material(py::module_& m) {
       jc_visco(m, "PyJohnsonCookViscoHardening");
   jc_visco.def(py::init<>())
       .def_readwrite("C", &JCViscoHardening::C_)
-      .def_readwrite("eps_dot0",
+      .def_readwrite("eps0_dot",
                      &JCViscoHardening::effective_plastic_strain_rate_);
 
   py::class_<J2NonlinVisco, std::shared_ptr<J2NonlinVisco>, MaterialBase>

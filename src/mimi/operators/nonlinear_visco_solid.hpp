@@ -34,25 +34,25 @@ public:
   /// flag to inform grad assembly is relevant
   virtual void AssembleGradOn() {
     MIMI_FUNC()
-    nonlinear_stiffness_->AssembleGradOn();
+    nonlinear_visco_stiffness_->AssembleGradOn();
   }
 
   /// flag to inform grad assembly is NOT relevant
   virtual void AssembleGradOff() {
     MIMI_FUNC()
-    nonlinear_stiffness_->AssembleGradOff();
+    nonlinear_visco_stiffness_->AssembleGradOff();
   }
 
   /// freeze material states - no accumulation
   virtual void FreezeStates() {
     MIMI_FUNC()
-    nonlinear_stiffness_->FreezeStates();
+    nonlinear_visco_stiffness_->FreezeStates();
   }
 
   /// track material states - accumulation
   virtual void MeltStates() {
     MIMI_FUNC()
-    nonlinear_stiffness_->MeltStates();
+    nonlinear_visco_stiffness_->MeltStates();
   }
 
   virtual void Setup() {

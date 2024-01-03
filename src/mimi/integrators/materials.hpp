@@ -555,9 +555,9 @@ public:
 struct HardeningBase {
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
 
-  std::string Name() const { return "HardeningBase"; }
+  virtual std::string Name() const { return "HardeningBase"; }
 
-  bool IsRateDependent() const { return false; }
+  virtual bool IsRateDependent() const { return false; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain,
@@ -588,7 +588,7 @@ struct PowerLawHardening : public HardeningBase {
   double n_;
   double eps0_;
 
-  std::string Name() const { return "PowerLawHardening"; }
+  virtual std::string Name() const { return "PowerLawHardening"; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
@@ -608,7 +608,7 @@ struct VoceHardening : public HardeningBase {
   double sigma_sat_;
   double strain_constant_;
 
-  std::string Name() const { return "VoceHardening"; }
+  virtual std::string Name() const { return "VoceHardening"; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
@@ -630,7 +630,7 @@ struct JohnsonCookHardening : public HardeningBase {
   double B_;
   double n_;
 
-  std::string Name() const { return "JohnsonCookHardening"; }
+  virtual std::string Name() const { return "JohnsonCookHardening"; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
@@ -765,15 +765,14 @@ public:
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    auto residual = [eqps_old, *this](auto delta_eqps,
-                                      auto trial_mises) -> ADScalar_ {
-      return trial_mises - 3.0 * G_ * delta_eqps
+    auto residual = [eqps_old, q, *this](auto delta_eqps) -> ADScalar_ {
+      return q - 3.0 * G_ * delta_eqps
              - hardening_->Evaluate(eqps_old + delta_eqps);
     };
 
     const double tolerance = hardening_->SigmaY() * k_tol;
 
-    if (residual(0.0, q) > tolerance) {
+    if (residual(0.0) > tolerance) {
       /// return mapping
       mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
                                               .rtol = tolerance,
@@ -786,8 +785,7 @@ public:
                                                            0.0,
                                                            lower_bound,
                                                            upper_bound,
-                                                           opts,
-                                                           q);
+                                                           opts);
       // compute sqrt(3/2) * eta / norm(eta)
       // this term is use for both s and plastic strain
       // this is equivalent to
@@ -824,19 +822,27 @@ struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
 
   /// @brief  this is a long name for a hardening model
   /// @return
-  std::string Name() const { return "JohnsonCookRateDependentHardening"; }
+  virtual std::string Name() const {
+    return "JohnsonCookRateDependentHardening";
+  }
 
-  bool IsRateDependent() const { return true; }
+  virtual bool IsRateDependent() const { return true; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain,
            const double& equivalent_plastic_strain_rate) const {
     MIMI_FUNC()
+
+    double visco_contribution{};
+    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
+      std::cout << "vc!\n";
+      visco_contribution = C_
+                           * std::log(equivalent_plastic_strain_rate
+                                      / effective_plastic_strain_rate_);
+    }
+
     return Base_::Evaluate(accumulated_plastic_strain)
-           * (1.0
-              + (C_
-                 * std::log(equivalent_plastic_strain_rate
-                            / effective_plastic_strain_rate_)));
+           * (1.0 + visco_contribution);
   }
 };
 
@@ -1052,6 +1058,7 @@ public:
                                          : EquivalentPlasticStrainRate(F_dot);
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
+
     auto residual =
         [eqps_old, eqps_rate, q, *this](auto delta_eqps) -> ADScalar_ {
       return q - 3.0 * G_ * delta_eqps
