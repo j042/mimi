@@ -29,6 +29,14 @@ public:
 
     residual = 0.0;
 
+    AddMult(current_x, current_v, residual);
+  }
+
+  virtual void AddMult(const mfem::Vector& current_x,
+                       const mfem::Vector& current_v,
+                       mfem::Vector& residual) const {
+    MIMI_FUNC()
+
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfvi_) {

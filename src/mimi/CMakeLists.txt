@@ -7,6 +7,7 @@ set(SRCS
     py/py_nonlinear_form.cpp
     py/py_material.cpp
     py/py_nonlinear_solid.cpp
+    py/py_nonlinear_visco_solid.cpp
     py/py_ad.cpp
     py/mimi.cpp)
 

@@ -98,7 +98,7 @@ public:
   };
 
   /// inherit ctor
-  Base_::Base_;
+  using Base_::Base_;
 
   /// This one needs / stores
   /// - basis(shape) function derivative (at reference)
@@ -241,6 +241,10 @@ public:
                             element_vectors_->size(),
                             n_threads_);
   }
+
+  /// just as base
+  virtual void AssembleBoundaryResidual(const mfem::Vector& current_x,
+                                        const mfem::Vector& current_v) {}
 };
 
 } // namespace mimi::integrators

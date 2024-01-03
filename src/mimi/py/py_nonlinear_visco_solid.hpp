@@ -19,7 +19,7 @@ public:
 
   MaterialPointer_ material_;
 
-  PyNonlinearSolid() = default;
+  PyNonlinearViscoSolid() = default;
 
   virtual void SetMaterial(const MaterialPointer_& material) {
     MIMI_FUNC()

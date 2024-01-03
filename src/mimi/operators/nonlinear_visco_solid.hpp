@@ -2,7 +2,7 @@
 
 #include <mfem.hpp>
 
-#include "mimi/form/nonlinear_visco.hpp"
+#include "mimi/forms/nonlinear_visco.hpp"
 #include "mimi/operators/nonlinear_solid.hpp"
 
 namespace mimi::operators {
@@ -12,7 +12,7 @@ public:
   using Base_ = NonlinearSolid;
   using MimiBase_ = Base_::MimiBase_;
   using MfemBase_ = Base_::MfemBase_;
-  using NonlinearFormPointer_ = MimiBase_::NonlinearFormPointer_;
+  using NonlinearFormPointer_ = std::shared_ptr<mimi::forms::NonlinearVisco>;
 
 protected:
   // nonlinear visco stiffness -> Base_::nonlinear_stiffness_ is left untouched
@@ -78,10 +78,12 @@ public:
     }
 
     nonlinear_visco_stiffness_ =
-        MimiBase_::nonlinear_forms_.at("nonlinear_visco_stiffness");
+        std::dynamic_pointer_cast<NonlinearFormPointer_::element_type>(
+            MimiBase_::nonlinear_forms_.at("nonlinear_visco_stiffness"));
 
     assert(!stiffness_);
     assert(!nonlinear_stiffness_);
+    assert(nonlinear_visco_stiffness_);
 
     // copy jacobian with mass matrix to initialize sparsity pattern
     // technically, we don't have to copy I & J;
