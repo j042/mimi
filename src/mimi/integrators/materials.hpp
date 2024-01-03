@@ -62,6 +62,18 @@ public:
 
   virtual std::string Name() const { return "MaterialBase"; }
 
+  /// defining the material properties #1
+  virtual void set_young_poisson(const double young, const double poisson){
+    lambda_ = young / (3.0 * (1.0 - (2.0 * poisson)));
+    mu_ = young / (2.0 * (1.0 + poisson));
+  }
+
+  /// defining the material properties #2
+  virtual void set_lame(const double lambda, const double mu){
+    lambda_ = lambda;
+    mu_ = mu;
+  }
+
   /// self setup. will be called once.
   /// unless you want to do it your self, call this one.
   /// before you extend Setup.
@@ -697,12 +709,6 @@ public:
     // I
     I_.Diag(1., dim);
 
-    if (young_ != -1 && poisson_ != -1) {
-      //std::tie(mu_, lambda_) = mimi::utils::ToLambdaAndMu(young_, poisson_);
-      lambda_ = young_ / (3.0 * (1.0 - (2.0 * poisson_)));
-      mu_ = young_ / (2.0 * (1.0 + poisson_));
-    } 
-
     // match variable name with the literature
     K_ = lambda_ + (2 * mu_ / 3);
     G_ = mu_;
@@ -811,7 +817,7 @@ public:
 /// Considers nonlinear Isotropic hardening
 ///
 ///
-class J2NonlinearVisco : public MaterialBase {
+class linearVisco : public MaterialBase {
 public:
   using Base_ = MaterialBase;
   using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
@@ -853,7 +859,7 @@ protected:
   static constexpr const int k_N_p{2};
 
 public:
-  virtual std::string Name() const { return "J2NonlinearVisco"; }
+  virtual std::string Name() const { return "linearVisco"; }
 
   /// answers if this material is suitable for visco-solids.
   virtual bool IsRateDependent() const { return true; }
