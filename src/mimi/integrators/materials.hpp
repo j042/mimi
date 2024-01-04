@@ -38,6 +38,9 @@ protected:
   int dim_;
   int n_threads_;
 
+  /// I want to be thread-safe. Don't touch me after Setup
+  mfem::DenseMatrix I_;
+
   /// those tmp/aux containers needs to be initialized in Setup
   /// for thread safe use.
   Vector_<Vector_<mfem::DenseMatrix>> aux_matrices_;
@@ -72,6 +75,8 @@ public:
     stress_conversions_.resize(
         n_threads_,
         Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+
+    I_.Diag(1., dim);
   }
 
   /// answers if this material is suitable for visco-solids.
@@ -186,9 +191,6 @@ public:
   using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
 
 protected:
-  /// I am thread-safe. Don't touch me after Setup
-  mfem::DenseMatrix I_;
-
   /// just for lookup index
   static constexpr const int k_C{0};
   static constexpr const int k_E{1};
@@ -208,9 +210,6 @@ public:
 
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
-
-    // I
-    I_.Diag(1., dim);
 
     /// make space for C F S
     aux_matrices_.resize(
@@ -253,9 +252,6 @@ public:
   using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
 
 protected:
-  /// I am thread-safe. Don't touch me after Setup
-  mfem::DenseMatrix I_;
-
   /// just for lookup index
   static constexpr const int k_B{0};
 
@@ -273,9 +269,6 @@ public:
 
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
-
-    // I
-    I_.Diag(1., dim);
 
     /// make space for C F S
     aux_matrices_.resize(
@@ -341,9 +334,6 @@ public:
   };
 
 protected:
-  /// I am thread-safe. Don't touch me after Setup
-  mfem::DenseMatrix I_;
-
   /// some constants
   const double sqrt_6_ = std::sqrt(6.0);
   const double sqrt_3_2_ = std::sqrt(3.0 / 2.0);
@@ -371,9 +361,6 @@ public:
 
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
-
-    // I
-    I_.Diag(1., dim);
 
     // match variable name with the literature
     K_ = lambda_ + (2 * mu_ / 3);
@@ -583,9 +570,6 @@ public:
   };
 
 protected:
-  /// I am thread-safe. Don't touch me after Setup
-  mfem::DenseMatrix I_;
-
   /// some constants
   const double sqrt_3_2_ = std::sqrt(3.0 / 2.0);
 
@@ -611,9 +595,6 @@ public:
 
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
-
-    // I
-    I_.Diag(1., dim);
 
     // match variable name with the literature
     K_ = lambda_ + (2 * mu_ / 3);
@@ -781,9 +762,6 @@ public:
   };
 
 protected:
-  /// I am thread-safe. Don't touch me after Setup
-  mfem::DenseMatrix I_;
-
   /// some constants
   const double sqrt_3_2_ = std::sqrt(3.0 / 2.0);
 
@@ -794,8 +772,6 @@ protected:
   static constexpr const int k_s{1};
   /// N_p
   static constexpr const int k_N_p{2};
-  /// eps dot (plastic strain rate)
-  static constexpr const int k_eps_dot{3};
 
 public:
   virtual std::string Name() const { return "J2NonlinearVisco"; }
@@ -825,9 +801,6 @@ public:
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
 
-    // I
-    I_.Diag(1., dim);
-
     // match variable name with the literature
     K_ = lambda_ + (2 * mu_ / 3);
     G_ = mu_;
@@ -835,7 +808,7 @@ public:
     /// make space for du_dX
     aux_matrices_.resize(
         n_threads_,
-        Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
+        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -874,7 +847,6 @@ public:
     mfem::DenseMatrix& eps = i_aux[k_eps];
     mfem::DenseMatrix& s = i_aux[k_s];
     mfem::DenseMatrix& N_p = i_aux[k_N_p];
-    mfem::DenseMatrix& eps_dot = i_aux[k_eps_dot];
 
     // get states
     mfem::DenseMatrix& plastic_strain =
@@ -963,17 +935,15 @@ public:
 
   struct State : public MaterialState {
     static constexpr const int k_state_matrices{1};
-    static constexpr const int k_state_scalars{1};
+    static constexpr const int k_state_scalars{2};
     /// matrix indices
     static constexpr const int k_plastic_strain{0};
     /// scalar indices
     static constexpr const int k_accumulated_plastic_strain{0};
+    static constexpr const int k_temperature{1};
   };
 
 protected:
-  /// I am thread-safe. Don't touch me after Setup
-  mfem::DenseMatrix I_;
-
   /// some constants
   const double sqrt_3_2_ = std::sqrt(3.0 / 2.0);
 
@@ -984,8 +954,6 @@ protected:
   static constexpr const int k_s{1};
   /// N_p
   static constexpr const int k_N_p{2};
-  /// eps dot (plastic strain rate)
-  static constexpr const int k_eps_dot{3};
 
 public:
   virtual std::string Name() const { return "J2NonlinearVisco"; }
@@ -1015,9 +983,6 @@ public:
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
 
-    // I
-    I_.Diag(1., dim);
-
     // match variable name with the literature
     K_ = lambda_ + (2 * mu_ / 3);
     G_ = mu_;
@@ -1025,7 +990,7 @@ public:
     /// make space for du_dX
     aux_matrices_.resize(
         n_threads_,
-        Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
+        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -1064,7 +1029,6 @@ public:
     mfem::DenseMatrix& eps = i_aux[k_eps];
     mfem::DenseMatrix& s = i_aux[k_s];
     mfem::DenseMatrix& N_p = i_aux[k_N_p];
-    mfem::DenseMatrix& eps_dot = i_aux[k_eps_dot];
 
     // get states
     mfem::DenseMatrix& plastic_strain =
