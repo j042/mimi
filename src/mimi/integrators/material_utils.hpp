@@ -135,7 +135,7 @@ inline double EquivalentPlasticStrainRate2D(const mfem::DenseMatrix& F_dot) {
 }
 
 /// @brief sqrt(2/3  s_dot_ij  s_dot_ij)
-/// Temporary, maybe removed
+/// Temporary, maybe removed, since we don't need to take dev()
 /// @param F_dot
 /// @return
 inline double EquivalentPlasticStrainRate_Dev(const mfem::DenseMatrix& F_dot) {
@@ -216,6 +216,38 @@ inline double EquivalentPlasticStrainRate(const mfem::DenseMatrix& F_dot) {
   }
 
   return {};
+}
+
+/// Hooke law for isotropic stress
+/// lambda * tr(eps) * I + 2 * mu * eps
+inline void IsotropicStress(const double lambda,
+                            const double mu,
+                            const mfem::DenseMatrix& eps,
+                            mfem::DenseMatrix& sig) {
+
+  MIMI_FUNC()
+  assert(eps.Width() == eps.Height() == sig.Width() == sig.Height());
+
+  const int dim = eps.Width();
+  assert(dim == 2 || dim == 3);
+
+  // get constants
+  const double diag = lambda * eps.Trace();
+  const double two_mu = 2. * mu;
+
+  // do second part first
+  const double* eps_data = eps.GetData();
+  double* sig_data = sig.GetData();
+  for (int i{}; i < dim * dim; ++i) {
+    *sig_data++ = *sig_data++ * two_mu;
+  }
+
+  // do the first part
+  sig(0, 0) += diag;
+  sig(1, 1) += diag;
+  if (dim == 3) {
+    sig(2, 2) += diag;
+  }
 }
 
 } // namespace mimi::integrators
