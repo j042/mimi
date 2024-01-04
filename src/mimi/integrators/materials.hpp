@@ -448,7 +448,14 @@ struct HardeningBase {
 
   virtual bool IsRateDependent() const { return false; }
   virtual bool IsTemperatureDependent() const { return false; }
-  virtual bool Validate() const { MIMI_FUNC() }
+  virtual void Validate() const { MIMI_FUNC() }
+
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("HardeningBase::Evaluate not overriden");
+    return {};
+  }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain,
@@ -458,12 +465,16 @@ struct HardeningBase {
         "HardeningBase::Evaluate (rate-dependent) not overriden");
     return {};
   }
-  virtual ADScalar_
-  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
+
+  virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
+                             const double& equivalent_plastic_strain_rate,
+                             const double& temperature) const {
     MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("HardeningBase::Evaluate not overriden");
+    mimi::utils::PrintAndThrowError(
+        "HardeningBase::Evaluate (thermo-rate-dependent) not overriden");
     return {};
   }
+
   virtual double SigmaY() const {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("HardeningBase::SigmaY not overriden");
@@ -928,7 +939,9 @@ struct JohnsonCookAdiabaticRateDependentHardening
   double m_;
 
   // frequently used value.
-  double inv_Tm_minus_Tr;
+  // we compute this in validate
+  // TODO - restructure to be somewhere that suits better
+  mutable double inv_Tm_minus_Tr_;
 
   /// @brief  this is a long name for a hardening model
   /// @return
@@ -938,9 +951,9 @@ struct JohnsonCookAdiabaticRateDependentHardening
 
   virtual bool IsRateDependent() const { return true; }
 
-  virtual bool IsTemperatureDependent() const override { return true; }
+  virtual bool IsTemperatureDependent() const { return true; }
 
-  virtual void Validate() const override {
+  virtual void Validate() const {
     MIMI_FUNC()
 
     if (reference_temperature_ > melting_temperature_) {
@@ -953,7 +966,7 @@ struct JohnsonCookAdiabaticRateDependentHardening
     }
 
     // compute frequently used value
-    inv_Tm_minus_Tr = 1. / (melting_temperature_ - reference_temperature_);
+    inv_Tm_minus_Tr_ = 1. / (melting_temperature_ - reference_temperature_);
   }
 
   virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
@@ -971,7 +984,7 @@ struct JohnsonCookAdiabaticRateDependentHardening
       thermo_contribution = 0.0;
     } else {
       thermo_contribution -=
-          std::pow((temperature - reference_temperature_) * inv_Tm_minus_Tr,
+          std::pow((temperature - reference_temperature_) * inv_Tm_minus_Tr_,
                    m_);
     }
 
@@ -1113,7 +1126,7 @@ public:
     const double* f = F_dot.GetData();
     const double* e = eps.GetData();
 
-    if (dim == 2) {
+    if (dim_ == 2) {
       // sym(F_dot)
       // for large strain, use L
       const double ed0 = f[0];
@@ -1127,8 +1140,8 @@ public:
       // Now, stress : eps_dot
       // first, stress using lambda * tr(eps) * I + 2*mu*eps
       // eps may not be symmetric
-      const double diag = lambda * eps.Trace();
-      const double two_mu = 2. * mu;
+      const double diag = lambda_ * eps.Trace();
+      const double two_mu = 2. * mu_;
 
       // delta_temp = eta * sigma : eps_dot / (rho * c_p)
       delta_T = (heat_fraction_ * ((diag + two_mu * e[0]) * ed0)
@@ -1155,8 +1168,8 @@ public:
                        + 2. * ed5 * ed5 + ed8 * ed8));
 
       // get stress
-      const double diag = lambda * eps.Trace();
-      const double two_mu = 2. * mu;
+      const double diag = lambda_ * eps.Trace();
+      const double two_mu = 2. * mu_;
       const double sig_eps_dot =
           ((diag + two_mu * e[0]) * ed0) + ((two_mu * e[1]) * ed1)
           + ((two_mu * e[2]) * ed2) + ((two_mu * e[3]) * ed1)
