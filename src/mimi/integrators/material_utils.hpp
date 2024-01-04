@@ -152,7 +152,7 @@ inline double EquivalentPlasticStrainRate_Dev(const mfem::DenseMatrix& F_dot) {
     const double trace_over_dim = (f[0] + f[3]) / 2.0;
 
     const double d0 = f[0] - trace_over_dim;
-    const double d1 = 0.5 * f[1] * f[2];
+    const double d1 = 0.5 * (f[1] + f[2]);
     const double d3 = f[3] - trace_over_dim;
 
     return std::sqrt(2. / 3. * (d0 * d0 + 2.0 * d1 * d1 + d3 * d3));
@@ -189,12 +189,13 @@ inline double EquivalentPlasticStrainRate(const mfem::DenseMatrix& F_dot) {
   const int dim = F_dot.Width();
 
   // steps
-  // 1. devL = dev(sym(F_dot))
-  // 2. sqrt(2/3 devL : devL)
+  // (not required for small strain) 0. get velocity gradient (L)
+  // 1. eps_dot = sym(F_dot)
+  // 2. sqrt(2/3 eps_dot : eps_dot)
 
   if (dim == 2) {
     const double d0 = f[0];
-    const double d1 = 0.5 * f[1] * f[2];
+    const double d1 = .5 * (f[1] + f[2]);
     const double d3 = f[3];
 
     return std::sqrt(2. / 3. * (d0 * d0 + 2.0 * d1 * d1 + d3 * d3));
