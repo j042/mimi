@@ -9,7 +9,6 @@
 #include "mimi/utils/ad.hpp"
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
-//#include "mimi/utils/lambda_and_mu.hpp"
 
 namespace mimi::integrators {
 
@@ -55,8 +54,6 @@ public:
   double viscosity_{-1.0};
   double lambda_{-1.0};
   double mu_{-1.0};
-  double young_{-1.0};
-  double poisson_{-1.0};
 
   virtual void Prepare(const int dim, const int n_threads_) { MIMI_FUNC() }
 
