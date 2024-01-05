@@ -23,7 +23,7 @@ mat.set_young_poisson(210000, 0.3)
 
 # instead, one can also use lame's parameter lambda and mu
 # define material properties (lamda, mu)
-#mat.set_lame(26333, 79000)
+# mat.set_lame(121154, 79000)
 
 nl.set_material(mat)
 

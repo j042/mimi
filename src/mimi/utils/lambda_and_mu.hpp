@@ -10,8 +10,8 @@ namespace mimi::utils {
 /// @param mu
 std::pair<double, double> ToLambdaAndMu(const double young,
                                         const double poisson) {
-  return {young / (3.0 * (1.0 - (2.0 * poisson))), // lambda
-          young / (2.0 * (1.0 + poisson))};        // mu
+  return {young * poisson / ((1 + poisson) * (1 - 2 * poisson)), // lambda
+          young / (2.0 * (1.0 + poisson))};                      // mu
 }
 
 } // namespace mimi::utils
