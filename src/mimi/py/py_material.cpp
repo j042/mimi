@@ -16,6 +16,7 @@ void init_py_material(py::module_& m) {
   using J2 = mimi::integrators::J2;
   using J2NonlinHi = mimi::integrators::J2NonlinearIsotropicHardening;
   using J2NonlinVisco = mimi::integrators::J2NonlinearVisco;
+  using J2NonlinAdiabaticVisco = mimi::integrators::J2AdiabaticVisco;
 
   /// hardening laws
   using HardeningBase = mimi::integrators::HardeningBase;
@@ -23,6 +24,8 @@ void init_py_material(py::module_& m) {
   using VoceHardening = mimi::integrators::VoceHardening;
   using JCHardening = mimi::integrators::JohnsonCookHardening;
   using JCViscoHardening = mimi::integrators::JohnsonCookRateDependentHardening;
+  using JCThermoViscoHardening =
+      mimi::integrators::JohnsonCookAdiabaticRateDependentHardening;
 
   /// input type
   using ADScalar = typename HardeningBase::ADScalar_;
@@ -109,10 +112,32 @@ void init_py_material(py::module_& m) {
       .def_readwrite("eps0_dot",
                      &JCViscoHardening::effective_plastic_strain_rate_);
 
+  py::class_<JCThermoViscoHardening,
+             std::shared_ptr<JCThermoViscoHardening>,
+             JCViscoHardening>
+      jc_thermo_visco(m, "PyJohnsonCookThermoViscoHardening");
+  jc_thermo_visco.def(py::init<>())
+      .def_readwrite("reference_temperature",
+                     &JCThermoViscoHardening::reference_temperature_)
+      .def_readwrite("melting_temperature",
+                     &JCThermoViscoHardening::melting_temperature_)
+      .def_readwrite("m", &JCThermoViscoHardening::m_);
+
   py::class_<J2NonlinVisco, std::shared_ptr<J2NonlinVisco>, MaterialBase>
       j2_visco(m, "PyJ2ViscoIsotropicHardening");
   j2_visco.def(py::init<>())
       .def_readwrite("hardening", &J2NonlinVisco::hardening_);
+
+  py::class_<J2NonlinAdiabaticVisco,
+             std::shared_ptr<J2NonlinAdiabaticVisco>,
+             MaterialBase>
+      j2_adia_visco(m, "PyJ2AdiabaticViscoIsotropicHardening");
+  j2_adia_visco.def(py::init<>())
+      .def_readwrite("hardening", &J2NonlinAdiabaticVisco::hardening_)
+      .def_readwrite("heat_fraction", &J2NonlinAdiabaticVisco::heat_fraction_)
+      .def_readwrite("specific_heat", &J2NonlinAdiabaticVisco::specific_heat_)
+      .def_readwrite("initial_temperature",
+                     &J2NonlinAdiabaticVisco::initial_temperature_);
 }
 
 } // namespace mimi::py

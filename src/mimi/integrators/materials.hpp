@@ -729,15 +729,28 @@ struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
            const double& equivalent_plastic_strain_rate) const {
     MIMI_FUNC()
 
-    double visco_contribution{};
+    double visco_contribution{1.0};
+    // we only want to avoid 0.0 as it leads to domain error (nan)
+    // this won't be negative, so no need to check that
+    // with 1E-323, log returns -743.75.
+    // if (equivalent_plastic_strain_rate != 0.0) {
+    //   visco_contribution += C_
+    //                         * std::log(equivalent_plastic_strain_rate
+    //                                    / effective_plastic_strain_rate_);
+    //   // however, we don't want this to be smaller than 0.0?
+    //   if (visco_contribution <= 0.0) {
+    //     mimi::utils::PrintWarning(
+    //         "visco_contribution negative, setting it to 1e-10.");
+    //     visco_contribution = 1e-10;
+    //   }
+    // }
     if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
-      visco_contribution = C_
-                           * std::log(equivalent_plastic_strain_rate
-                                      / effective_plastic_strain_rate_);
+      visco_contribution += C_
+                            * std::log(equivalent_plastic_strain_rate
+                                       / effective_plastic_strain_rate_);
     }
 
-    return Base_::Evaluate(accumulated_plastic_strain)
-           * (1.0 + visco_contribution);
+    return Base_::Evaluate(accumulated_plastic_strain) * visco_contribution;
   }
 };
 
@@ -875,8 +888,8 @@ public:
     const double q = sqrt_3_2_ * Norm(s); // trial mises
 
     // TODO consider using `EquivalentPlasticStrainRate2D`?
-    const double eqps_rate = (dim_ == 2) ? EquivalentPlasticStrainRate2D(F_dot)
-                                         : EquivalentPlasticStrainRate(F_dot);
+    const double eqps_rate = EquivalentPlasticStrainRate(F_dot);
+
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
 
@@ -974,13 +987,20 @@ struct JohnsonCookAdiabaticRateDependentHardening
                              const double& temperature) const {
     MIMI_FUNC()
 
-    double thermo_contribution{1.0};
-    // if (temperature < reference_temperature) {
-    //   nothing
-    // }
+    // get visco contribution
+    double visco_contribution{1.0};
+    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
+      visco_contribution += C_
+                            * std::log(equivalent_plastic_strain_rate
+                                       / effective_plastic_strain_rate_);
+    }
 
-    // melted: yield stress is zero
-    if (temperature > melting_temperature_) {
+    // then thermo
+    double thermo_contribution{1.0};
+    if (temperature < reference_temperature_) {
+      //   nothing
+    } // melted: yield stress is zero
+    else if (temperature > melting_temperature_) {
       thermo_contribution = 0.0;
     } else {
       thermo_contribution -=
@@ -988,8 +1008,11 @@ struct JohnsonCookAdiabaticRateDependentHardening
                    m_);
     }
 
-    return Base_::Evaluate(accumulated_plastic_strain,
-                           equivalent_plastic_strain_rate)
+    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
+      return ADScalar_(A_) * visco_contribution * thermo_contribution;
+    }
+
+    return (A_ + B_ * pow(accumulated_plastic_strain, n_)) * visco_contribution
            * thermo_contribution;
   }
 };
@@ -1144,10 +1167,14 @@ public:
       const double two_mu = 2. * mu_;
 
       // delta_temp = eta * sigma : eps_dot / (rho * c_p)
-      delta_T = (heat_fraction_ * ((diag + two_mu * e[0]) * ed0)
-                 + ((two_mu * e[1]) * ed1) + ((two_mu * e[2]) * ed1)
-                 + ((diag + two_mu * e[4]) * ed3))
+      delta_T = (heat_fraction_
+                 * std::abs(((diag + two_mu * e[0]) * ed0)
+                            + ((two_mu * e[1]) * ed1) + ((two_mu * e[2]) * ed1)
+                            + ((diag + two_mu * e[3]) * ed3)))
                 / (density_ * specific_heat_);
+      //  mimi::utils::PrintInfo("ed [", ed0, ed1, ed1, ed3, "]", "sig [", (diag
+      //  + two_mu * e[0]), (two_mu * e[1]), (two_mu * e[2]), (diag + two_mu *
+      //  e[3]), "]", delta_T);
       return;
     } else {
       // get eps_dot
@@ -1210,6 +1237,9 @@ public:
 
     // get eqps_rate and delta temperature
     double eqps_rate, delta_temperature;
+    // mfem::DenseMatrix L(dim_, dim_);
+    // VelocityGradient(F, F_dot, L);
+    // Dev(L, dim_, 1.0, L);
     PlasticStrainRateAndDeltaTemperature(F_dot,
                                          eps,
                                          eqps_rate,
