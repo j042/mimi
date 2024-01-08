@@ -11,7 +11,7 @@ namespace mimi::solvers {
 class OdeBase {
 public:
   virtual ~OdeBase() = default;
-  virtual std::string Name() = 0;
+  virtual std::string Name() const = 0;
   virtual void PrintInfo() {
     mimi::utils::PrintInfo("No detailed info for", Name());
   }
@@ -50,6 +50,22 @@ public:
     mimi::utils::PrintAndThrowError("AdvanceTime2 is not implemented for",
                                     Name());
   }
+
+  virtual double FirstEffectiveTimeStep(const double dt) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "FirstEffectiveTimeStep is not implemented for",
+        Name());
+    return dt;
+  }
+
+  virtual double SecondEffectiveTimeStep(const double dt) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "SecondEffectiveTimeStep is not implemented for",
+        Name());
+    return dt;
+  }
 };
 
 class GeneralizedAlpha2 : public mfem::GeneralizedAlpha2Solver, public OdeBase {
@@ -71,9 +87,10 @@ public:
     fac3_ = beta * alpha_f / alpha_m;
     fac4_ = gamma * alpha_f / alpha_m;
     fac5_ = alpha_m;
+    std::cout << fac3_ << " 4 " << fac4_;
   }
 
-  virtual std::string Name() { return "GeneralizedAlpha2"; }
+  virtual std::string Name() const { return "GeneralizedAlpha2"; }
 
   virtual void PrintInfo() {
     MIMI_FUNC()
@@ -152,6 +169,16 @@ public:
     d2xdt2.Add(1.0 / fac5_, aa);
 
     t += dt;
+  }
+
+  virtual double FirstEffectiveTimeStep(const double dt) const {
+    MIMI_FUNC()
+    return fac3_ * dt * dt;
+  }
+
+  virtual double SecondEffectiveTimeStep(const double dt) const {
+    MIMI_FUNC()
+    return fac4_ * dt;
   }
 };
 

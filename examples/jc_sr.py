@@ -41,7 +41,7 @@ s.cps[:] = s.cps[to_s]
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
 bc.initial.body_force(1, -10)
-#bc.initial.traction(3, 1, -1000)
+# bc.initial.traction(3, 1, -1000)
 
 nl.boundary_condition = bc
 
@@ -72,13 +72,13 @@ for i in range(10000):
             interactive=False,
         )
     # remove body force
-    #if i == 75:
+    # if i == 75:
     #    rhs[:] *= -1.0
-    #if i == 150:
+    # if i == 150:
     #    rhs[:] = 0.0
 
     nl.step_time2()
-    print(i, np.linalg.norm(x-x_ref))
+    print(i, np.linalg.norm(x - x_ref))
 #    print(x[:4])
 #    print(v[:4])
 

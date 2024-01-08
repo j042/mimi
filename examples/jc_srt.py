@@ -4,6 +4,7 @@ import splinepy as sp
 import mimi
 import gustaf as gus
 import numpy as np
+
 sp.settings.NTHREADS = 4
 
 #  create nl solid
@@ -20,7 +21,8 @@ mat.density = 1
 
 mat.viscosity = -1
 mat.lambda_ = (790000 - (79000 * 2 / 3)) * 10
-mat.mu = 79000 * 10
+# mat.mu = 79000 * 10
+mat.mu = mat.lambda_ * (1 - 2 * 0.3) / 0.6
 mat.heat_fraction = 0.9
 mat.specific_heat = 450
 mat.initial_temperature = 800
@@ -46,12 +48,12 @@ s.cps[:] = s.cps[to_s]
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
 bc.initial.body_force(1, -7)
-#bc.initial.traction(3, 1, -50)
+# bc.initial.traction(3, 1, -50)
 
 nl.boundary_condition = bc
 
-nl.setup(4)
-nl.configure_newton("nonlinear_visco_solid", 1e-12, 1e-8, 20, False)
+nl.setup(1)
+nl.configure_newton("nonlinear_visco_solid", 1e-10, 1e-8, 20, False)
 
 rhs = nl.linear_form_view2("rhs")
 print(rhs)
@@ -77,15 +79,15 @@ for i in range(10000):
             interactive=False,
         )
     # remove body force
-    #if i == 75:
+    # if i == 75:
     #    rhs[:] *= -1.0
-    #if i == 150:
+    # if i == 150:
     #    rhs[:] = 0.0
 
     nl.step_time2()
-    print(i, np.linalg.norm(x-x_ref))
-    #print(x[:4])
-    #print(v[:4])
-    #time.sleep(.5)
+    print(i, np.linalg.norm(x - x_ref))
+    # print(x[:4])
+    # print(v[:4])
+    # time.sleep(.5)
 
 gus.show(s, vedoplot=plt, interactive=True)
