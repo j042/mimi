@@ -143,6 +143,9 @@ public:
                                       const mfem::Vector& current_v) {
     MIMI_FUNC()
 
+    material_->first_effective_dt_ = first_effective_dt_;
+    material_->second_effective_dt_ = second_effective_dt_;
+
     auto assemble_element_residual_and_maybe_grad =
         [&](const int begin, const int end, const int i_thread) {
           TemporaryData tmp;

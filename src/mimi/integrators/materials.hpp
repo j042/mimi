@@ -34,6 +34,9 @@ class MaterialBase {
 public:
   using MaterialStatePtr_ = std::shared_ptr<MaterialState>;
 
+  double first_effective_dt_;
+  double second_effective_dt_;
+
 protected:
   int dim_;
   int n_threads_;
@@ -1273,8 +1276,7 @@ public:
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    const double trial_T =
-        temperature + temperature_rate; // TODO! + effective_dt;
+    const double trial_T = temperature + temperature_rate * first_effective_dt_;
     auto residual =
         [eqps_old, eqps_rate, q, trial_T, *this](auto delta_eqps) -> ADScalar_ {
       return q - 3.0 * G_ * delta_eqps
