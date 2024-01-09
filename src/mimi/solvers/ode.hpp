@@ -167,111 +167,84 @@ public:
 class NewmarkSolver : public mfem::SecondOrderODESolver
 {
 protected:
-   Vector d2xdt2;
-
-   double beta, gamma;
+   mfem::Vector d2xdt2;
+   mfem::Vector xa,va,aa;
+   double alpha_f, alpha_m, beta, gamma;
+   int nstate;
    bool first;
 
 public:
-   NewmarkSolver(double beta_ = 0.25, double gamma_ = 0.5) { beta = beta_; gamma = gamma_; };
+  NewmarkSolver(double beta_ = 0.25, double gamma_ = 0.5) { beta = beta_; gamma = gamma_; };
 
-   void PrintProperties(std::ostream &out = mfem::out);
+  virtual void Init(mfem::SecondOrderTimeDependentOperator &f_)
+  {
+    mfem::SecondOrderODESolver::Init(f_);
+    d2xdt2.SetSize(f->Width());
+    d2xdt2 = 0.0;
+    first = true;
+  }
 
-   void Init(mfem::SecondOrderTimeDependentOperator &f_) override;
+  virtual void PrintProperties(std::ostream &os)
+  {
+    os << "Newmark time integrator:" << std::endl;
+    os << "beta    = " << beta  << std::endl;
+    os << "gamma   = " << gamma << std::endl;
 
-   void Step(mfem::Vector &x, mfem::Vector &dxdt, double &t, double &dt) override;
-};
+    if (gamma == 0.5)
+    {
+        os<<"Second order"<<" and ";
+    }
+    else
+    {
+        os<<"First order"<<" and ";
+    }
 
-/*
-class LinearAccelerationSolver : public NewmarkSolver
-{
-public:
-   LinearAccelerationSolver() : NewmarkSolver(1.0/6.0, 0.5) { };
-};
+    if ((gamma >= 0.5) && (beta >= (gamma + 0.5)*(gamma + 0.5)/4))
+    {
+        os<<"A-Stable"<<std::endl;
+    }
+    else if ((gamma >= 0.5) && (beta >= 0.5*gamma))
+    {
+        os<<"Conditionally stable"<<std::endl;
+    }
+    else
+    {
+        os<<"Unstable"<<std::endl;
+    }
+  }
 
-class CentralDifferenceSolver : public NewmarkSolver
-{
-public:
-   CentralDifferenceSolver() : NewmarkSolver(0.0, 0.5) { };
-};
+  virtual void Step(mfem::Vector &x, mfem::Vector &dxdt, double &t, double &dt)
+  {
+    double fac0 = 0.5 - beta;
+    double fac2 = 1.0 - gamma;
+    double fac3 = beta;
+    double fac4 = gamma;
+    double fac5 = alpha_m;
 
-class FoxGoodwinSolver : public NewmarkSolver
-{
-public:
-   FoxGoodwinSolver() : NewmarkSolver(1.0/12.0, 0.5) { };
-};
-*/
-
-/// TEIL AUS MFEM ode.cpp
-void NewmarkSolver::Init(SecondOrderTimeDependentOperator &f_)
-{
-   SecondOrderODESolver::Init(f_);
-   d2xdt2.SetSize(f->Width());
-   d2xdt2 = 0.0;
-   first = true;
-}
-
-void NewmarkSolver::PrintProperties(std::ostream &os)
-{
-   os << "Newmark time integrator:" << std::endl;
-   os << "beta    = " << beta  << std::endl;
-   os << "gamma   = " << gamma << std::endl;
-
-   if (gamma == 0.5)
-   {
-      os<<"Second order"<<" and ";
-   }
-   else
-   {
-      os<<"First order"<<" and ";
-   }
-
-   if ((gamma >= 0.5) && (beta >= (gamma + 0.5)*(gamma + 0.5)/4))
-   {
-      os<<"A-Stable"<<std::endl;
-   }
-   else if ((gamma >= 0.5) && (beta >= 0.5*gamma))
-   {
-      os<<"Conditionally stable"<<std::endl;
-   }
-   else
-   {
-      os<<"Unstable"<<std::endl;
-   }
-}
-
-void NewmarkSolver::Step(Vector &x, Vector &dxdt, double &t, double &dt)
-{
-   double fac0 = 0.5 - beta;
-   double fac2 = 1.0 - gamma;
-   double fac3 = beta;
-   double fac4 = gamma;
-
-   // In the first pass compute d2xdt2 directly from operator.
-   if (first)
-   {
+    // In the first pass compute d2xdt2 directly from operator.
+    if (first)
+    {
       f->Mult(x, dxdt, d2xdt2);
       first = false;
-   }
-   f->SetTime(t + dt);
+    }
+    f->SetTime(t + dt);
 
-   x.Add(dt, dxdt);
-   x.Add(fac0*dt*dt, d2xdt2);
-   dxdt.Add(fac2*dt, d2xdt2);
+    x.Add(dt, dxdt);
+    x.Add(fac0*dt*dt, d2xdt2);
+    dxdt.Add(fac2*dt, d2xdt2);
 
-   f->SetTime(t + dt);
-   f->ImplicitSolve(fac3*dt*dt, fac4*dt, x, dxdt, d2xdt2);
+    f->SetTime(t + dt);
+    f->ImplicitSolve(fac3*dt*dt, fac4*dt, x, dxdt, d2xdt2);
 
-   x   .Add(fac3*dt*dt, d2xdt2);
-   dxdt.Add(fac4*dt,    d2xdt2);
-   t += dt;
-}
-/// TEIL ENDE
-
+    x   .Add(fac3*dt*dt, d2xdt2);
+    dxdt.Add(fac4*dt,    d2xdt2);
+    t += dt;
+  }
+};
 
 class Newmark : public NewmarkSolver, public OdeBase {
 protected:
-  double fac0_, fac1_, fac2_, fac3_, fac4_;
+  double fac0_, fac1_, fac2_, fac3_, fac4_, fac5_;
 
 public:
   using Base_ = NewmarkSolver;
@@ -286,6 +259,7 @@ public:
     fac2_ = 1.0 - gamma;
     fac3_ = beta;
     fac4_ = gamma;
+    fac5_ = alpha_m;
   }
 
   virtual std::string Name() { return "Newmark"; }
@@ -294,7 +268,7 @@ public:
     MIMI_FUNC()
 
     mimi::utils::PrintInfo("Info for", Name());
-    Base_::PrintProperties();
+    //Base_::PrintProperties();
   }
 
   virtual void
