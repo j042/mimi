@@ -161,6 +161,8 @@ public:
 
 // SOLVER 2
 
+// Imported the parts of Newmark from MFEM manually
+
 /// The classical newmark method.
 /// Newmark, N. M. (1959) A method of computation for structural dynamics.
 /// Journal of Engineering Mechanics, ASCE, 85 (EM3) 67-94.
