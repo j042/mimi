@@ -57,6 +57,22 @@ public:
     nonlinear_stiffness_->MeltStates();
   }
 
+  virtual void SetParameters(double const& fac0,
+                             double const& fac1,
+                             const mfem::Vector* x,
+                             const mfem::Vector* v) {
+    MIMI_FUNC()
+
+    // this is from base
+    fac0_ = fac0;
+    fac1_ = fac1;
+    x_ = x;
+    v_ = v;
+
+    nonlinear_stiffness_->first_effective_dt_ = fac0;
+    nonlinear_stiffness_->second_effective_dt_ = fac1;
+  }
+
   virtual void Setup() {
     MIMI_FUNC()
 

@@ -19,6 +19,11 @@ public:
 
   using Base_::Base_;
 
+  /// time step size, in case you need them
+  /// operators should set them
+  double first_effective_dt_{0.0};  // this is for x
+  double second_effective_dt_{0.0}; // this is for x_dot (=v).
+
   virtual void AssembleGradOn() {
     MIMI_FUNC()
     for (auto& dnfi : domain_nfi_) {
@@ -81,6 +86,8 @@ public:
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfi_) {
+      domain_integ->first_effective_dt_ = first_effective_dt_;
+      domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AssembleDomainResidual(current_x);
 
       // add to global
@@ -94,6 +101,8 @@ public:
 
     // boundary
     for (auto& boundary_integ : boundary_face_nfi_) {
+      boundary_integ->first_effective_dt_ = first_effective_dt_;
+      boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryResidual(current_x);
 
       // add to global
@@ -124,6 +133,8 @@ public:
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfi_) {
+      domain_integ->first_effective_dt_ = first_effective_dt_;
+      domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AssembleDomainGrad(current_x);
 
       // add to global
@@ -138,6 +149,8 @@ public:
 
     // boundary
     for (auto& boundary_integ : boundary_face_nfi_) {
+      boundary_integ->first_effective_dt_ = first_effective_dt_;
+      boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryGrad(current_x);
 
       // add to global

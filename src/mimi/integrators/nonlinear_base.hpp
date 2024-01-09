@@ -27,6 +27,11 @@ public:
   /// flag to know when not to accumulate
   bool frozen_state_{false};
 
+  /// time step size, in case you need them
+  /// nonlinear forms will set them
+  double first_effective_dt_{0.0};  // this is for x
+  double second_effective_dt_{0.0}; // this is for x_dot (=v).
+
   /// marker for this bdr face integ
   const mfem::Array<int>* boundary_marker_ = nullptr;
 

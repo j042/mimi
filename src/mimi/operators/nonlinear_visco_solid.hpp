@@ -31,30 +31,6 @@ public:
 
   virtual std::string Name() const { return "NonlinearViscoSolid"; }
 
-  /// flag to inform grad assembly is relevant
-  virtual void AssembleGradOn() {
-    MIMI_FUNC()
-    nonlinear_visco_stiffness_->AssembleGradOn();
-  }
-
-  /// flag to inform grad assembly is NOT relevant
-  virtual void AssembleGradOff() {
-    MIMI_FUNC()
-    nonlinear_visco_stiffness_->AssembleGradOff();
-  }
-
-  /// freeze material states - no accumulation
-  virtual void FreezeStates() {
-    MIMI_FUNC()
-    nonlinear_visco_stiffness_->FreezeStates();
-  }
-
-  /// track material states - accumulation
-  virtual void MeltStates() {
-    MIMI_FUNC()
-    nonlinear_visco_stiffness_->MeltStates();
-  }
-
   virtual void Setup() {
     MIMI_FUNC()
 
@@ -84,6 +60,10 @@ public:
     assert(!stiffness_);
     assert(!nonlinear_stiffness_);
     assert(nonlinear_visco_stiffness_);
+
+    // we upcast to nonlinear_stiffness to avoid re-implementing
+    // set parameters and freeze/melt
+    nonlinear_stiffness_ = nonlinear_visco_stiffness_;
 
     // copy jacobian with mass matrix to initialize sparsity pattern
     // technically, we don't have to copy I & J;
