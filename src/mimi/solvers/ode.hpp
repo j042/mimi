@@ -8,7 +8,7 @@
 
 namespace mimi::solvers {
 
-// GENERAL 
+// GENERAL
 
 class OdeBase {
 public:
@@ -166,57 +166,51 @@ public:
 /// The classical newmark method.
 /// Newmark, N. M. (1959) A method of computation for structural dynamics.
 /// Journal of Engineering Mechanics, ASCE, 85 (EM3) 67-94.
-class NewmarkSolver : public mfem::SecondOrderODESolver
-{
+class NewmarkSolver : public mfem::SecondOrderODESolver {
 protected:
-   mfem::Vector d2xdt2;
-   mfem::Vector xa,va,aa;
-   double alpha_f, alpha_m, beta, gamma;
-   int nstate;
-   bool first;
+  mfem::Vector d2xdt2;
+  mfem::Vector xa, va, aa;
+  double alpha_f, alpha_m, beta, gamma;
+  int nstate;
+  bool first;
 
 public:
-  NewmarkSolver(double beta_ = 0.25, double gamma_ = 0.5) { beta = beta_; gamma = gamma_; };
+  NewmarkSolver(double beta_ = 0.25, double gamma_ = 0.5) {
+    beta = beta_;
+    gamma = gamma_;
+  };
 
-  virtual void Init(mfem::SecondOrderTimeDependentOperator &f_)
-  {
+  virtual void Init(mfem::SecondOrderTimeDependentOperator& f_) {
     mfem::SecondOrderODESolver::Init(f_);
     d2xdt2.SetSize(f->Width());
     d2xdt2 = 0.0;
     first = true;
   }
 
-  virtual void PrintProperties(std::ostream &os)
-  {
+  virtual void PrintProperties(std::ostream& os) {
     os << "Newmark time integrator:" << std::endl;
-    os << "beta    = " << beta  << std::endl;
+    os << "beta    = " << beta << std::endl;
     os << "gamma   = " << gamma << std::endl;
 
-    if (gamma == 0.5)
-    {
-        os<<"Second order"<<" and ";
-    }
-    else
-    {
-        os<<"First order"<<" and ";
+    if (gamma == 0.5) {
+      os << "Second order"
+         << " and ";
+    } else {
+      os << "First order"
+         << " and ";
     }
 
-    if ((gamma >= 0.5) && (beta >= (gamma + 0.5)*(gamma + 0.5)/4))
-    {
-        os<<"A-Stable"<<std::endl;
-    }
-    else if ((gamma >= 0.5) && (beta >= 0.5*gamma))
-    {
-        os<<"Conditionally stable"<<std::endl;
-    }
-    else
-    {
-        os<<"Unstable"<<std::endl;
+    if ((gamma >= 0.5) && (beta >= (gamma + 0.5) * (gamma + 0.5) / 4)) {
+      os << "A-Stable" << std::endl;
+    } else if ((gamma >= 0.5) && (beta >= 0.5 * gamma)) {
+      os << "Conditionally stable" << std::endl;
+    } else {
+      os << "Unstable" << std::endl;
     }
   }
 
-  virtual void Step(mfem::Vector &x, mfem::Vector &dxdt, double &t, double &dt)
-  {
+  virtual void
+  Step(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     double fac0 = 0.5 - beta;
     double fac2 = 1.0 - gamma;
     double fac3 = beta;
@@ -224,22 +218,21 @@ public:
     double fac5 = alpha_m;
 
     // In the first pass compute d2xdt2 directly from operator.
-    if (first)
-    {
+    if (first) {
       f->Mult(x, dxdt, d2xdt2);
       first = false;
     }
     f->SetTime(t + dt);
 
     x.Add(dt, dxdt);
-    x.Add(fac0*dt*dt, d2xdt2);
-    dxdt.Add(fac2*dt, d2xdt2);
+    x.Add(fac0 * dt * dt, d2xdt2);
+    dxdt.Add(fac2 * dt, d2xdt2);
 
     f->SetTime(t + dt);
-    f->ImplicitSolve(fac3*dt*dt, fac4*dt, x, dxdt, d2xdt2);
+    f->ImplicitSolve(fac3 * dt * dt, fac4 * dt, x, dxdt, d2xdt2);
 
-    x   .Add(fac3*dt*dt, d2xdt2);
-    dxdt.Add(fac4*dt,    d2xdt2);
+    x.Add(fac3 * dt * dt, d2xdt2);
+    dxdt.Add(fac4 * dt, d2xdt2);
     t += dt;
   }
 };
@@ -252,7 +245,8 @@ public:
   using Base_ = NewmarkSolver;
 
   Newmark(mfem::SecondOrderTimeDependentOperator& oper,
-                    double beta = 0.25, double gamma = 0.5)
+          double beta = 0.25,
+          double gamma = 0.5)
       : Base_(beta, gamma) {
     Base_::Init(oper);
 
@@ -270,7 +264,7 @@ public:
     MIMI_FUNC()
 
     mimi::utils::PrintInfo("Info for", Name());
-    //Base_::PrintProperties();
+    // Base_::PrintProperties();
   }
 
   virtual void
