@@ -17,7 +17,6 @@ public:
   mimi::utils::Vector<NFIPointer_> boundary_face_nfi_{};
   mimi::utils::Vector<const mfem::Array<int>*> boundary_markers_{};
 
-  /// same ctor as base
   using Base_::Base_;
 
   virtual void AssembleGradOn() {
@@ -68,6 +67,16 @@ public:
     MIMI_FUNC()
 
     residual = 0.0;
+
+    AddMult(current_x, residual);
+  }
+
+  /// this is not an override.
+  /// This does not initialize residual with 0. instead just adds to it.
+  /// Mult() uses this after initializing residual to zero
+  virtual void AddMult(const mfem::Vector& current_x,
+                       mfem::Vector& residual) const {
+    MIMI_FUNC()
 
     // we assemble all first - these will call nthreadexe
     // domain

@@ -324,7 +324,7 @@ inline void Dev(const mfem::DenseMatrix& A,
   if (dim == 2) {
     const double& A_0 = A_data[0];
     const double& A_3 = A_data[3];
-    const double tr_A_over_dim = (A_0 + A_3) / dim;
+    const double tr_A_over_dim = (A_0 + A_3) / 2.0; // div(val, dim)
 
     dev_A_data[0] = (A_0 - tr_A_over_dim) * factor;
     dev_A_data[1] = A_data[1] * factor;
@@ -335,7 +335,7 @@ inline void Dev(const mfem::DenseMatrix& A,
     const double& A_0 = A_data[0];
     const double& A_4 = A_data[4];
     const double& A_8 = A_data[8];
-    const double tr_A_over_dim = (A_0 + A_4 + A_8) / dim;
+    const double tr_A_over_dim = (A_0 + A_4 + A_8) / 3.0; // div(val, dim)
 
     dev_A_data[0] = (A_0 - tr_A_over_dim) * factor;
     dev_A_data[1] = A_data[1] * factor;
@@ -554,6 +554,19 @@ public:
 
 struct HardeningBase {
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
+
+  virtual std::string Name() const { return "HardeningBase"; }
+
+  virtual bool IsRateDependent() const { return false; }
+
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain,
+           const double& equivalent_plastic_strain_rate) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "HardeningBase::Evaluate (rate-dependent) not overriden");
+    return {};
+  }
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
@@ -575,6 +588,8 @@ struct PowerLawHardening : public HardeningBase {
   double n_;
   double eps0_;
 
+  virtual std::string Name() const { return "PowerLawHardening"; }
+
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
@@ -592,6 +607,8 @@ struct VoceHardening : public HardeningBase {
   double sigma_y_;
   double sigma_sat_;
   double strain_constant_;
+
+  virtual std::string Name() const { return "VoceHardening"; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
@@ -612,6 +629,8 @@ struct JohnsonCookHardening : public HardeningBase {
   double A_;
   double B_;
   double n_;
+
+  virtual std::string Name() const { return "JohnsonCookHardening"; }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
@@ -673,7 +692,7 @@ protected:
   static constexpr const int k_eps{0};
   /// stress deviator
   static constexpr const int k_s{1};
-  /// N_p
+  /// N_p - flow vector
   static constexpr const int k_N_p{2};
 
 public:
@@ -746,15 +765,14 @@ public:
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    auto residual = [eqps_old, *this](auto delta_eqps,
-                                      auto trial_mises) -> ADScalar_ {
-      return trial_mises - 3.0 * G_ * delta_eqps
+    auto residual = [eqps_old, q, *this](auto delta_eqps) -> ADScalar_ {
+      return q - 3.0 * G_ * delta_eqps
              - hardening_->Evaluate(eqps_old + delta_eqps);
     };
 
     const double tolerance = hardening_->SigmaY() * k_tol;
 
-    if (residual(0.0, q) > tolerance) {
+    if (residual(0.0) > tolerance) {
       /// return mapping
       mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
                                               .rtol = tolerance,
@@ -767,17 +785,14 @@ public:
                                                            0.0,
                                                            lower_bound,
                                                            upper_bound,
-                                                           opts,
-                                                           q);
+                                                           opts);
       // compute sqrt(3/2) * eta / norm(eta)
       // this term is use for both s and plastic strain
       // this is equivalent to
-      // s = eta (see above)
+      // s = eta (see above; this is because we only consider isotropic)
       // 3/2 * s / q = 3/2 * s * sqrt(2/3) / norm(s)
-      // didn't quite get why this is called Np yet,
       // but as this references serac's implementation
       // here it goes
-      // we can directly incorperate this into s, but
       N_p.Set(1.5 / q, s);
 
       s.Add(-2.0 * G_ * delta_eqps, N_p);
@@ -791,6 +806,107 @@ public:
     mfem::Add(s, I_, p, sigma);
   }
 };
+
+struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
+  using Base_ = JohnsonCookHardening;
+  using ADScalar_ = Base_::ADScalar_;
+
+  using Base_::A_;
+  using Base_::B_;
+  using Base_::n_;
+  double C_;
+  // several ways to call this
+  // Jannis calls this reference strain rate
+  // wikipedia call this:
+  double effective_plastic_strain_rate_;
+
+  /// @brief  this is a long name for a hardening model
+  /// @return
+  virtual std::string Name() const {
+    return "JohnsonCookRateDependentHardening";
+  }
+
+  virtual bool IsRateDependent() const { return true; }
+
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain,
+           const double& equivalent_plastic_strain_rate) const {
+    MIMI_FUNC()
+
+    double visco_contribution{};
+    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
+      std::cout << "vc!\n";
+      visco_contribution = C_
+                           * std::log(equivalent_plastic_strain_rate
+                                      / effective_plastic_strain_rate_);
+    }
+
+    return Base_::Evaluate(accumulated_plastic_strain)
+           * (1.0 + visco_contribution);
+  }
+};
+
+/// @brief evaluates equivalent strain rate based on
+/// https://www.sciencedirect.com/science/article/pii/S1359645411002412
+/// https://hal.science/hal-03244237/document
+/// ... is this actually same as normal one?
+/// @param F_dot
+/// @return
+inline double EquivalentPlasticStrainRate2D(const mfem::DenseMatrix& F_dot) {
+  const double* fd = F_dot.GetData();
+  // Those are just elements of sym(F_dot)
+  const double e_xx = fd[0];
+  const double e_yy = fd[3];
+  // gamma = 2 * e_xy | e_xy = 0.5 * f1 * f2
+  const double gamma = fd[1] + fd[2];
+
+  // sqrt( 4/9 * (1/2 * ( (e_xx - e_yy)^2 + e_xx^2 + e_yy^2 ) + 3/4*gamma^2 )
+  // sqrt( 2/9 * (e_xx - e_yy)^2 + e_xx^2 + e_yy^2) + 1/3 * gamma^2
+  return std::sqrt(
+      2. / 9. * ((e_xx - e_yy) * (e_xx - e_yy) + e_xx * e_xx + e_yy * e_yy)
+      + 1. / 3. * gamma * gamma);
+}
+
+/// @brief sqrt(2/3  s_dot_ij  s_dot_ij)
+/// @param F_dot
+/// @return
+inline double EquivalentPlasticStrainRate(const mfem::DenseMatrix& F_dot) {
+  const double* f = F_dot.GetData();
+  const int dim = F_dot.Width();
+
+  // steps
+  // 1. devL = dev(sym(F_dot))
+  // 2. sqrt(2/3 devL : devL)
+
+  if (dim == 2) {
+    const double trace_over_dim = (f[0] + f[3]) / 2.0;
+
+    const double d0 = f[0] - trace_over_dim;
+    const double d1 = 0.5 * f[1] * f[2];
+    const double d3 = f[3] - trace_over_dim;
+
+    return std::sqrt(2. / 3. * (d0 * d0 + 2.0 * d1 * d1 + d3 * d3));
+  } else {
+    const double trace_over_dim = (f[0] + f[4] + f[8]) / 3.0;
+
+    const double d0 = f[0] - trace_over_dim;
+
+    const double d1 = 0.5 * (f[1] + f[3]);
+    const double d2 = 0.5 * (f[2] + f[6]);
+
+    const double d4 = f[4] - trace_over_dim;
+
+    const double d5 = 0.5 * (f[5] + f[7]);
+
+    const double d8 = f[8] - trace_over_dim;
+
+    return std::sqrt(2. / 3.
+                     * (d0 * d0 + 2. * d1 * d1 + 2. * d2 * d2 + d4 * d4
+                        + 2. * d5 * d5 + d8 * d8));
+  }
+
+  return {};
+}
 
 /// @brief Computational Methods for plasticity p260, box 7.5
 /// specialized for visco plasticity.
@@ -842,6 +958,8 @@ protected:
   static constexpr const int k_s{1};
   /// N_p
   static constexpr const int k_N_p{2};
+  /// eps dot (plastic strain rate)
+  static constexpr const int k_eps_dot{3};
 
 public:
   virtual std::string Name() const { return "J2NonlinearVisco"; }
@@ -861,6 +979,16 @@ public:
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
 
+    // check if this is an appropriate hardening.
+    if (hardening_) {
+      if (!hardening_->IsRateDependent()) {
+        mimi::utils::PrintAndThrowError(hardening_->Name(),
+                                        "is not rate-dependent.");
+      }
+    } else {
+      mimi::utils::PrintAndThrowError("hardening missing for", Name());
+    }
+
     // I
     I_.Diag(1., dim);
 
@@ -871,7 +999,7 @@ public:
     /// make space for du_dX
     aux_matrices_.resize(
         n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+        Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -910,6 +1038,7 @@ public:
     mfem::DenseMatrix& eps = i_aux[k_eps];
     mfem::DenseMatrix& s = i_aux[k_s];
     mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    mfem::DenseMatrix& eps_dot = i_aux[k_eps_dot];
 
     // get states
     mfem::DenseMatrix& plastic_strain =
@@ -918,23 +1047,27 @@ public:
         state->scalars_[State::k_accumulated_plastic_strain];
 
     // precompute aux values
-    // eps, p, s, eta, q, phi
+    // eps, p, s, eta, q, equivalent plastic strain rate
     ElasticStrain(F, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
-    const double q = sqrt_3_2_ * Norm(s);
+    const double q = sqrt_3_2_ * Norm(s); // trial mises
 
+    // TODO consider using `EquivalentPlasticStrainRate2D`?
+    const double eqps_rate = (dim_ == 2) ? EquivalentPlasticStrainRate2D(F_dot)
+                                         : EquivalentPlasticStrainRate(F_dot);
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    auto residual = [eqps_old, *this](auto delta_eqps,
-                                      auto trial_mises) -> ADScalar_ {
-      return trial_mises - 3.0 * G_ * delta_eqps
-             - hardening_->Evaluate(eqps_old + delta_eqps);
+
+    auto residual =
+        [eqps_old, eqps_rate, q, *this](auto delta_eqps) -> ADScalar_ {
+      return q - 3.0 * G_ * delta_eqps
+             - hardening_->Evaluate(eqps_old + delta_eqps, eqps_rate);
     };
 
     const double tolerance = hardening_->SigmaY() * k_tol;
 
-    if (residual(0.0, q) > tolerance) {
+    if (residual(0.0) > tolerance) {
       /// return mapping
       mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
                                               .rtol = tolerance,
@@ -942,22 +1075,18 @@ public:
 
       const double lower_bound = 0.0;
       const double upper_bound =
-          (q - hardening_->Evaluate(eqps_old).GetValue() / (3.0 * G_));
+          (q
+           - hardening_->Evaluate(eqps_old, eqps_rate).GetValue() / (3.0 * G_));
       const double delta_eqps = mimi::solvers::ScalarSolve(residual,
                                                            0.0,
                                                            lower_bound,
                                                            upper_bound,
-                                                           opts,
-                                                           q);
-      // compute sqrt(3/2) * eta / norm(eta)
+                                                           opts);
+      // compute sqrt(3/2) * s / norm(s)
+      // this is sqrt(3/2 s : s)
       // this term is use for both s and plastic strain
       // this is equivalent to
-      // s = eta (see above)
-      // 3/2 * s / q = 3/2 * s * sqrt(2/3) / norm(s)
-      // didn't quite get why this is called Np yet,
-      // but as this references serac's implementation
-      // here it goes
-      // we can directly incorperate this into s, but
+      // 3/2 / q * s = 3/2 * s * sqrt(2/3) / norm(s)
       N_p.Set(1.5 / q, s);
 
       s.Add(-2.0 * G_ * delta_eqps, N_p);
