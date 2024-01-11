@@ -286,6 +286,7 @@ public:
                               .Warnings()
                               .Errors()
                               .Summary()
+                              .Iterations()
                               .FirstAndLast());
     newton->SetRelTol(1e-8);
     newton->SetAbsTol(1e-12);

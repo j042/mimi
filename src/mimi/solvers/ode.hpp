@@ -11,7 +11,7 @@ namespace mimi::solvers {
 class OdeBase {
 public:
   virtual ~OdeBase() = default;
-  virtual std::string Name() = 0;
+  virtual std::string Name() const = 0;
   virtual void PrintInfo() {
     mimi::utils::PrintInfo("No detailed info for", Name());
   }
@@ -73,7 +73,7 @@ public:
     fac5_ = alpha_m;
   }
 
-  virtual std::string Name() { return "GeneralizedAlpha2"; }
+  virtual std::string Name() const { return "GeneralizedAlpha2"; }
 
   virtual void PrintInfo() {
     MIMI_FUNC()

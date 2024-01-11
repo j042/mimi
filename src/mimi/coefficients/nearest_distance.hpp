@@ -17,7 +17,7 @@ public:
   /// @brief coefficient used for contact formulation
   double coefficient_{1e4};
   /// @brief tolerance for nearest search
-  double tolerance_{1e-18};
+  double tolerance_{1e-24};
   /// @brief parametric dimension of the scene
   int para_dim_{-1};
   /// @brief physical dimension of the scene

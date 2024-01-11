@@ -82,6 +82,8 @@ public:
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfvi_) {
+      domain_integ->first_effective_dt_ = first_effective_dt_;
+      domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AssembleDomainResidual(current_x, current_v);
 
       // add to global
@@ -95,6 +97,8 @@ public:
 
     // boundary
     for (auto& boundary_integ : boundary_face_nfvi_) {
+      boundary_integ->first_effective_dt_ = first_effective_dt_;
+      boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryResidual(current_x, current_v);
 
       // add to global
@@ -126,6 +130,8 @@ public:
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfvi_) {
+      domain_integ->first_effective_dt_ = first_effective_dt_;
+      domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AssembleDomainGrad(current_x);
 
       // add to global
@@ -140,6 +146,8 @@ public:
 
     // boundary
     for (auto& boundary_integ : boundary_face_nfvi_) {
+      boundary_integ->first_effective_dt_ = first_effective_dt_;
+      boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryGrad(current_x);
 
       // add to global
