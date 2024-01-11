@@ -1168,21 +1168,21 @@ public:
       // But it doesn't converge and they are negative, which isn't allowed
       //
       // first, stress using lambda * tr(eps) * I + 2*mu*eps
-      const double diag = lambda_ * eps.Trace();
-      const double two_mu = 2. * mu_;
-      double sig_eq0 = diag + two_mu * e[0];
-      double sig_eq3 = diag + two_mu * e[3];
-      const double trace_over_dim = (sig_eq0 + sig_eq3) / 2.0;
-      sig_eq0 -= trace_over_dim;
-      sig_eq3 -= trace_over_dim;
-      const double sig_eq1 = two_mu * e[1];
-      const double sig_eq2 = two_mu * e[2];
-      const double equivalent_stress =
-          std::sqrt(3. / 2.
-                    * ((sig_eq0 * sig_eq0) + (sig_eq1 * sig_eq1)
-                       + (sig_eq2 * sig_eq2) + (sig_eq3 * sig_eq3)));
-      temperature_rate = heat_fraction_ * equivalent_stress
-                         * plastic_strain_rate / (density_ * specific_heat_);
+      // const double diag = lambda_ * eps.Trace();
+      // const double two_mu = 2. * mu_;
+      // double sig_eq0 = diag + two_mu * e[0];
+      // double sig_eq3 = diag + two_mu * e[3];
+      // const double trace_over_dim = (sig_eq0 + sig_eq3) / 2.0;
+      // sig_eq0 -= trace_over_dim;
+      // sig_eq3 -= trace_over_dim;
+      // const double sig_eq1 = two_mu * e[1];
+      // const double sig_eq2 = two_mu * e[2];
+      // const double equivalent_stress =
+      //     std::sqrt(3. / 2.
+      //               * ((sig_eq0 * sig_eq0) + (sig_eq1 * sig_eq1)
+      //                  + (sig_eq2 * sig_eq2) + (sig_eq3 * sig_eq3)));
+      // temperature_rate = heat_fraction_ * equivalent_stress
+      //                    * plastic_strain_rate / (density_ * specific_heat_);
 
       // delta_temp = eta * sigma : eps_dot / (rho * c_p)
       // delta_T = (heat_fraction_
@@ -1196,13 +1196,14 @@ public:
       //  e[3]), "]", delta_T);
 
       // first, stress using lambda * tr(eps) * I + 2*mu*eps
-      // const double diag = lambda_ * eps.Trace();
-      // const double two_mu = 2. * mu_;
-      // temperature_rate = (heat_fraction_
-      //            * (((diag + two_mu * e[0]) * ed0) + ((two_mu * e[1]) * ed1)
-      //               + ((two_mu * e[2]) * ed1) + ((diag + two_mu * e[3]) *
-      //               ed3)))
-      //           / (density_ * specific_heat_);
+      const double diag = lambda_ * eps.Trace();
+      const double two_mu = 2. * mu_;
+      temperature_rate = std::max(
+          (heat_fraction_
+           * (((diag + two_mu * e[0]) * ed0) + ((two_mu * e[1]) * ed1)
+              + ((two_mu * e[2]) * ed1) + ((diag + two_mu * e[3]) * ed3)))
+              / (density_ * specific_heat_),
+          0.0);
       return;
     } else {
       // get eps_dot
