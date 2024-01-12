@@ -89,6 +89,123 @@ NormalGap(mimi::coefficients::NearestDistanceBase::Results& result) {
 /// implements methods presented in "Sauer and De Lorenzis. An unbiased
 /// computational contact formulation for 3D friction (DOI: 10.1002/nme.4794)
 class PenaltyContact : public NonlinearBase {
+public:
+  using Base_ = NonlinearBase;
+  template<typename T>
+  using Vector_ = mimi::utils::Vector<T>;
+
+  /// precomputed data at quad points
+  struct QuadData {
+    double integration_weight_;
+    // mfem::DenseMatrix dN_dxi_; // don't really need to save this
+    mfem::DenseMatrix dN_dX_;
+    double det_dX_dxi_;
+    mfem::DenseMatrix dxi_dX_; // J_target_to_reference
+    bool active_;
+    mimi::coefficients::NearestDistanceBase::Results results_;
+  };
+
+  /// everything here is based on boundary element.
+  /// consider that each variable has "boundary_" prefix
+  struct BoundaryElementData {
+    int quadrature_order_;
+    int geometry_type_;
+    int n_quad_;
+    int n_dof_; // this is not true dof
+    int n_tdof_;
+
+    std::shared_ptr<mfem::Array<int>> v_dofs_;
+    mfem::DenseMatrix residual_view_; // we always assemble at the same place
+    mfem::DenseMatrix grad_view_;     // we always assemble at the same place
+
+    Vector_<QuadData> quad_data_;
+
+    /// pointer to element and eltrans. don't need it,
+    /// but maybe for further processing or something
+    std::shared_ptr<mfem::NURBSFiniteElement> element_;
+    std::shared_ptr<mfem::IsoparametricTransformation> element_trans_;
+
+    /// pointers to corresponding Base_::element_vectors_
+    mfem::Vector* element_residual_;
+    /// and Base_::element_matrices_
+    mfem::DenseMatrix* element_grad_;
+
+    const mfem::IntegrationRule&
+    GetIntRule(mfem::IntegrationRules& thread_int_rules) const {
+      MIMI_FUNC()
+
+      return thread_int_rules.Get(geometry_type_, quadrature_order_);
+    }
+  };
+  /// temporary containers required in element assembly
+  /// mfem performs some fancy checks for allocating memories.
+  /// So we create one for each thread
+  struct TemporaryData {
+    /// wraps element_state_data_
+    mfem::Vector element_x_;
+    /// wraps element_x_
+    mfem::DenseMatrix element_x_mat_;
+    /// wraps stress_data
+    mfem::DenseMatrix stress_;
+    /// wraps dN_dx_data
+    mfem::DenseMatrix dN_dx_;
+    /// wraps F_data
+    mfem::DenseMatrix F_;
+    /// wraps F_inv_data
+    mfem::DenseMatrix F_inv_;
+    /// wraps forward_residual data
+    mfem::DenseMatrix forward_residual_;
+    /// wraps backward residual data
+    mfem::DenseMatrix backward_residual_;
+
+    /// @brief
+    /// @param element_x_data
+    /// @param stress_data
+    /// @param dN_dx_data
+    /// @param F_data
+    /// @param F_inv_data
+    /// @param dim
+    void SetData(double* element_x_data,
+                 double* stress_data,
+                 double* dN_dx_data,
+                 double* F_data,
+                 double* F_inv_data,
+                 double* forward_residual_data,
+                 double* backward_residual_data,
+                 const int dim) {
+      MIMI_FUNC()
+
+      element_x_.SetDataAndSize(element_x_data, kMaxTrueDof);
+      element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
+      stress_.UseExternalData(stress_data, dim, dim);
+      dN_dx_.UseExternalData(dN_dx_data, kMaxTrueDof, 1);
+      F_.UseExternalData(F_data, dim, dim);
+      F_inv_.UseExternalData(F_inv_data, dim, dim);
+      forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
+      backward_residual_.UseExternalData(backward_residual_data,
+                                         kMaxTrueDof,
+                                         1);
+    }
+
+    void SetShape(const int n_dof, const int dim) {
+      MIMI_FUNC()
+
+      element_x_mat_.SetSize(n_dof, dim);
+      dN_dx_.SetSize(n_dof, dim);
+      forward_residual_.SetSize(n_dof, dim);
+      backward_residual_.SetSize(n_dof, dim);
+    }
+
+    mfem::DenseMatrix&
+    CurrentElementSolutionCopy(const mfem::Vector& current_all,
+                               const ElementData& elem_data) {
+      MIMI_FUNC()
+
+      current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
+      return element_x_mat_;
+    }
+  };
+
 protected:
   /// scene
   std::shared_ptr<mimi::coefficients::NearestDistanceBase>
@@ -103,9 +220,11 @@ protected:
   /// convenient constants - space dim (dim_) is in base
   int boundary_para_dim_;
 
-public:
-  using Base_ = NonlinearBase;
+  int n_threads_;
 
+  Vector_<BoundaryElementData> boundary_element_data_;
+
+public:
   PenaltyContact(
       const std::shared_ptr<mimi::coefficients::NearestDistanceBase>&
           nearest_distance_coeff,
@@ -123,7 +242,7 @@ public:
     // get numbers to decide loop size
     const int n_boundary_elements =
         precomputed_->meshes_[0]->NURBSext->GetNBE();
-    const int n_threads =
+    n_threads_ =
         precomputed_->meshes_.size(); // size of mesh is nthread from Setup()
 
     // get dimension
@@ -135,6 +254,7 @@ public:
       mimi::utils::PrintAndThrowError(Name(),
                                       "does not have a boundary marker.");
     }
+
     // prepare loop - deref and get a mesh to ask
     auto& mesh = *precomputed_->meshes_[0];
     auto& b_marker = *boundary_marker_;
