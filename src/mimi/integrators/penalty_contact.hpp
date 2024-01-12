@@ -325,14 +325,19 @@ public:
 
     auto& augmented_lagrange_multipliers =
         precomputed_->scalars_["augmented_lagrange_multipliers"];
+    auto& new_augmented_lagrange_multipliers =
+        precomputed_->scalars_["new_augmented_lagrange_multipliers"];
 
     // active element loop
     for (const int& i_mbe : Base_::marked_boundary_elements_) {
       auto& i_lagranges = augmented_lagrange_multipliers[i_mbe];
-
+      auto& i_n = new_augmented_lagrange_multipliers[i_mbe];
       // quad loop
       for (auto& j_lagrange : i_lagranges) {
         j_lagrange = value;
+      }
+      for (auto& j : i_n) {
+        j = value;
       }
     }
   }
@@ -464,20 +469,27 @@ public:
 
           // 2. normal gap orientation - we can probably merge condition (1)
           // here
-          if (q_normal_gap > 0.) {
-            mimi::utils::PrintDebug(
-                "exiting quad loop because normal gap is positive");
-            continue;
-          }
+          if (q_normal_gap < q_lagrange / nearest_distance_coeff_->coefficient_) { // lagrange never decreases
+          // if (q_lagrange < 0.) { // lagrange never decreases
+            // q_normal_gap = 0.0;
+            // std::cout << "not active but resigning q_lagrange " << q_lagrange
+            // << "and then gap" << q_normal_gap << "\n";
+          } else {
+            if (q_normal_gap > 0.) {
+              mimi::utils::PrintDebug(
+                  "exiting quad loop because normal gap is positive");
+              continue;
+            }
 
-          // 3. angle check
-          constexpr const double angle_tolerance = 1.0e-5;
-          if (std::acos(
-                  std::min(1., std::abs(q_normal_gap) / q_result.distance_))
-              > angle_tolerance) {
-            mimi::utils::PrintDebug(
-                "exiting quad loop because angle difference is too big");
-            continue;
+            // 3. angle check
+            constexpr const double angle_tolerance = 1.0e-5;
+            if (std::acos(
+                    std::min(1., std::abs(q_normal_gap) / q_result.distance_))
+                > angle_tolerance) {
+              mimi::utils::PrintDebug(
+                  "exiting quad loop because angle difference is too big");
+              continue;
+            }
           }
 
           // set true to active
@@ -490,11 +502,19 @@ public:
           // for here, we just keep it as it is, since the results are the same
           //
           // lambda_new = penalty_factor * normal_distance + lambda_old
-          q_new_lagrange =
-              nearest_distance_coeff_->coefficient_ * q_normal_gap + q_lagrange;
+          // if (q_lagrange < 0. && q_normal_gap > 0.) {
+          //   q_new_lagrange = q_lagrange; // don't let it increase
+          // } else {
+            q_new_lagrange =
+                nearest_distance_coeff_->coefficient_ * q_normal_gap
+                + q_lagrange;
+          // }
           assert(q_new_lagrange < 0.0);
           for (int j{}; j < dim_; ++j) {
             traction_n[j] = q_new_lagrange * q_result.normal_[j];
+          }
+          if (q_lagrange < 0. && q_normal_gap > 0.) {
+            q_new_lagrange = q_lagrange; // don't let pro
           }
 
           // get sqrt of det of metric tensor
@@ -504,7 +524,7 @@ public:
           // get product of all the weights
           // I don't think we need this(* q_reference_to_target_weight)
           const double weight =
-              ip.weight * q_result.query_metric_tensor_weight_;
+              ip.weight * q_reference_to_target_weight * q_result.query_metric_tensor_weight_;
 
           // set residual
           for (int j{}; j < dim_; ++j) {
@@ -526,6 +546,7 @@ public:
   /// -eps [I - c_ab * tangent_a dyadic tangent_b]
   virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
     MIMI_FUNC()
+    return;
 
     // get related precomputed values
     auto& boundary_shapes = precomputed_->vectors_["boundary_shapes"];
@@ -535,6 +556,9 @@ public:
         precomputed_->scalars_["boundary_reference_to_target_weights"];
     // normal gaps
     auto& normal_gaps = precomputed_->scalars_["normal_gaps"];
+
+    auto& new_augmented_lagrange_multipliers =
+        precomputed_->scalars_["new_augmented_lagrange_multipliers"];
 
     auto assemble_face_grad = [&](const int begin,
                                   const int end,
@@ -561,6 +585,7 @@ public:
         const auto& i_d_shapes = boundary_d_shapes[i_mbe];
         auto& i_results = nearest_distance_results_[i_mbe];
         auto& i_normal_gaps = normal_gaps[i_mbe];
+        auto& i_new_lagranges = new_augmented_lagrange_multipliers[i_mbe];
 
         // matrix to assemble
         auto& i_grad = Base_::boundary_element_matrices_->operator[](i_mbe);
@@ -592,7 +617,10 @@ public:
           const auto& metric_tensor_weight =
               q_result.query_metric_tensor_weight_;
           const auto& normal = q_result.normal_;
-          const double& penalty = nearest_distance_coeff_->coefficient_;
+          // const double& penalty = nearest_distance_coeff_->coefficient_;
+
+          // auto& q_new_lagrange = i_new_lagranges[q];
+          auto& penalty = i_new_lagranges[q];
 
           // calc cp_mat - this is symmetric so has a potential to be reduced
           // for 3D for 2D, won't make any difference.
