@@ -20,9 +20,14 @@ mat.density = 1
 
 
 mat.viscosity = -1
-mat.lambda_ = (790000 - (79000 * 2 / 3)) * 10
-# mat.mu = 79000 * 10
-mat.mu = mat.lambda_ * (1 - 2 * 0.3) / 0.6
+
+# define material properties (young's modulus, poisson's ratio)
+# mat.set_young_poisson(210000, 0.3)
+
+# instead, one can also use lame's parameter lambda and mu
+# define material properties (lamda, mu)
+mat.set_lame((790000 - (79000 * 2 / 3)) * 10, 790000)
+
 mat.heat_fraction = 0.9
 mat.specific_heat = 450
 mat.initial_temperature = 800

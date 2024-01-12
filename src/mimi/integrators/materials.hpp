@@ -61,10 +61,34 @@ public:
   double viscosity_{-1.0};
   double lambda_{-1.0};
   double mu_{-1.0};
+  double young_{-1.0};
+  double poisson_{-1.0};
+  double K_{-1.0};
+  double G_{-1.0};
 
   virtual void Prepare(const int dim, const int n_threads_) { MIMI_FUNC() }
 
   virtual std::string Name() const { return "MaterialBase"; }
+
+  /// defining material properties #1
+  virtual void SetYoungPoisson(const double young, const double poisson) {
+    young_ = young;
+    poisson_ = poisson;
+    lambda_ = young * poisson / ((1 + poisson) * (1 - 2 * poisson));
+    mu_ = young / (2.0 * (1.0 + poisson));
+    G_ = mu_;
+    K_ = young / (3.0 * (1.0 - (2.0 * poisson)));
+  }
+
+  /// defining the material properties #2
+  virtual void SetLame(const double lambda, const double mu) {
+    young_ = mu * (3 * lambda + 2 * mu) / (lambda + mu);
+    poisson_ = lambda / (2 * (lambda + mu));
+    lambda_ = lambda;
+    mu_ = mu;
+    G_ = mu;
+    K_ = lambda + 2 * mu / 3;
+  }
 
   /// self setup. will be called once.
   /// unless you want to do it your self, call this one.
@@ -318,11 +342,6 @@ public:
   double kinematic_hardening_;
   double sigma_y_; // yield
 
-  /// @brief Bulk Modulus (lambda + 2 / 3 mu)
-  double K_; // K
-  /// shear modulus (=mu)
-  double G_;
-
   /// decided to use inline
   bool is_2d_{true};
 
@@ -364,10 +383,6 @@ public:
 
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
-
-    // match variable name with the literature
-    K_ = lambda_ + (2 * mu_ / 3);
-    G_ = mu_;
 
     /// make space for du_dX
     aux_matrices_.resize(
@@ -569,11 +584,6 @@ public:
   // additional parameters
   HardeningPtr_ hardening_;
 
-  /// @brief Bulk Modulus (lambda + 2 / 3 mu)
-  double K_; // K
-  /// shear modulus (=mu)
-  double G_;
-
   static constexpr const double k_tol{1.e-10};
 
   struct State : public MaterialState {
@@ -611,10 +621,6 @@ public:
 
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
-
-    // match variable name with the literature
-    K_ = lambda_ + (2 * mu_ / 3);
-    G_ = mu_;
 
     /// make space for du_dX
     aux_matrices_.resize(
@@ -774,11 +780,6 @@ public:
   // additional parameters
   HardeningPtr_ hardening_;
 
-  /// @brief Bulk Modulus (lambda + 2 / 3 mu)
-  double K_; // K
-  /// shear modulus (=mu)
-  double G_;
-
   static constexpr const double k_tol{1.e-10};
 
   struct State : public MaterialState {
@@ -829,10 +830,6 @@ public:
     } else {
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
-
-    // match variable name with the literature
-    K_ = lambda_ + (2 * mu_ / 3);
-    G_ = mu_;
 
     /// make space for du_dX
     aux_matrices_.resize(
@@ -1037,11 +1034,6 @@ public:
   // additional parameters
   HardeningPtr_ hardening_;
 
-  /// @brief Bulk Modulus (lambda + 2 / 3 mu)
-  double K_; // K
-  /// shear modulus (=mu)
-  double G_;
-
   // thermo related
   double heat_fraction_{0.9};        // 0.9 is apparently abaqus' default
   double specific_heat_;             // for now, constant
@@ -1105,10 +1097,6 @@ public:
     } else {
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
-
-    // match variable name with the literature
-    K_ = lambda_ + (2 * mu_ / 3);
-    G_ = mu_;
 
     /// make space for du_dX
     aux_matrices_.resize(
