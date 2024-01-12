@@ -17,8 +17,14 @@ mat = mimi.PyStVenantKirchhoff()
 mat = mimi.PyCompressibleOgdenNeoHookean()
 mat.density = 1
 mat.viscosity = -1
-mat.lambda_ = 50
-mat.mu = 200
+
+# define material properties (young's modulus, poisson's ratio)
+mat.set_young_poisson(210000, 0.3)
+
+# instead, one can also use lame's parameter lambda and mu
+# define material properties (lamda, mu)
+# mat.set_lame(26333, 79000)
+
 nl.set_material(mat)
 
 # create splinepy nurbs to show
