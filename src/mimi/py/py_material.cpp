@@ -3,10 +3,68 @@
 #include <pybind11/pybind11.h>
 
 #include "mimi/integrators/materials.hpp"
+#include "mimi/py/py_utils.hpp"
 
 namespace mimi::py {
 
 namespace py = pybind11;
+
+/// here
+class PythonDefinedMaterial : public mimi::integrators::MaterialBase {
+public:
+  using Base_ = MaterialBase;
+
+  py::object mat_;
+
+  bool use_cauchy_;
+
+  virtual std::string Name() const { return "PythonDefinedMaterial"; }
+
+  virtual bool UsesCauchy() const {
+    MIMI_FUNC()
+    return use_cauchy_;
+  }
+
+  virtual void LoadMat(const std::string& mat_name) {
+    MIMI_FUNC()
+
+    mat_ = py::module_::import("mimimat").attr(mat_name.c_str());
+  }
+
+  virtual void Setup(const int dim, const int n_threads) {
+    MIMI_FUNC()
+
+    Base_::Setup(dim, 1);
+  }
+
+  //   virtual void EvaluatePK1(const mfem::DenseMatrix& F,
+  //                            const int& i_thread,
+  //                            MaterialStatePtr_&,
+  //                            mfem::DenseMatrix& P) {
+  //     MIMI_FUNC()
+
+  //     mimi::utils::PrintInfo("PK1!");
+
+  //     // Give and take as numpy
+  //     mat_(mimi::py::NumpyCopy<double>(F, dim_, dim_),
+  //          mimi::py::NumpyView<double>(P, dim_, dim_));
+  //     py::print(mimi::py::NumpyCopy<double>(F, dim_, dim_));
+  //     py::print(mimi::py::NumpyView<double>(P, dim_, dim_));
+  //   }
+
+  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
+                              const int& i_thread,
+                              MaterialStatePtr_&,
+                              mfem::DenseMatrix& sigma) {
+    MIMI_FUNC()
+
+    // Give and take as numpy
+    mat_(mimi::py::NumpyCopy<double>(F, dim_, dim_),
+         mimi::py::NumpyView<double>(sigma, dim_, dim_));
+    // py::print(mimi::py::NumpyCopy<double>(F, dim_, dim_));
+    // py::print(mimi::py::NumpyView<double>(sigma, dim_, dim_));
+  }
+};
 
 void init_py_material(py::module_& m) {
   /// material laws
@@ -40,6 +98,14 @@ void init_py_material(py::module_& m) {
       .def("uses_cauchy", &MaterialBase::UsesCauchy)
       .def("set_young_poisson", &MaterialBase::SetYoungPoisson)
       .def("set_lame", &MaterialBase::SetLame);
+
+  py::class_<PythonDefinedMaterial,
+             std::shared_ptr<PythonDefinedMaterial>,
+             MaterialBase>
+      pymat(m, "PythonMaterial");
+  pymat.def(py::init<>())
+      .def_readwrite("mat", &PythonDefinedMaterial::mat_)
+      .def_readwrite("use_cauchy", &PythonDefinedMaterial::use_cauchy_);
 
   py::class_<StVK, std::shared_ptr<StVK>, MaterialBase> stvk(
       m,
