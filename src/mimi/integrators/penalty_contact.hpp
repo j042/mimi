@@ -89,25 +89,45 @@ NormalGap(mimi::coefficients::NearestDistanceBase::Results& result) {
 /// implements methods presented in "Sauer and De Lorenzis. An unbiased
 /// computational contact formulation for 3D friction (DOI: 10.1002/nme.4794)
 class PenaltyContact : public NonlinearBase {
+  constexpr static const int kMaxTrueDof = 50;
+  constexpr static const int kDimDim = 9;
+
 public:
   using Base_ = NonlinearBase;
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
 
+  /// we can update augmented lagrange vectors just by copying converged force
+  /// https://hal.science/hal-01005280/document
+  mfem::Vector augmented_lagrange_;
+
   /// precomputed data at quad points
   struct QuadData {
+    bool active_; // needed for
+
     double integration_weight_;
-    // mfem::DenseMatrix dN_dxi_; // don't really need to save this
-    mfem::DenseMatrix dN_dX_;
     double det_dX_dxi_;
+    double lagrange_;     // lambda_k
+    double new_lagrange_; // lambda_k+1
+    double penalty_;      // penalty factor
+    double g_;            // normal gap
+
+    mfem::Vector N_; // shape
+    // mfem::DenseMatrix dN_dxi_; // don't really need to save this
+    mfem::DenseMatrix dN_dX_;  // used to compute F
     mfem::DenseMatrix dxi_dX_; // J_target_to_reference
-    bool active_;
-    mimi::coefficients::NearestDistanceBase::Results results_;
+
+    mimi::coefficients::NearestDistanceBase::Results distance_results_;
   };
 
   /// everything here is based on boundary element.
   /// consider that each variable has "boundary_" prefix
   struct BoundaryElementData {
+    /// we only work with marked boundaries, so we keep two ids
+    /// for convenience. One that belongs to marked boundary list (id_)
+    /// and one that belongs to NBE(true_id_)
+    int id_;
+    int true_id_;
     int quadrature_order_;
     int geometry_type_;
     int n_quad_;
@@ -211,16 +231,12 @@ protected:
   std::shared_ptr<mimi::coefficients::NearestDistanceBase>
       nearest_distance_coeff_ = nullptr;
 
-  /// results from proximity queries, to be reused for grad - latest relevant
-  /// residual and grad are calls right after one another from newton solver
-  mimi::utils::Vector<
-      mimi::utils::Vector<mimi::coefficients::NearestDistanceBase::Results>>
-      nearest_distance_results_;
-
   /// convenient constants - space dim (dim_) is in base
   int boundary_para_dim_;
 
   int n_threads_;
+
+  int n_marked_boundaries_;
 
   Vector_<BoundaryElementData> boundary_element_data_;
 
@@ -271,150 +287,110 @@ public:
     }
     Base_::marked_boundary_elements_.shrink_to_fit();
 
+    // this is actually number of boundaries that contributes to assembly
+    n_marked_boundaries_ = Base_::marked_boundary_elements_.size();
+
     // extract boundary geometry type
     boundary_geometry_type_ =
         precomputed_->boundary_elements_[0]->GetGeomType();
 
-    // allocate result holder
-    nearest_distance_results_.resize(n_boundary_elements);
-
     // allocate element vectors and matrices
     Base_::boundary_element_matrices_ =
         std::make_unique<mimi::utils::Data<mfem::DenseMatrix>>();
-    Base_::boundary_element_matrices_->Reallocate(n_boundary_elements);
+    Base_::boundary_element_matrices_->Reallocate(n_marked_boundaries_);
     Base_::boundary_element_vectors_ =
         std::make_unique<mimi::utils::Data<mfem::Vector>>();
-    Base_::boundary_element_vectors_->Reallocate(n_boundary_elements);
+    Base_::boundary_element_vectors_->Reallocate(n_marked_boundaries_);
 
-    // shapes
-    auto& boundary_shapes = precomputed_->vectors_["boundary_shapes"];
-    boundary_shapes.resize(n_boundary_elements);
-
-    // Dshapes - need to evaluate derivative at current quad point
-    auto& boundary_d_shapes = precomputed_->matrices_["boundary_d_shapes"];
-    boundary_d_shapes.resize(n_boundary_elements);
-
-    // jacobian weights
-    auto& boundary_reference_to_target_weights =
-        precomputed_->scalars_["boundary_reference_to_target_weights"];
-    boundary_reference_to_target_weights.resize(n_boundary_elements);
-
-    // lagrange_multiplier for augmented
-    // we don't have to use it, but we have it
-    auto& augmented_lagrange_multipliers =
-        precomputed_->scalars_["augmented_lagrange_multipliers"];
-    augmented_lagrange_multipliers.resize(n_boundary_elements);
-
-    // we need to save penalty * dist + lagrange each iteration
-    auto& new_augmented_lagrange_multipliers =
-        precomputed_->scalars_["new_augmented_lagrange_multipliers"];
-    new_augmented_lagrange_multipliers.resize(n_boundary_elements);
-
-    // save normal gap to update lagrange multiplier
-    // we actually need normal_distance which is just -normal_gap.
-    // I just don't want to introduce a new variable.
-    auto& normal_gaps = precomputed_->scalars_["normal_gaps"];
-    normal_gaps.resize(n_boundary_elements);
-
-    // quad order
-    boundary_quadrature_orders_.resize(n_boundary_elements);
+    boundary_element_data_.resize(n_marked_boundaries_);
 
     // now, weight of jacobian.
-    auto precompute_trans_weights = [&](const int marked_b_el_begin,
-                                        const int marked_b_el_end,
-                                        const int i_thread) {
+    auto precompute_at_elem_and_quad = [&](const int marked_b_el_begin,
+                                           const int marked_b_el_end,
+                                           const int i_thread) {
       // thread's obj
       auto& int_rules = precomputed_->int_rules_[i_thread];
 
+      mfem::DenseMatrix dN_dxi;
+
       for (int i{marked_b_el_begin}; i < marked_b_el_end; ++i) {
         // we only need makred boundaries
-        const int& i_mbe = Base_::marked_boundary_elements_[i];
+        const int m = Base_::marked_boundary_elements_[i];
 
-        // get element
-        const auto& i_b_el = precomputed_->boundary_elements_[i_mbe];
+        // get boundary element data
+        auto& i_bed = boundary_element_data_[m];
 
-        // shapes, dshapes
-        auto& i_shapes = boundary_shapes[i_mbe];
-        auto& i_d_shapes = boundary_d_shapes[i_mbe];
+        i_bed.id_ = i;
+        i_bed.true_id_ = m;
+        // save (shared) pointers from global numbering
+        i_bed.element_ = precomputed_->boundary_elements_[m];
+        i_bed.geometry_type_ = i_bed.element_->GetGeomType();
+        i_bed.element_trans_ =
+            precomputed_->reference_to_target_element_trans_[m];
+        i_bed.n_dof_ = i_bed.element_->GetDof();
+        i_bed.n_tdof_ = i_bed.n_dof_ * dim_;
+        i_bed.v_dofs_ = precomputed_->boundary_v_dofs_[m];
 
-        // get boundary transformations
-        auto& i_b_trans =
-            *precomputed_->reference_to_target_boundary_trans_[i_mbe];
+        // quick size check
+        const int n_tdof = i_bed.n_tdof_;
+        if (kMaxTrueDof < n_tdof) {
+          mimi::utils::PrintAndThrowError(
+              "kMaxTrueDof smaller than required space.",
+              "Please recompile after setting a bigger number");
+        }
 
-        // get corresponding vector of weights to fill
-        auto& i_weights = boundary_reference_to_target_weights[i_mbe];
+        // now, setup some more from local properties
+        i_bed.element_residual_ = &(*boundary_element_vectors_)[i];
+        i_bed.element_residual_->SetSize(n_tdof);
+        i_bed.residual_view_.UseExternalData(i_bed.element_residual_->GetData(),
+                                             i_bed.n_dof,
+                                             dim_);
+        i_bed.element_grad_ = &(*element_matrices_)[i];
+        i_bed.element_grad_->SetSize(n_tdof, n_tdof);
+        i_bed.grad_view_.UseExternalData(i_bed.element_grad_->GetData(),
+                                         n_tdof,
+                                         n_tdof);
 
-        // get corresponding vector of lagrange multipliers
-        // TODO: check if per-quad is correct.
-        auto& i_lagrange = augmented_lagrange_multipliers[i_mbe];
-        auto& i_new_lagrange = new_augmented_lagrange_multipliers[i_mbe];
-
-        // get corresponding vector of normal_gaps
-        auto& i_normal_gaps = normal_gaps[i_mbe];
-
-        // get results holder to allocate
-        auto& i_results = nearest_distance_results_[i_mbe];
-
-        // get quad order
-        const int q_order = (quadrature_order < 0)
-                                ? i_b_trans.GetFE()->GetOrder() * 2 + 3
-                                : quadrature_order;
-
-        // save this quad_order for the element
-        boundary_quadrature_orders_[i_mbe] = q_order;
-
-        // get int rule
-        const mfem::IntegrationRule& ir =
-            int_rules.Get(boundary_geometry_type_, q_order);
-        // prepare quad loop
-        const int n_quad = ir.GetNPoints();
-
-        // ndof
-        const int n_dof = i_b_el->GetDof();
-
-        // allocate boundary element based values
-        Base_::boundary_element_vectors_->operator[](i_mbe).SetSize(n_dof
-                                                                    * dim_);
-        Base_::boundary_element_matrices_->operator[](i_mbe).SetSize(
-            n_dof * dim_,
-            n_dof * dim_);
-
-        // use n_quad to allocate quad dependant values
-        i_weights.resize(n_quad);
-        i_results.resize(n_quad);
-        i_lagrange.resize(n_quad, 0.0);
-        i_new_lagrange.resize(n_quad, 0.0);
-        i_normal_gaps.resize(n_quad, 0.0);
-        i_shapes.resize(n_quad);
-        i_d_shapes.resize(n_quad);
-
-        // loop quad points
-        for (int j{}; j < n_quad; ++j) {
-          // start by setting int point
+        // let's prepare quad loop
+        i_bed.quadrature_order_ = (quadrature_order < 0)
+                                      ? i_bed.element_->GetOrder() * 2 + 3
+                                      : quadrature_order;
+        const mfem::IntegrationRule& ir = i_bed.GetIntRule(int_rules);
+        i_bed.n_quad_ = ir.GetNPoints();
+        i_bed.quad_data_.resize(i_bed.n_quad_);
+        dN_dxi.SetSize(i_bed.n_dof_, boundary_para_dim_);
+        for (int j{}; j < i_el_data.n_quad_; ++j) {
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
-          i_b_trans.SetIntPoint(&ip);
+          i_bed.element_trans_->SetIntPoint(&ip);
 
-          // get shapes and dshapes
-          mfem::Vector& j_shape = i_shapes[j];
-          mfem::DenseMatrix& j_d_shape = i_d_shapes[j];
-          j_shape.SetSize(n_dof);
-          j_d_shape.SetSize(n_dof, boundary_para_dim_);
-          i_b_el->CalcShape(ip, j_shape);
-          i_b_el->CalcDShape(ip, j_d_shape);
+          // first allocate, then start filling values
+          auto& q_data = i_bed.quad_data_[j];
+          q_data.integration_weight_ = ip.weight;
+          q_data.N_.SetSize(i_bed.n_dof_);
+          q_data.dN_dX_.SetSize(i_bed.n_dof_, boundary_para_dim_);
+          q_data.dxi_dX_.SetSize(i_bed.n_dof_, boundary_para_dim_);
+          q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
 
-          // get trans weight
-          i_weights[j] = i_b_trans.Weight();
+          // precompute
+          i_bed.element_->CalcShape(ip, q_data.dN_);
+          i_bed.element_->CalcDShape(ip, dN_dxi);
+          mfem::CalcInverse(i_bed.element_trans_->Jacobian(), q_data.dxi_dX_);
+          mfem::Mult(dN_dxi, q_data.dxi_dX_, q_data.dN_dX_);
+          q_data.det_dX_dxi_ = i_bed.element_trans_->Weight();
 
-          // alloate each members of results
-          i_results[j].SetSize(boundary_para_dim_, dim_);
+          // let's not forget to initialize values
+          q_data.active_ = false;
+          q_data.lagrange_ = 0.0;
+          q_data.new_lagrange_ = 0.0;
+          q_data.penalty_ = nearest_distance_coeff_->coefficient_;
+          q_data.g_ = 0.0;
         }
       }
     };
 
-    mimi::utils::NThreadExe(
-        precompute_trans_weights,
-        static_cast<int>(Base_::marked_boundary_elements_.size()),
-        n_threads);
+    mimi::utils::NThreadExe(precompute_at_elem_and_quad,
+                            n_marked_boundaries_,
+                            n_threads_);
   }
 
   virtual void UpdateLagrange() {
