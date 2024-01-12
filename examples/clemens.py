@@ -16,11 +16,12 @@ def py_mat(F, P):
 
 
 def neo(F, sig):
-    I = np.eye(F.shape[0])
+    F = F.T
+    I = np.eye(F.shape[0], dtype=float)
     det_F = np.linalg.det(F)
-    muF = 200 / det_F
+    muF = 200. / det_F
     B = F @ F.T
-    sig[:] = muF * B + (-muF + 50 * (det_F-1)) * I
+    sig[:] = muF * B + (-muF + 50. * (det_F-1.)) * I
 
 #  create nl solid
 nl = mimi.PyNonlinearSolid()
@@ -52,7 +53,7 @@ bc.initial.body_force(1, -1)
 nl.boundary_condition = bc
 
 nl.setup(1)
-nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 10, False)
+#nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 10, False)
 
 rhs = nl.linear_form_view2("rhs")
 
