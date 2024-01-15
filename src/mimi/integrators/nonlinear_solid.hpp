@@ -317,20 +317,6 @@ public:
                           q.dN_dX_,
                           tmp.stress_,
                           residual_matrix);
-
-      // alternatively, this. But, this does not converge.
-      // check what's wrong with this
-      //
-      // material_->EvaluateCauchy(tmp.F_,
-      //                           i_thread,
-      //                           q.material_state_,
-      //                           tmp.stress_);
-      // mfem::CalcInverse(tmp.F_, tmp.F_inv_);
-      // mfem::Mult(q.dN_dX_, tmp.F_inv_, tmp.dN_dx_);
-      // mfem::AddMult_a(tmp.F_.Det() * q.integration_weight_ * q.det_dX_dxi_,
-      //                 tmp.dN_dx_,
-      //                 tmp.stress_,
-      //                 e.residual_view_);
     }
   }
 

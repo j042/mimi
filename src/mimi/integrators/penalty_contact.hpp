@@ -402,22 +402,9 @@ public:
   virtual void UpdateLagrange() {
     MIMI_FUNC();
 
-    auto& augmented_lagrange_multipliers =
-        precomputed_->scalars_["augmented_lagrange_multipliers"];
-
-    auto& new_augmented_lagrange_multipliers =
-        precomputed_->scalars_["new_augmented_lagrange_multipliers"];
-
-    // active element loop
-    for (const int& i_mbe : Base_::marked_boundary_elements_) {
-      auto& i_lag = augmented_lagrange_multipliers[i_mbe];
-      const auto& i_new_lag = new_augmented_lagrange_multipliers[i_mbe];
-
-      assert(i_lag.size() == i_new_lag.size());
-
-      // quad loop
-      for (int j{}; j < static_cast<int>(i_lag.size()); ++j) {
-        i_lag[j] = i_new_lag[j];
+    for (auto& be : boundary_element_data_) {
+      for (auto& qd : be.quad_data_) {
+        qd.lagrange_ = qd.new_lagrange_;
       }
     }
   }
@@ -425,46 +412,15 @@ public:
   virtual void FillLagrange(const double value) {
     MIMI_FUNC()
 
-    auto& augmented_lagrange_multipliers =
-        precomputed_->scalars_["augmented_lagrange_multipliers"];
-
-    // active element loop
-    for (const int& i_mbe : Base_::marked_boundary_elements_) {
-      auto& i_lagranges = augmented_lagrange_multipliers[i_mbe];
-
-      // quad loop
-      for (auto& j_lagrange : i_lagranges) {
-        j_lagrange = value;
+    for (auto& be : boundary_element_data_) {
+      for (auto& qd : be.quad_data_) {
+        qd.lagrange_ = value;
       }
     }
   }
 
   virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
-
-    // get related precomputed values
-    auto& boundary_shapes =
-        precomputed_->vectors_["boundary_shapes"]; // n_patches * n_quad (n_dof)
-                                                   // - each can vary in size
-    auto& boundary_d_shapes =
-        precomputed_->matrices_["boundary_d_shapes"]; // n_patches * n_quad
-                                                      // (n_dof * n_dim)
-
-    // jacobian weights
-    auto& boundary_reference_to_target_weights =
-        precomputed_
-            ->scalars_["boundary_reference_to_target_weights"]; // n_b_elem *
-                                                                // n_quad
-
-    // augmented larange
-    auto& augmented_lagrange_multipliers =
-        precomputed_->scalars_["augmented_lagrange_multipliers"];
-
-    auto& new_augmented_lagrange_multipliers =
-        precomputed_->scalars_["new_augmented_lagrange_multipliers"];
-
-    // normal gaps
-    auto& normal_gaps = precomputed_->scalars_["normal_gaps"];
 
     auto assemble_face_residual = [&](const int begin,
                                       const int end,
