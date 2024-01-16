@@ -104,6 +104,21 @@ public:
         Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
 
     I_.Diag(1., dim);
+
+    mimi::utils::PrintInfo(Name(),
+                           "Material Paramters:",
+                           "\nE:",
+                           young_,
+                           "\npoisson:",
+                           poisson_,
+                           "\nlambda:",
+                           lambda_,
+                           "\nmu",
+                           mu_,
+                           "\nG",
+                           G_,
+                           "\nK",
+                           K_);
   }
 
   /// answers if this material is suitable for visco-solids.
