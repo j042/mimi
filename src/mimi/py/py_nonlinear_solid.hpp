@@ -289,15 +289,14 @@ public:
     nl_oper->SetNewtonSolver(newton);
 
     // ode
-    auto gen_alpha =
-        std::make_unique<mimi::solvers::GeneralizedAlpha2>(*nl_oper);
-    gen_alpha->PrintInfo();
+    auto odesolver = std::make_unique<mimi::solvers::NewmarkSolver>(*nl_oper);
+    odesolver->PrintInfo();
 
     // finalize operator
     nl_oper->Setup();
 
     // set dynamic system -> transfer ownership of those to base
-    Base_::SetDynamicSystem2(nl_oper.release(), gen_alpha.release());
+    Base_::SetDynamicSystem2(nl_oper.release(), odesolver.release());
   }
 };
 
