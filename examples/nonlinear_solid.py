@@ -6,10 +6,10 @@ sp.settings.NTHREADS = 4
 
 #  create nl solid
 nl = mimi.PyNonlinearSolid()
-nl.read_mesh("tests/data/balken.mesh")
+nl.read_mesh("tests/data/cube-nurbs.mesh")
 # refine
 nl.elevate_degrees(1)
-nl.subdivide(0)
+nl.subdivide(3)
 
 # create material
 # PyMaterial is platzhalter
@@ -19,7 +19,7 @@ mat.density = 1
 mat.viscosity = -1
 
 # define material properties (young's modulus, poisson's ratio)
-mat.set_young_poisson(210000, 0.3)
+mat.set_young_poisson(2100, 0.3)
 
 # instead, one can also use lame's parameter lambda and mu
 # define material properties (lamda, mu)
@@ -34,21 +34,22 @@ s.cps[:] = s.cps[to_s]
 
 bc = mimi.BoundaryConditions()
 # bc.initial.dirichlet(1, 0).dirichlet(1, 1)
-bc.initial.dirichlet(2, 0).dirichlet(2, 1)
-# bc.initial.dirichlet(3, 0).dirichlet(3, 1)
-bc.initial.body_force(1, -1)
+bc.initial.dirichlet(1, 0).dirichlet(1, 1).dirichlet(1, 2)
+bc.initial.traction(0, 1, -100)
+# bc.initial.body_force(1, -100)
 
 nl.boundary_condition = bc
 
-nl.setup(2)
-nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 1, False)
+nl.setup(4)
+nl.configure_newton("nonlinear_solid", 1e-12, 1e-12, 11, False)
 
 rhs = nl.linear_form_view2("rhs")
 
-nl.time_step_size = 0.05
+nl.time_step_size = 0.01
 
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
+# s.show_options["control_points"] = False
 # s.show_options["knots"] = False
 s.show_options["resolutions"] = 50
 s.cps[:] = x[to_s]
@@ -64,7 +65,7 @@ for i in range(10000):
         )
     nl.step_time2()
 
-    if i == 0:
-        exit()
+#    if i == 0:
+#        exit()
 
 gus.show(s, vedoplot=plt, interactive=True)

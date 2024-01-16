@@ -12,20 +12,25 @@ def py_mat(F, P):
     C = F.T @ F
     E = 0.5 * (C - I)
     S = 50 * np.trace(E) * I + 2 * 200 * E
-    P[:] = F @ S 
+    P[:] = F @ S
 
 
 def neo(F, sig):
     F = F.T
     I = np.eye(F.shape[0], dtype=float)
     det_F = np.linalg.det(F)
-    muF = 200. / det_F
+    muF = 1923.08 / det_F
     B = F @ F.T
-    sig[:] = muF * B + (-muF + 50. * (det_F-1.)) * I
+    sig[:] = muF * B + (-muF + 2884.62 * (det_F - 1.0)) * I
+    if np.isnan(sig).any():
+        print(F)
+        print(sig)
+        exit()
+
 
 #  create nl solid
 nl = mimi.PyNonlinearSolid()
-nl.read_mesh("tests/data/balken.mesh")
+nl.read_mesh("tests/data/cube-nurbs.mesh")
 # refine
 nl.elevate_degrees(1)
 nl.subdivide(1)
@@ -35,8 +40,7 @@ nl.subdivide(1)
 mat = mimi.PythonMaterial()
 mat.mat = neo
 mat.density = 1
-mat.viscosity = -1
-mat.use_cauchy = True
+mat.set_young_poisson(5000, 0.3)
 nl.set_material(mat)
 
 # create splinepy nurbs to show
@@ -48,16 +52,16 @@ bc = mimi.BoundaryConditions()
 # bc.initial.dirichlet(1, 0).dirichlet(1, 1)
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
 # bc.initial.dirichlet(3, 0).dirichlet(3, 1)
-bc.initial.body_force(1, -1)
+bc.initial.body_force(1, -10)
 
 nl.boundary_condition = bc
 
 nl.setup(1)
-#nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 10, False)
+nl.configure_newton("nonlinear_solid", 1e-8, 1e-12, 10, False)
 
 rhs = nl.linear_form_view2("rhs")
 
-nl.time_step_size = 0.005
+nl.time_step_size = 0.05
 
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
