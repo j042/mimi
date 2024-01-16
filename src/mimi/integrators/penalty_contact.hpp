@@ -240,6 +240,8 @@ protected:
 
   Vector_<BoundaryElementData> boundary_element_data_;
 
+  mfem::Vector augmented_lagrange_lambda_;
+
 public:
   PenaltyContact(
       const std::shared_ptr<mimi::coefficients::NearestDistanceBase>&
@@ -289,6 +291,10 @@ public:
 
     // this is actually number of boundaries that contributes to assembly
     n_marked_boundaries_ = Base_::marked_boundary_elements_.size();
+
+    // we will only keep marked boundary dofs
+    // this means that we need a dof map
+    lambda_al_.SetSize(n_marked_boundaries_ * dim_);
 
     // extract boundary geometry type
     boundary_geometry_type_ =
