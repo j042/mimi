@@ -53,9 +53,11 @@ public:
     double g_;            // normal gap
 
     mfem::Vector N_; // shape
-    // mfem::DenseMatrix dN_dxi_; // don't really need to save this
-    mfem::DenseMatrix dN_dX_;  // used to compute F
-    mfem::DenseMatrix dxi_dX_; // J_target_to_reference
+    /// thanks to Jac's hint, it turns out we can just work with this for
+    /// boundary
+    mfem::DenseMatrix dN_dxi_; // don't really need to save this
+    // mfem::DenseMatrix dN_dX_;  // used to compute F
+    // mfem::DenseMatrix dxi_dX_; // J_target_to_reference
 
     mimi::coefficients::NearestDistanceBase::Query distance_query_;
     mimi::coefficients::NearestDistanceBase::Results distance_results_;
@@ -84,7 +86,7 @@ public:
     /// pointer to element and eltrans. don't need it,
     /// but maybe for further processing or something
     std::shared_ptr<mfem::NURBSFiniteElement> element_;
-    std::shared_ptr<mfem::IsoparametricTransformation> element_trans_;
+    std::shared_ptr<mfem::FaceElementTransformations> element_trans_;
 
     /// pointers to corresponding Base_::element_vectors_
     mfem::Vector* element_residual_;
@@ -135,8 +137,8 @@ public:
       element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
       // F_.UseExternalData(F_data, dim, para_dim);
       // F_inv_.UseExternalData(F_inv_data, dim, para_dim);
-      F_.UseExternalData(F_data, dim, dim);
-      F_inv_.UseExternalData(F_inv_data, dim, dim);
+      F_.UseExternalData(F_data, dim, para_dim);
+      F_inv_.UseExternalData(F_inv_data, para_dim, dim);
       forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
       backward_residual_.UseExternalData(backward_residual_data,
                                          kMaxTrueDof,
@@ -259,8 +261,6 @@ public:
       // thread's obj
       auto& int_rules = precomputed_->int_rules_[i_thread];
 
-      mfem::DenseMatrix dN_dxi;
-
       for (int i{marked_b_el_begin}; i < marked_b_el_end; ++i) {
         // we only need makred boundaries
         const int m = Base_::marked_boundary_elements_[i];
@@ -308,8 +308,8 @@ public:
         const mfem::IntegrationRule& ir = i_bed.GetIntRule(int_rules);
         i_bed.n_quad_ = ir.GetNPoints();
         i_bed.quad_data_.resize(i_bed.n_quad_);
-        dN_dxi.SetSize(i_bed.n_dof_, boundary_para_dim_);
 
+        // this needs to come from volume element!
         for (int j{}; j < i_bed.n_quad_; ++j) {
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
           i_bed.element_trans_->SetIntPoint(&ip);
@@ -318,19 +318,34 @@ public:
           auto& q_data = i_bed.quad_data_[j];
           q_data.integration_weight_ = ip.weight;
           q_data.N_.SetSize(i_bed.n_dof_);
-          q_data.dN_dX_.SetSize(i_bed.n_dof_, dim_);
-          // this is "inverse" of dim x p_dim -> p_dim x dim
-          q_data.dxi_dX_.SetSize(boundary_para_dim_, dim_);
+
+          // /// These need to come from volume element!
+          // q_data.dN_dX_.SetSize(i_bed.n_dof_, dim_);
+          // q_data.dxi_dX_.SetSize(dim_, dim_);
+          q_data.dN_dxi_.SetSize(i_bed.n_dof_, boundary_para_dim_);
+
           q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
           q_data.distance_query_.SetSize(boundary_para_dim_);
           q_data.distance_query_.max_iterations_ = 20;
 
           // precompute
+          // shape comes from boundary element
           i_bed.element_->CalcShape(ip, q_data.N_);
-          i_bed.element_->CalcDShape(ip, dN_dxi);
-          mfem::CalcInverse(i_bed.element_trans_->Jacobian(), q_data.dxi_dX_);
-          mfem::Mult(dN_dxi, q_data.dxi_dX_, q_data.dN_dX_);
-          q_data.det_dX_dxi_ = i_bed.element_trans_->Weight();
+          i_bed.element_->CalcDShape(ip, q_data.dN_dxi_);
+          // DShape should come from volume
+          // get volume element
+          // auto& i_el =
+          // precomputed_->elements_[i_bed.element_trans_->Elem1No]; auto&
+          // i_eltrans = i_bed.element_trans_->Elem1;
+          // i_bed.element_trans_->Loc1.Transform(ip, eip);
+          // std::cout << "dshape\n";
+          // i_el->CalcDShape(eip, dN_dxi);
+          // std::cout << "inv\n";
+          // mfem::CalcInverse(i_eltrans->Jacobian(), q_data.dxi_dX_);
+          // std::cout << "mult\n";
+          // mfem::Mult(dN_dxi, q_data.dxi_dX_, q_data.dN_dX_);
+
+          // q_data.det_dX_dxi_ = i_bed.element_trans_->Weight();
 
           // let's not forget to initialize values
           q_data.active_ = false;
@@ -399,7 +414,7 @@ public:
     for (QuadData& q : q_data) {
       // get current position and F
       x.MultTranspose(q.N_, q.distance_query_.query_.data());
-      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
+      mfem::MultAtB(x, q.dN_dxi_, tmp.F_);
 
       // nearest distance query
       q.active_ = false; // init
@@ -438,14 +453,18 @@ public:
       // AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_ *.F_.Weight() *
       // q.distance_results_.normal_norm_,
       // tmp.F_.Print();
-      // mimi::utils::PrintInfo(q.det_dX_dxi_, tmp.F_.Weight(),
-      // q.distance_results_.normal_norm_);
-      AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_, // * tmp.F_.Weight(),
-                    q.N_.begin(),
-                    q.N_.end(),
-                    t_n.begin(),
-                    t_n.end(),
-                    residual_begin);
+      // mimi::utils::PrintInfo(//q.det_dX_dxi_,
+      //                       tmp.F_.Weight(),
+      //                       q.distance_results_.normal_norm_);
+      AddMult_a_VWt(
+          q.integration_weight_
+              * tmp.F_.Weight(), // *  q.distance_results_.normal_norm_, // *
+                                 // tmp.F_.Weight(),
+          q.N_.begin(),
+          q.N_.end(),
+          t_n.begin(),
+          t_n.end(),
+          residual_begin);
     }
   }
 
