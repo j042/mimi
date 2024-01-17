@@ -47,6 +47,7 @@ public:
 
     double integration_weight_;
     double det_dX_dxi_;
+    double det_F_;
     double lagrange_;     // lambda_k
     double new_lagrange_; // lambda_k+1
     double penalty_;      // penalty factor
@@ -238,7 +239,11 @@ public:
 
     // we will only keep marked boundary dofs
     // this means that we need a dof map
-    al_lambda_.SetSize(n_marked_boundaries_ * dim_);
+    //
+    // however for now, let's keep the whole size
+    // this should just equal to GetNDofs()
+    al_lambda_.SetSize(precomputed_->fe_spaces_[0]->GetTrueVSize() / dim_);
+    al_lambda_ = 0.0;
 
     // extract boundary geometry type
     boundary_geometry_type_ =
@@ -345,7 +350,7 @@ public:
           // std::cout << "mult\n";
           // mfem::Mult(dN_dxi, q_data.dxi_dX_, q_data.dN_dX_);
 
-          // q_data.det_dX_dxi_ = i_bed.element_trans_->Weight();
+          q_data.det_dX_dxi_ = i_bed.element_trans_->Weight();
 
           // let's not forget to initialize values
           q_data.active_ = false;
@@ -379,16 +384,54 @@ public:
                             marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.erase(last, marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.shrink_to_fit();
+    // we gotta do this twice
   }
 
+  // we will average lagrange
   virtual void UpdateLagrange() {
     MIMI_FUNC();
 
+    al_lambda_ = 0.0;
+
+    // averaging loop
+    mfem::Vector lambda;
     for (auto& be : boundary_element_data_) {
+      lambda.SetSize(be.n_dof_);
+      lambda = 0.0;
       for (auto& qd : be.quad_data_) {
-        qd.lagrange_ = qd.new_lagrange_;
+        // would I have to multiply det(J) and such?
+        // I'd consider this just pure integration, but maybe not
+        // lambda.Add(qd.integration_weight_ * qd.det_dX_dxi_ *
+        // qd.new_lagrange_, qd.N_);
+        lambda.Add(qd.integration_weight_ * qd.det_F_ * qd.new_lagrange_,
+                   qd.N_);
+      }
+
+      for (int i{}, j{}; i < be.v_dofs_->Size(); i += 2, ++j) {
+        const int ii = std::div((*be.v_dofs_)[i], 2).quot;
+        al_lambda_[ii] += lambda[j];
       }
     }
+
+    // distribute loop
+    for (auto& be : boundary_element_data_) {
+      lambda.SetSize(be.n_dof_);
+      for (int i{}, j{}; i < be.v_dofs_->Size(); i += 2, ++j) {
+        const int ii = std::div((*be.v_dofs_)[i], 2).quot;
+        lambda[j] = al_lambda_[ii];
+      }
+      for (auto& qd : be.quad_data_) {
+        // std::cout << "before " << qd.lagrange_;
+        qd.lagrange_ = lambda * qd.N_;
+        // std::cout << "after " << qd.lagrange_ << std::endl;
+      }
+    }
+
+    // for (auto& be : boundary_element_data_) {
+    //   for (auto& qd : be.quad_data_) {
+    //     qd.lagrange_ = qd.new_lagrange_;
+    //   }
+    // }
   }
 
   virtual void FillLagrange(const double value) {
@@ -397,7 +440,12 @@ public:
     for (auto& be : boundary_element_data_) {
       for (auto& qd : be.quad_data_) {
         qd.lagrange_ = value;
+        qd.new_lagrange_ = value;
       }
+    }
+
+    for (const int& v : marked_boundary_v_dofs_) {
+      al_lambda_[v] = value;
     }
   }
 
@@ -434,28 +482,35 @@ public:
           continue;
         }
       }
-      const double p = q.lagrange_ + (q.penalty_ * q.g_);
+      double p = q.lagrange_;
+      if (q.g_ < 0.0) {
+        p += q.penalty_ * q.g_;
+      }
+      const double det_F = tmp.F_.Weight();
+      // const double p = q.lagrange_ + (q.penalty_ * q.g_);
 
       // this is from SIMO & LAURSEN (1990)
       // where they use Macauley bracket.
       // since we bring this residual directly to lhs,
       // sign for us is just flipped
       // https://doi.org/10.1016/0045-7949(92)90540-G
-      if (!(p < 0.0)) {
-        // q.active_ = false;
-        continue;
-      }
+      // if (!(p < 0.0)) {
+      //   // q.active_ = false;
+      //   q.new_lagrange_ = q.lagrange_;
+      //   continue;
+      // }
       // we made it til here.
       // if state is not frozen, we can save this as new lagrange
       if (!frozen_state_) {
         q.active_ = true;
         q.new_lagrange_ = p;
+        q.det_F_ = det_F;
       }
 
-      t_n.MultiplyAssign(q.new_lagrange_, q.distance_results_.normal_.data());
+      t_n.MultiplyAssign(p, q.distance_results_.normal_.data());
 
       // again, note no negative sign.
-      AddMult_a_VWt(q.integration_weight_ * tmp.F_.Weight(),
+      AddMult_a_VWt(q.integration_weight_ * det_F,
                     q.N_.begin(),
                     q.N_.end(),
                     t_n.begin(),
