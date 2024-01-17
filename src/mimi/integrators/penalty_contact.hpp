@@ -133,8 +133,10 @@ public:
 
       element_x_.SetDataAndSize(element_x_data, kMaxTrueDof);
       element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
-      F_.UseExternalData(F_data, dim, para_dim);
-      F_inv_.UseExternalData(F_inv_data, dim, para_dim);
+      // F_.UseExternalData(F_data, dim, para_dim);
+      // F_inv_.UseExternalData(F_inv_data, dim, para_dim);
+      F_.UseExternalData(F_data, dim, dim);
+      F_inv_.UseExternalData(F_inv_data, dim, dim);
       forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
       backward_residual_.UseExternalData(backward_residual_data,
                                          kMaxTrueDof,
@@ -272,7 +274,7 @@ public:
         i_bed.element_ = precomputed_->boundary_elements_[m];
         i_bed.geometry_type_ = i_bed.element_->GetGeomType();
         i_bed.element_trans_ =
-            precomputed_->reference_to_target_element_trans_[m];
+            precomputed_->reference_to_target_boundary_trans_[m];
         i_bed.n_dof_ = i_bed.element_->GetDof();
         i_bed.n_tdof_ = i_bed.n_dof_ * dim_;
         i_bed.v_dofs_ = precomputed_->boundary_v_dofs_[m];
@@ -291,7 +293,8 @@ public:
         i_bed.residual_view_.UseExternalData(i_bed.element_residual_->GetData(),
                                              i_bed.n_dof_,
                                              dim_);
-        i_bed.element_grad_ = &(*element_matrices_)[i];
+
+        i_bed.element_grad_ = &(*boundary_element_matrices_)[i];
         i_bed.element_grad_->SetSize(n_tdof, n_tdof);
         i_bed.grad_view_.UseExternalData(i_bed.element_grad_->GetData(),
                                          n_tdof,
@@ -301,10 +304,12 @@ public:
         i_bed.quadrature_order_ = (quadrature_order < 0)
                                       ? i_bed.element_->GetOrder() * 2 + 3
                                       : quadrature_order;
+
         const mfem::IntegrationRule& ir = i_bed.GetIntRule(int_rules);
         i_bed.n_quad_ = ir.GetNPoints();
         i_bed.quad_data_.resize(i_bed.n_quad_);
         dN_dxi.SetSize(i_bed.n_dof_, boundary_para_dim_);
+
         for (int j{}; j < i_bed.n_quad_; ++j) {
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
           i_bed.element_trans_->SetIntPoint(&ip);
@@ -313,11 +318,12 @@ public:
           auto& q_data = i_bed.quad_data_[j];
           q_data.integration_weight_ = ip.weight;
           q_data.N_.SetSize(i_bed.n_dof_);
-          q_data.dN_dX_.SetSize(i_bed.n_dof_, boundary_para_dim_);
+          q_data.dN_dX_.SetSize(i_bed.n_dof_, dim_);
           // this is "inverse" of dim x p_dim -> p_dim x dim
           q_data.dxi_dX_.SetSize(boundary_para_dim_, dim_);
           q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
           q_data.distance_query_.SetSize(boundary_para_dim_);
+          q_data.distance_query_.max_iterations_ = 20;
 
           // precompute
           i_bed.element_->CalcShape(ip, q_data.N_);
@@ -401,7 +407,6 @@ public:
                                                q.distance_results_);
       q.distance_results_.ComputeNormal<true>(); // unit normal
       q.g_ = q.distance_results_.NormalGap();
-
       // activity check - only done if the following criteria is not met
       // if (!(q.g_ < q.lagrange_ / q.penalty_)) {
       if (!(q.lagrange_ < 0.0)) {
@@ -414,8 +419,8 @@ public:
           continue;
         }
       }
-
       q.new_lagrange_ = q.lagrange_ + (q.penalty_ * q.g_);
+
       // this is from SIMO & LAURSEN (1990)
       // where they use Macauley bracket.
       // since we bring this residual directly to lhs,
@@ -426,12 +431,16 @@ public:
         continue;
       }
       q.active_ = true;
+
       t_n.MultiplyAssign(q.new_lagrange_, q.distance_results_.normal_.data());
 
       // again, note no negative sign.
       // AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_ *.F_.Weight() *
       // q.distance_results_.normal_norm_,
-      AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_ * tmp.F_.Weight(),
+      // tmp.F_.Print();
+      // mimi::utils::PrintInfo(q.det_dX_dxi_, tmp.F_.Weight(),
+      // q.distance_results_.normal_norm_);
+      AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_, // * tmp.F_.Weight(),
                     q.N_.begin(),
                     q.N_.end(),
                     t_n.begin(),
@@ -524,6 +533,25 @@ public:
 
   virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
     MIMI_FUNC()
+  }
+
+  /// boundaries are kept
+  virtual void
+  AddToGlobalBoundaryResidual(mfem::Vector& global_residual) const {
+    MIMI_FUNC()
+    for (const BoundaryElementData& bed : boundary_element_data_) {
+      global_residual.AddElementVector(*bed.v_dofs_, *bed.element_residual_);
+    }
+  }
+
+  virtual void AddToGlobalBoundaryGrad(mfem::SparseMatrix& global_grad) const {
+    MIMI_FUNC()
+    for (const BoundaryElementData& bed : boundary_element_data_) {
+      global_grad.AddSubMatrix(*bed.v_dofs_,
+                               *bed.v_dofs_,
+                               *bed.element_grad_,
+                               0);
+    }
   }
 };
 

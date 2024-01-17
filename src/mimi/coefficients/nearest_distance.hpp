@@ -137,7 +137,9 @@ public:
     }
 
     // this will fill normal at the same time
-    inline constexpr double NormalGap() {
+    inline double NormalGap() const {
+      MIMI_FUNC()
+
       // here, we apply negative sign to physical_minus_query
       // normal gap is formulated as query minus physical
       return -normal_.InnerProduct(physical_minus_query_);

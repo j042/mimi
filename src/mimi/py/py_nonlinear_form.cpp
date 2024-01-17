@@ -29,14 +29,7 @@ void init_py_nonlinear_form(py::module_& m) {
         // 2. loop saved boundary residuals and add
         // see NLF::Mult()
         for (const auto& boundary_integ : nlf.boundary_face_nfi_) {
-          const auto& bel_vecs = *boundary_integ->boundary_element_vectors_;
-          const auto& bel_vdofs =
-              boundary_integ->precomputed_->boundary_v_dofs_;
-          for (const auto& boundary_marks :
-               boundary_integ->marked_boundary_elements_) {
-            res_vector.AddElementVector(*bel_vdofs[boundary_marks],
-                                        bel_vecs[boundary_marks]);
-          }
+          boundary_integ->AddToGlobalBoundaryResidual(res_vector);
         }
 
         return residual;

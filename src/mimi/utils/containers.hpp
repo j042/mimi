@@ -518,7 +518,6 @@ public:
     for (IndexType i{}; i < size_; ++i) {
       dot += a[i] * data_[i];
     }
-
     return dot;
   }
 
