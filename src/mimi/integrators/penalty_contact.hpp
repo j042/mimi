@@ -32,7 +32,7 @@ public:
     double lagrange_;     // lambda_k
     double new_lagrange_; // lambda_k+1
     double penalty_;      // penalty factor
-    double g_{0.0};       // normal gap
+    double g_;            // normal gap
 
     mfem::Vector N_; // shape
     // mfem::DenseMatrix dN_dxi_; // don't really need to save this
@@ -388,9 +388,16 @@ public:
       q_result.ComputeNormal<true>(); // unit normal
       q.g_ = q_result.NormalGap();
 
-      // activity check
-      // if lagrange value is set, we should compute this regardless of g_ value
-      if (q.langrange_ < 0.0) {
+      // activity check - only done if the following criteria is not met
+      if (!(q.g_ < q.lagrange_ / q.penalty_)) {
+        // normalgap validity and angle tolerance
+        constexpr const double angle_tol = 1.e-5;
+        if (q.g_ > 0.
+            || std::acos(
+                   std::min(1., std::abs(q.g_) / q.distance_results_.distance_))
+                   > angle_tolerance) {
+          continue
+        }
       }
     }
   }
