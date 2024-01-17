@@ -25,7 +25,7 @@ void AddMult_a_VWt(const DataType a,
   for (const DataType* wi{w_begin}; wi != w_end; ++wi) {
     const DataType aw = *wi * a;
     for (const DataType* vi{v_begin}; vi != v_end;) {
-      (*out++) += aw * (*vi++)
+      (*out++) += aw * (*vi++);
     }
   }
 }
@@ -150,7 +150,7 @@ public:
 
     mfem::DenseMatrix&
     CurrentElementSolutionCopy(const mfem::Vector& current_all,
-                               const ElementData& elem_data) {
+                               const BoundaryElementData& elem_data) {
       MIMI_FUNC()
 
       current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
@@ -234,7 +234,7 @@ public:
 
     // we will only keep marked boundary dofs
     // this means that we need a dof map
-    lambda_al_.SetSize(n_marked_boundaries_ * dim_);
+    al_lambda_.SetSize(n_marked_boundaries_ * dim_);
 
     // extract boundary geometry type
     boundary_geometry_type_ =
@@ -289,7 +289,7 @@ public:
         i_bed.element_residual_ = &(*boundary_element_vectors_)[i];
         i_bed.element_residual_->SetSize(n_tdof);
         i_bed.residual_view_.UseExternalData(i_bed.element_residual_->GetData(),
-                                             i_bed.n_dof,
+                                             i_bed.n_dof_,
                                              dim_);
         i_bed.element_grad_ = &(*element_matrices_)[i];
         i_bed.element_grad_->SetSize(n_tdof, n_tdof);
@@ -305,7 +305,7 @@ public:
         i_bed.n_quad_ = ir.GetNPoints();
         i_bed.quad_data_.resize(i_bed.n_quad_);
         dN_dxi.SetSize(i_bed.n_dof_, boundary_para_dim_);
-        for (int j{}; j < i_el_data.n_quad_; ++j) {
+        for (int j{}; j < i_bed.n_quad_; ++j) {
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
           i_bed.element_trans_->SetIntPoint(&ip);
 
@@ -320,7 +320,7 @@ public:
           q_data.distance_query_.SetSize(boundary_para_dim_);
 
           // precompute
-          i_bed.element_->CalcShape(ip, q_data.dN_);
+          i_bed.element_->CalcShape(ip, q_data.N_);
           i_bed.element_->CalcDShape(ip, dN_dxi);
           mfem::CalcInverse(i_bed.element_trans_->Jacobian(), q_data.dxi_dX_);
           mfem::Mult(dN_dxi, q_data.dxi_dX_, q_data.dN_dX_);
@@ -347,7 +347,7 @@ public:
         * std::pow((precomputed_->fe_spaces_[0]->GetMaxElementOrder() + 1),
                    boundary_para_dim_));
     for (const BoundaryElementData& bed : boundary_element_data_) {
-      for (const int& vdof : bed.v_dofs_) {
+      for (const int& vdof : *bed.v_dofs_) {
         marked_boundary_v_dofs_.push_back(vdof);
       }
     }
@@ -357,7 +357,7 @@ public:
     auto last = std::unique(marked_boundary_v_dofs_.begin(),
                             marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.erase(last, marked_boundary_v_dofs_.end());
-    marked_boundary_v_dofs_.shrinked_to_fit();
+    marked_boundary_v_dofs_.shrink_to_fit();
   }
 
   virtual void UpdateLagrange() {
@@ -397,23 +397,23 @@ public:
 
       // nearest distance query
       q.active_ = false; // init
-      nearest_distance_coeff_->NearestDistance(query, q_result);
+      nearest_distance_coeff_->NearestDistance(q.distance_query_,
+                                               q.distance_results_);
       q.distance_results_.ComputeNormal<true>(); // unit normal
       q.g_ = q.distance_results_.NormalGap();
 
       // activity check - only done if the following criteria is not met
       // if (!(q.g_ < q.lagrange_ / q.penalty_)) {
-      if (!(q.lagrange_ < 0.0))) {
-          // normalgap validity and angle tolerance
-          constexpr const double angle_tol = 1.e-5;
-          if (q.g_ > 0.
-              || std::acos(
-                     std::min(1.,
-                              std::abs(q.g_) / q.distance_results_.distance_))
-                     > angle_tolerance) {
-            continue
-          }
+      if (!(q.lagrange_ < 0.0)) {
+        // normalgap validity and angle tolerance
+        constexpr const double angle_tol = 1.e-5;
+        if (q.g_ > 0.
+            || std::acos(
+                   std::min(1., std::abs(q.g_) / q.distance_results_.distance_))
+                   > angle_tol) {
+          continue;
         }
+      }
 
       q.new_lagrange_ = q.lagrange_ + (q.penalty_ * q.g_);
       // this is from SIMO & LAURSEN (1990)
@@ -426,12 +426,12 @@ public:
         continue;
       }
       q.active_ = true;
-      t_n.MultiplyAssign(q.new_lagrange_, q.normal_.data());
+      t_n.MultiplyAssign(q.new_lagrange_, q.distance_results_.normal_.data());
 
       // again, note no negative sign.
       // AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_ *.F_.Weight() *
       // q.distance_results_.normal_norm_,
-      AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_ *.F_.Weight(),
+      AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_ * tmp.F_.Weight(),
                     q.N_.begin(),
                     q.N_.end(),
                     t_n.begin(),
@@ -471,7 +471,7 @@ public:
             // set shape for tmp data
             tmp.SetShape(bed.n_dof_, dim_);
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, e);
+                tmp.CurrentElementSolutionCopy(current_x, bed);
 
             if (assemble_grad_) {
               assert(frozen_state_);
@@ -516,17 +516,15 @@ public:
                      bed.residual_view_);
           } // marked elem loop
         };
-  };
 
-  mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
-                          n_marked_boundaries_ n_threads_);
-}
+    mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
+                            n_marked_boundaries_,
+                            n_threads_);
+  }
 
-virtual void
-AssembleBoundaryGrad(const mfem::Vector& current_x) {
-  MIMI_FUNC()
-}
-
+  virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+  }
 };
 
 } // namespace mimi::integrators

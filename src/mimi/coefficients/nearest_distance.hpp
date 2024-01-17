@@ -68,7 +68,7 @@ public:
       dim_ = dim;
 
       if (dim_ > 3 || dim_ < 2) {
-        mimi::utils::PrintAndThrowError("Unsupported Dim:", dim_, );
+        mimi::utils::PrintAndThrowError("Unsupported Dim:", dim_);
       }
       if (para_dim + 1 != dim) {
         mimi::utils::PrintAndThrowError(
@@ -137,32 +137,30 @@ public:
     }
 
     // this will fill normal at the same time
-    template<typename ArrayType>
-    inline constexpr double NormalGap() const {
+    inline constexpr double NormalGap() {
       // here, we apply negative sign to physical_minus_query
       // normal gap is formulated as query minus physical
       return -normal_.InnerProduct(physical_minus_query_);
     }
+  };
+
+  NearestDistanceBase() = default;
+
+  virtual ~NearestDistanceBase() = default;
+  virtual void NearestDistance(const Query& query, Results& results) const {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("Inherit and implement me");
+  };
+
+  /// Related body count
+  virtual int Size() const {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("Inherit and implement me.");
+
+    return -1;
   }
-};
-
-NearestDistanceBase() = default;
-
-virtual ~NearestDistanceBase() = default;
-virtual void NearestDistance(const Query& query, Results& results) const {
-  MIMI_FUNC()
-
-  mimi::utils::PrintAndThrowError("Inherit and implement me");
-};
-
-/// Related body count
-virtual int Size() const {
-  MIMI_FUNC()
-
-  mimi::utils::PrintAndThrowError("Inherit and implement me.");
-
-  return -1;
-}
 };
 
 class NearestDistanceToSplines : public NearestDistanceBase {

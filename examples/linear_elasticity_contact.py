@@ -14,8 +14,8 @@ le.read_mesh("tests/data/square-nurbs.mesh")
 le.set_parameters(1e9, 0.4, 1000000, 10000)
 
 # refine
-le.elevate_degrees(3)
-le.subdivide(4)
+le.elevate_degrees(2)
+le.subdivide(2)
 
 # create splinepy partner
 s = sp.NURBS(**le.nurbs())
