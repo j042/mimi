@@ -12,80 +12,6 @@
 
 namespace mimi::integrators {
 
-/// normal - we define a rule here, and it'd be your job to prepare
-/// the foreign spline in a correct orientation
-template<int dim, bool unit_normal = true, typename ArrayType>
-inline void Normal(const mimi::utils::Data<double, 2>& first_dir,
-                   ArrayType& normal) {
-  assert(first_dir.size() == 2 || first_dir.size() == 6);
-
-  if constexpr (dim == 2) {
-    const double& d0 = first_dir[0];
-    const double& d1 = first_dir[1];
-
-    if constexpr (unit_normal) {
-      const double inv_norm2 = 1. / std::sqrt(d0 * d0 + d1 * d1);
-
-      normal[0] = d1 * inv_norm2;
-      normal[1] = -d0 * inv_norm2;
-    } else {
-      normal[0] = d1;
-      normal[1] = -d0;
-    }
-
-  } else if constexpr (dim == 3) {
-    const double& d0 = first_dir[0];
-    const double& d1 = first_dir[1];
-    const double& d2 = first_dir[2];
-    const double& d3 = first_dir[3];
-    const double& d4 = first_dir[4];
-    const double& d5 = first_dir[5];
-
-    if constexpr (unit_normal) {
-      const double n0 = d1 * d5 - d2 * d4;
-      const double n1 = d2 * d3 - d0 * d5;
-      const double n2 = d0 * d4 - d1 * d3;
-
-      const double inv_norm2 = 1. / std::sqrt(n0 * n0 + n1 * n1 + n2 * n2);
-
-      normal[0] = n0 * inv_norm2;
-      normal[1] = n1 * inv_norm2;
-      normal[2] = n2 * inv_norm2;
-
-    } else {
-
-      normal[0] = d1 * d5 - d2 * d4;
-      normal[1] = d2 * d3 - d0 * d5;
-      normal[2] = d0 * d4 - d1 * d3;
-    }
-  } else {
-    static_assert(dim == 2 || dim == 3, "unsupported dim");
-  }
-}
-
-inline double
-NormalGap(mimi::coefficients::NearestDistanceBase::Results& result) {
-
-  double normal_gap{};
-  const int& dim = result.dim_;
-  auto& normal = result.normal_;
-
-  // let's get normal
-  if (dim == 2) {
-    Normal<2, true>(result.first_derivatives_, normal);
-  } else {
-    Normal<3, true>(result.first_derivatives_, normal);
-  }
-
-  for (int i{}; i < dim; ++i) {
-    // here, we apply negative sign to physical_minus_query
-    // normal gap is formulated as query minus physical
-    normal_gap += normal[i] * -result.physical_minus_query_[i];
-  }
-
-  return normal_gap;
-}
-
 /// implements methods presented in "Sauer and De Lorenzis. An unbiased
 /// computational contact formulation for 3D friction (DOI: 10.1002/nme.4794)
 class PenaltyContact : public NonlinearBase {
@@ -97,26 +23,23 @@ public:
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
 
-  /// we can update augmented lagrange vectors just by copying converged force
-  /// https://hal.science/hal-01005280/document
-  mfem::Vector augmented_lagrange_;
-
   /// precomputed data at quad points
   struct QuadData {
-    bool active_; // needed for
+    bool active_{false}; // needed for
 
     double integration_weight_;
     double det_dX_dxi_;
     double lagrange_;     // lambda_k
     double new_lagrange_; // lambda_k+1
     double penalty_;      // penalty factor
-    double g_;            // normal gap
+    double g_{0.0};       // normal gap
 
     mfem::Vector N_; // shape
     // mfem::DenseMatrix dN_dxi_; // don't really need to save this
     mfem::DenseMatrix dN_dX_;  // used to compute F
     mfem::DenseMatrix dxi_dX_; // J_target_to_reference
 
+    mimi::coefficients::NearestDistanceBase::Query distance_query_;
     mimi::coefficients::NearestDistanceBase::Results distance_results_;
   };
 
@@ -240,7 +163,15 @@ protected:
 
   Vector_<BoundaryElementData> boundary_element_data_;
 
-  mfem::Vector augmented_lagrange_lambda_;
+  /// residual contribution indices
+  /// can be used to copy al_lambda_
+  /// size == n_marked_boundaries_;
+  Vector_<int> marked_boundary_v_dofs_;
+
+  /// we can update augmented lagrange vectors just by copying converged force
+  /// https://hal.science/hal-01005280/document
+  /// size == n_marked_boundaries_;
+  mfem::Vector al_lambda_;
 
 public:
   PenaltyContact(
@@ -376,6 +307,7 @@ public:
           q_data.dN_dX_.SetSize(i_bed.n_dof_, boundary_para_dim_);
           q_data.dxi_dX_.SetSize(i_bed.n_dof_, boundary_para_dim_);
           q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
+          q_data.distance_query_.SetSize(boundary_para_dim_);
 
           // precompute
           i_bed.element_->CalcShape(ip, q_data.dN_);
@@ -397,6 +329,25 @@ public:
     mimi::utils::NThreadExe(precompute_at_elem_and_quad,
                             n_marked_boundaries_,
                             n_threads_);
+
+    // reserve enough space - supports can overlap so, be generous initially
+    marked_boundary_v_dofs_.clear();
+    marked_boundary_v_dofs_.reserve(
+        n_marked_boundaries_ * dim_
+        * std::pow((precomputed_->fe_spaces_[0]->GetMaxElementOrder() + 1),
+                   boundary_para_dim_));
+    for (const BoundaryElementData& bed : boundary_element_data_) {
+      for (const int& vdof : bed.v_dofs_) {
+        marked_boundary_v_dofs_.push_back(vdof);
+      }
+    }
+
+    // sort and get unique
+    std::sort(marked_boundary_v_dofs_.begin(), marked_boundary_v_dofs_.end());
+    auto last = std::unique(marked_boundary_v_dofs_.begin(),
+                            marked_boundary_v_dofs_.end());
+    marked_boundary_v_dofs_.erase(last, marked_boundary_v_dofs_.end());
+    marked_boundary_v_dofs_.shrinked_to_fit();
   }
 
   virtual void UpdateLagrange() {
@@ -415,6 +366,31 @@ public:
     for (auto& be : boundary_element_data_) {
       for (auto& qd : be.quad_data_) {
         qd.lagrange_ = value;
+      }
+    }
+  }
+
+  void QuadLoop(const mfem::DenseMatrix& x,
+                const int i_thread,
+                Vector_<QuadData>& q_data,
+                TemporaryData& tmp,
+                mfem::DenseMatrix& residual_matrix) {
+    MIMI_FUNC()
+
+    for (QuadData& q : q_data) {
+      // get current position and F
+      x.MultTranspose(q.N_, q.distance_query_.query_.data());
+      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
+
+      // nearest distance query
+      q.active_ = false; // init
+      nearest_distance_coeff_->NearestDistance(query, q_result);
+      q_result.ComputeNormal<true>(); // unit normal
+      q.g_ = q_result.NormalGap();
+
+      // activity check
+      // if lagrange value is set, we should compute this regardless of g_ value
+      if (q.langrange_ < 0.0) {
       }
     }
   }
