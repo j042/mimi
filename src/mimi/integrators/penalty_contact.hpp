@@ -434,37 +434,33 @@ public:
           continue;
         }
       }
-      q.new_lagrange_ = q.lagrange_ + (q.penalty_ * q.g_);
+      const double p = q.lagrange_ + (q.penalty_ * q.g_);
 
       // this is from SIMO & LAURSEN (1990)
       // where they use Macauley bracket.
       // since we bring this residual directly to lhs,
       // sign for us is just flipped
       // https://doi.org/10.1016/0045-7949(92)90540-G
-      if (!(q.new_lagrange_ < 0.0)) {
+      if (!(p < 0.0)) {
         // q.active_ = false;
         continue;
       }
-      q.active_ = true;
+      // we made it til here.
+      // if state is not frozen, we can save this as new lagrange
+      if (!frozen_state_) {
+        q.active_ = true;
+        q.new_lagrange_ = p;
+      }
 
       t_n.MultiplyAssign(q.new_lagrange_, q.distance_results_.normal_.data());
 
       // again, note no negative sign.
-      // AddMult_a_VWt(q.integration_weight_ * q.det_dX_dxi_ *.F_.Weight() *
-      // q.distance_results_.normal_norm_,
-      // tmp.F_.Print();
-      // mimi::utils::PrintInfo(//q.det_dX_dxi_,
-      //                       tmp.F_.Weight(),
-      //                       q.distance_results_.normal_norm_);
-      AddMult_a_VWt(
-          q.integration_weight_
-              * tmp.F_.Weight(), // *  q.distance_results_.normal_norm_, // *
-                                 // tmp.F_.Weight(),
-          q.N_.begin(),
-          q.N_.end(),
-          t_n.begin(),
-          t_n.end(),
-          residual_begin);
+      AddMult_a_VWt(q.integration_weight_ * tmp.F_.Weight(),
+                    q.N_.begin(),
+                    q.N_.end(),
+                    t_n.begin(),
+                    t_n.end(),
+                    residual_begin);
     }
   }
 
