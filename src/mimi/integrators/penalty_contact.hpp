@@ -403,6 +403,9 @@ public:
         // I'd consider this just pure integration, but maybe not
         // lambda.Add(qd.integration_weight_ * qd.det_dX_dxi_ *
         // qd.new_lagrange_, qd.N_);
+        if (qd.new_lagrange_ == 0.0) {
+          continue;
+        }
         lambda.Add(qd.integration_weight_ * qd.det_F_ * qd.new_lagrange_,
                    qd.N_);
       }
