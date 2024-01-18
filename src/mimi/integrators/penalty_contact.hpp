@@ -393,17 +393,16 @@ public:
 
     al_lambda_ = 0.0;
 
-    // averaging loop
+    // averaging loop - bring value to the nodes
     mfem::Vector lambda;
     for (auto& be : boundary_element_data_) {
       lambda.SetSize(be.n_dof_);
       lambda = 0.0;
       for (auto& qd : be.quad_data_) {
-        // would I have to multiply det(J) and such?
-        // I'd consider this just pure integration, but maybe not
-        // lambda.Add(qd.integration_weight_ * qd.det_dX_dxi_ *
-        // qd.new_lagrange_, qd.N_);
         if (qd.new_lagrange_ == 0.0) {
+          continue;
+        }
+        if (qd.lagrange_ + qd.penalty_ * qd.g_ > 0) {
           continue;
         }
         // qd.new_lagrange_ = std::max(qd.new_lagrange_, 2 * qd.lagrange_);
@@ -428,12 +427,6 @@ public:
         qd.lagrange_ = lambda * qd.N_;
       }
     }
-
-    // for (auto& be : boundary_element_data_) {
-    //   for (auto& qd : be.quad_data_) {
-    //     qd.lagrange_ = qd.new_lagrange_;
-    //   }
-    // }
   }
 
   virtual void FillLagrange(const double value) {
@@ -482,6 +475,7 @@ public:
             || std::acos(
                    std::min(1., std::abs(g) / q.distance_results_.distance_))
                    > angle_tol) {
+          q.new_lagrange_ = 0.0;
           continue;
         }
       }
@@ -490,20 +484,7 @@ public:
         p += q.penalty_ * g;
       }
       const double det_F = tmp.F_.Weight();
-      // const double p = q.lagrange_ + (q.penalty_ * q.g_);
 
-      // this is from SIMO & LAURSEN (1990)
-      // where they use Macauley bracket.
-      // since we bring this residual directly to lhs,
-      // sign for us is just flipped
-      // https://doi.org/10.1016/0045-7949(92)90540-G
-      // if (!(p < 0.0)) {
-      //   // q.active_ = false;
-      //   q.new_lagrange_ = q.lagrange_;
-      //   continue;
-      // }
-      // we made it til here.
-      // if state is not frozen, we can save this as new lagrange
       if (!frozen_state_) {
         q.active_ = true;
         q.new_lagrange_ = p;

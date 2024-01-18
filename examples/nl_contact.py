@@ -71,10 +71,10 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
-s.show_options["control_points"] = False
+# s.show_options["control_points"] = False
 # s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-s.show_options["control_points"] = False
+# s.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
 tic.summary(print_=True)
