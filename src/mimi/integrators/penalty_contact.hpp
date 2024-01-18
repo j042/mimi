@@ -52,6 +52,7 @@ public:
     double new_lagrange_; // lambda_k+1
     double penalty_;      // penalty factor
     double g_;            // normal gap
+    double old_g_;        // normal gap
 
     mfem::Vector N_; // shape
     /// thanks to Jac's hint, it turns out we can just work with this for
@@ -358,6 +359,7 @@ public:
           q_data.new_lagrange_ = 0.0;
           q_data.penalty_ = nearest_distance_coeff_->coefficient_;
           q_data.g_ = 0.0;
+          q_data.old_g_ = 0.0;
         }
       }
     };
@@ -391,42 +393,60 @@ public:
   virtual void UpdateLagrange() {
     MIMI_FUNC();
 
-    al_lambda_ = 0.0;
+    // al_lambda_ = 0.0;
 
-    // averaging loop - bring value to the nodes
-    mfem::Vector lambda;
+    // // averaging loop - bring value to the nodes
+    // mfem::Vector lambda;
+    // for (auto& be : boundary_element_data_) {
+    //   lambda.SetSize(be.n_dof_);
+    //   lambda = 0.0;
+    //   for (auto& qd : be.quad_data_) {
+    //     // complete irrelevant
+    //     if (qd.new_lagrange_ == 0.0 && qd.lagrange_ == 0.0) {
+    //       continue;
+    //     }
+    //     //if (qd.lagrange_ + qd.penalty_ * qd.g_ > 0) {
+    //     //  continue;
+    //     //}
+    //     // qd.new_lagrange_ = std::max(qd.new_lagrange_, 2 * qd.lagrange_);
+    //     const double value = std::max(qd.new_lagrange_, 2 * qd.lagrange_);
+    //     lambda.Add(qd.integration_weight_ * qd.det_F_ * qd.new_lagrange_,
+    //                qd.N_);
+    //   }
+
+    //   for (int i{}, j{}; i < be.v_dofs_->Size(); i += 2, ++j) {
+    //     const int ii = std::div((*be.v_dofs_)[i], 2).quot;
+    //     al_lambda_[ii] += lambda[j];
+    //   }
+    // }
+
+    // // distribute loop
+    // for (auto& be : boundary_element_data_) {
+    //   lambda.SetSize(be.n_dof_);
+    //   for (int i{}, j{}; i < be.v_dofs_->Size(); i += 2, ++j) {
+    //     const int ii = std::div((*be.v_dofs_)[i], 2).quot;
+    //     lambda[j] = al_lambda_[ii];
+    //   }
+    //   for (auto& qd : be.quad_data_) {
+    //     qd.lagrange_ = lambda * qd.N_;
+    //   }
+    // }
+
     for (auto& be : boundary_element_data_) {
-      lambda.SetSize(be.n_dof_);
-      lambda = 0.0;
       for (auto& qd : be.quad_data_) {
-        if (qd.new_lagrange_ == 0.0) {
-          continue;
+        // we only update valid zones
+        if (qd.g_ < 0.0) {
+          if (qd.old_g_ < 0.0) {
+            // this is from Wrigger's Computational contact mechanics
+            if (qd.g_ / qd.old_g_ < .25) {
+              qd.penalty_ *= 5.;
+            }
+          }
+          qd.lagrange_ = std::min(qd.new_lagrange_, qd.lagrange_);
         }
-        if (qd.lagrange_ + qd.penalty_ * qd.g_ > 0) {
-          continue;
-        }
-        // qd.new_lagrange_ = std::max(qd.new_lagrange_, 2 * qd.lagrange_);
-        lambda.Add(qd.integration_weight_ * qd.det_F_ * qd.new_lagrange_,
-                   qd.N_);
-      }
-
-      for (int i{}, j{}; i < be.v_dofs_->Size(); i += 2, ++j) {
-        const int ii = std::div((*be.v_dofs_)[i], 2).quot;
-        al_lambda_[ii] += lambda[j];
       }
     }
-
-    // distribute loop
-    for (auto& be : boundary_element_data_) {
-      lambda.SetSize(be.n_dof_);
-      for (int i{}, j{}; i < be.v_dofs_->Size(); i += 2, ++j) {
-        const int ii = std::div((*be.v_dofs_)[i], 2).quot;
-        lambda[j] = al_lambda_[ii];
-      }
-      for (auto& qd : be.quad_data_) {
-        qd.lagrange_ = lambda * qd.N_;
-      }
-    }
+    mimi::utils::PrintInfo("GAP NORM:", GapNorm());
   }
 
   virtual void FillLagrange(const double value) {
@@ -436,6 +456,7 @@ public:
       for (auto& qd : be.quad_data_) {
         qd.lagrange_ = value;
         qd.new_lagrange_ = value;
+        qd.penalty_ = nearest_distance_coeff_->coefficient_;
       }
     }
 
@@ -443,6 +464,7 @@ public:
     for (const int& v : marked_boundary_v_dofs_) {
       al_lambda_[v] = value;
     }
+    mimi::utils::PrintInfo("GAP NORM:", GapNorm());
   }
 
   void QuadLoop(const mfem::DenseMatrix& x,
@@ -476,20 +498,30 @@ public:
                    std::min(1., std::abs(g) / q.distance_results_.distance_))
                    > angle_tol) {
           q.new_lagrange_ = 0.0;
+          q.g_ = g;
           continue;
         }
       }
-      double p = q.lagrange_;
-      if (g < 0.0) {
-        p += q.penalty_ * g;
+
+      // we allow reduction of p, as long as it doesn't change sign
+      // see https://doi.org/10.1016/0045-7949(92)90540-G
+      double p = q.lagrange_ + q.penalty_ * g;
+      if (p > 0.0) {
+        p = 0.0;
       }
+
       const double det_F = tmp.F_.Weight();
 
       if (!frozen_state_) {
         q.active_ = true;
         q.new_lagrange_ = p;
         q.det_F_ = det_F;
+        q.old_g_ = q.g_;
         q.g_ = g;
+      }
+
+      if (p == 0.0) {
+        continue;
       }
 
       t_n.MultiplyAssign(p, q.distance_results_.normal_.data());
@@ -607,6 +639,21 @@ public:
                                *bed.element_grad_,
                                0);
     }
+  }
+
+  virtual double GapNorm() const {
+    MIMI_FUNC()
+
+    double negative_gap_sum{};
+    for (auto& be : boundary_element_data_) {
+      for (auto& qd : be.quad_data_) {
+        if (qd.g_ < 0.0) {
+          negative_gap_sum += qd.g_ + qd.g_;
+        }
+      }
+    }
+
+    return std::sqrt(std::abs(negative_gap_sum));
   }
 };
 

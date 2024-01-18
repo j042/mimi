@@ -74,7 +74,8 @@ tic.summary(print_=True)
 # s.show_options["control_points"] = False
 # s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-# s.show_options["control_points"] = False
+s.show_options["control_points"] = False
+curv.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
 tic.summary(print_=True)
@@ -93,15 +94,19 @@ def sol():
     le.fixed_point_solve2()
 
 
+def c_sol():
+    le.fixed_point_solve2()
+
+
 def adv():
-    le.fill_contact_lagrange(0)
     le.advance_time2()
+    le.fill_contact_lagrange(0)
 
 
 def show():
     s.cps[:] = x[to_s]
     gus.show(
-        [str(i), s, curv],
+        [str(i) + " " + str(j), s, curv],
         vedoplot=plt,
         interactive=False,
     )
@@ -114,10 +119,11 @@ for i in range(1000):
     move()
     old = 1
     b_old = 1
-    for j in range(50):
+    for j in range(1000):
         sol()
-        le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, True)
+        le.configure_newton("nonlinear_solid", 1e-4, 1e-6, 3, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
+
         bdr_norm = np.linalg.norm(n.boundary_residual())
         bdr_diff = b_old - bdr_norm
         bdr_rel = b_old / bdr_norm
@@ -125,10 +131,16 @@ for i in range(1000):
         print("augumenting")
         print(rel, bdr_rel, bdr_diff, bdr_norm)
         print()
-        if abs(bdr_diff) < 1e-5:
+        if abs(bdr_diff) < 1e-5 or ab < 5e-5:
+            print("exit!")
             break
     print("final solve!")
-    sol()
+    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 20, True)
+    c_sol()
+    rel, ab = le.newton_final_norms("nonlinear_solid")
+    if not (abs(bdr_diff) < 1e-5 or ab < 5e-5):
+        exit()
+
     le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
     adv()
     show()
