@@ -142,6 +142,11 @@ public:
         "AddToGlobalBoundaryGrad not implemented for",
         Name());
   }
+  virtual double GapNorm() const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("GapNorm not implemented for", Name());
+    return 0.0;
+  }
 };
 
 } // namespace mimi::integrators

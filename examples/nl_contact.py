@@ -96,6 +96,7 @@ def sol():
 
 def c_sol():
     le.fixed_point_solve2()
+    print(ni.gap_norm())
 
 
 def adv():
@@ -106,42 +107,45 @@ def adv():
 def show():
     s.cps[:] = x[to_s]
     gus.show(
-        [str(i) + " " + str(j), s, curv],
+        [
+            str(i) + " " + str(j) + " " + str(ab) + " " + str(ni.gap_norm()),
+            s,
+            curv,
+        ],
         vedoplot=plt,
         interactive=False,
     )
 
 
+coe = 1e10
 # initialize a plotter
 plt = gus.show([s, curv], close=False)
 n = le.nonlinear_from2("contact")
+ni = n.boundary_integrator(0)
 for i in range(1000):
     move()
     old = 1
     b_old = 1
-    for j in range(1000):
+    scene.coefficient = coe
+    for j in range(10):
         sol()
-        le.configure_newton("nonlinear_solid", 1e-4, 1e-6, 3, True)
+        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
-
         bdr_norm = np.linalg.norm(n.boundary_residual())
-        bdr_diff = b_old - bdr_norm
-        bdr_rel = b_old / bdr_norm
-        b_old = bdr_norm
         print("augumenting")
-        print(rel, bdr_rel, bdr_diff, bdr_norm)
         print()
-        if abs(bdr_diff) < 1e-5 or ab < 5e-5:
-            print("exit!")
+        if ni.gap_norm() < 1e-5:
+            print(ni.gap_norm(), "exit!")
             break
     print("final solve!")
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 20, True)
+    le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True)
+    le.update_contact_lagrange()
+    scene.coefficient = 0.0
     c_sol()
     rel, ab = le.newton_final_norms("nonlinear_solid")
-    if not (abs(bdr_diff) < 1e-5 or ab < 5e-5):
-        exit()
 
     le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
+    scene.coefficient = coe
     adv()
     show()
 

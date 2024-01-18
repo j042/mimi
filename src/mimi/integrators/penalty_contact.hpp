@@ -435,15 +435,20 @@ public:
     for (auto& be : boundary_element_data_) {
       for (auto& qd : be.quad_data_) {
         // we only update valid zones
-        if (qd.g_ < 0.0) {
-          if (qd.old_g_ < 0.0) {
-            // this is from Wrigger's Computational contact mechanics
-            if (qd.g_ / qd.old_g_ < .25) {
-              qd.penalty_ *= 5.;
-            }
-          }
-          qd.lagrange_ = std::min(qd.new_lagrange_, qd.lagrange_);
-        }
+        // if (qd.g_ < 0.0) {
+        //   if (qd.old_g_ < 0.0) {
+        //     // this is from Wrigger's Computational contact mechanics
+        //     if (qd.g_ >  0.25 * qd.old_g_) {
+        //       mimi::utils::PrintInfo("factor 10!");
+        //       qd.penalty_ *= 10.;
+        //     }
+        //   }
+        // }
+        //   qd.lagrange_ = std::min(qd.new_lagrange_, qd.lagrange_);
+        // } else {
+        //   qd.lagrange_ = qd.new_lagrange_;
+        // }
+        qd.lagrange_ = qd.new_lagrange_;
       }
     }
     mimi::utils::PrintInfo("GAP NORM:", GapNorm());
@@ -503,9 +508,15 @@ public:
         }
       }
 
+      double eps{};
+      if (nearest_distance_coeff_->coefficient_ != 0.0) {
+        eps = q.penalty_;
+      }
+
       // we allow reduction of p, as long as it doesn't change sign
       // see https://doi.org/10.1016/0045-7949(92)90540-G
-      double p = q.lagrange_ + q.penalty_ * g;
+      // double p = q.lagrange_ + q.penalty_ * g;
+      double p = q.lagrange_ + eps * g;
       if (p > 0.0) {
         p = 0.0;
       }
@@ -648,7 +659,7 @@ public:
     for (auto& be : boundary_element_data_) {
       for (auto& qd : be.quad_data_) {
         if (qd.g_ < 0.0) {
-          negative_gap_sum += qd.g_ + qd.g_;
+          negative_gap_sum += qd.g_ * qd.g_;
         }
       }
     }
