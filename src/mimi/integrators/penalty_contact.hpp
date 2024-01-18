@@ -406,6 +406,7 @@ public:
         if (qd.new_lagrange_ == 0.0) {
           continue;
         }
+        // qd.new_lagrange_ = std::max(qd.new_lagrange_, 2 * qd.lagrange_);
         lambda.Add(qd.integration_weight_ * qd.det_F_ * qd.new_lagrange_,
                    qd.N_);
       }
@@ -471,22 +472,22 @@ public:
       nearest_distance_coeff_->NearestDistance(q.distance_query_,
                                                q.distance_results_);
       q.distance_results_.ComputeNormal<true>(); // unit normal
-      q.g_ = q.distance_results_.NormalGap();
+      const double g = q.distance_results_.NormalGap();
       // activity check - only done if the following criteria is not met
       // if (!(q.g_ < q.lagrange_ / q.penalty_)) {
       if (!(q.lagrange_ < 0.0)) {
         // normalgap validity and angle tolerance
         constexpr const double angle_tol = 1.e-5;
-        if (q.g_ > 0.
+        if (g > 0.
             || std::acos(
-                   std::min(1., std::abs(q.g_) / q.distance_results_.distance_))
+                   std::min(1., std::abs(g) / q.distance_results_.distance_))
                    > angle_tol) {
           continue;
         }
       }
       double p = q.lagrange_;
-      if (q.g_ < 0.0) {
-        p += q.penalty_ * q.g_;
+      if (g < 0.0) {
+        p += q.penalty_ * g;
       }
       const double det_F = tmp.F_.Weight();
       // const double p = q.lagrange_ + (q.penalty_ * q.g_);
@@ -507,6 +508,7 @@ public:
         q.active_ = true;
         q.new_lagrange_ = p;
         q.det_F_ = det_F;
+        q.g_ = g;
       }
 
       t_n.MultiplyAssign(p, q.distance_results_.normal_.data());
