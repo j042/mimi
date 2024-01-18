@@ -114,26 +114,22 @@ for i in range(1000):
     move()
     old = 1
     b_old = 1
-    for j in range(20):
+    for j in range(50):
         sol()
-        le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 10, True)
+        le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
         bdr_norm = np.linalg.norm(n.boundary_residual())
         bdr_diff = b_old - bdr_norm
         bdr_rel = b_old / bdr_norm
         b_old = bdr_norm
         print("augumenting")
-        print("augumenting")
         print(rel, bdr_rel, bdr_diff, bdr_norm)
         print()
-    print("final solve!")
-    print("final solve!")
-    print("final solve!")
-    print("final solve!")
-    print("final solve!")
+        if abs(bdr_diff) < 1e-5:
+            break
     print("final solve!")
     sol()
-    le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 10, False)
+    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
     adv()
     show()
 

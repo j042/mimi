@@ -421,9 +421,7 @@ public:
         lambda[j] = al_lambda_[ii];
       }
       for (auto& qd : be.quad_data_) {
-        // std::cout << "before " << qd.lagrange_;
         qd.lagrange_ = lambda * qd.N_;
-        // std::cout << "after " << qd.lagrange_ << std::endl;
       }
     }
 
@@ -444,6 +442,7 @@ public:
       }
     }
 
+    // al_lambda_ = 0.0;
     for (const int& v : marked_boundary_v_dofs_) {
       al_lambda_[v] = value;
     }
