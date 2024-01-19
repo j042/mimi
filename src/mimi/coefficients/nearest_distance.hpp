@@ -26,8 +26,13 @@ public:
   /// @brief nearest distance query
   struct Query {
     mimi::utils::Data<double> query_;
-    mimi::utils::Data<double> initial_guess_;
-    int max_iterations_;
+    // mimi::utils::Data<double> initial_guess_;
+    int max_iterations_ = -1;
+
+    void SetSize(const int& para_dim) {
+      query_.Reallocate(para_dim);
+      // initial_guess_.Reallocate(para_dim);
+    }
   };
 
   /// @brief results of nearest distance query
@@ -49,9 +54,10 @@ public:
     // so that we can avoid recomputing these values for J(R(u))
     // it makes the most sense as query and result pair, but
     // we retrieve results with ids, so we do it this way.
-    bool active_{};
-    double query_metric_tensor_weight_{};
+    // bool active_{};
+    // double query_metric_tensor_weight_{};
     mimi::utils::Data<double> normal_;
+    double normal_norm_;
 
     /// given spline's para_dim and dim, allocates result's size.
     /// set give biggest acceptable size.
@@ -61,6 +67,14 @@ public:
       para_dim_ = para_dim;
       dim_ = dim;
 
+      if (dim_ > 3 || dim_ < 2) {
+        mimi::utils::PrintAndThrowError("Unsupported Dim:", dim_);
+      }
+      if (para_dim + 1 != dim) {
+        mimi::utils::PrintAndThrowError(
+            "boundary para_dim should be one smaller than dim.");
+      }
+
       parametric_.Reallocate(para_dim);
       physical_.Reallocate(dim);
       physical_minus_query_.Reallocate(dim);
@@ -69,6 +83,66 @@ public:
       second_derivatives_.Reallocate(para_dim * para_dim * dim);
       second_derivatives_.SetShape(para_dim, para_dim, dim);
       normal_.Reallocate(dim);
+    }
+
+    /// normal - we define a rule here, and it'd be your job to prepare
+    /// the foreign spline in a correct orientation
+    /// Note that this operation is not thread-safe, since each thread is
+    /// expected to have its own copy of this object.
+    template<bool unit_normal = true>
+    inline mimi::utils::Data<double>& ComputeNormal() {
+      MIMI_FUNC()
+
+      if (dim_ == 2) {
+        const double& d0 = first_derivatives_[0];
+        const double& d1 = first_derivatives_[1];
+
+        if constexpr (unit_normal) {
+          normal_norm_ = std::sqrt(d0 * d0 + d1 * d1);
+          const double inv_norm2 = 1. / normal_norm_;
+          normal_[0] = d1 * inv_norm2;
+          normal_[1] = -d0 * inv_norm2;
+        } else {
+          normal_[0] = d1;
+          normal_[1] = -d0;
+        }
+
+        // this should be either 2d or 3d
+      } else {
+        const double& d0 = first_derivatives_[0];
+        const double& d1 = first_derivatives_[1];
+        const double& d2 = first_derivatives_[2];
+        const double& d3 = first_derivatives_[3];
+        const double& d4 = first_derivatives_[4];
+        const double& d5 = first_derivatives_[5];
+
+        if constexpr (unit_normal) {
+          const double n0 = d1 * d5 - d2 * d4;
+          const double n1 = d2 * d3 - d0 * d5;
+          const double n2 = d0 * d4 - d1 * d3;
+
+          const double inv_norm2 = 1. / std::sqrt(n0 * n0 + n1 * n1 + n2 * n2);
+
+          normal_[0] = n0 * inv_norm2;
+          normal_[1] = n1 * inv_norm2;
+          normal_[2] = n2 * inv_norm2;
+
+        } else {
+          normal_[0] = d1 * d5 - d2 * d4;
+          normal_[1] = d2 * d3 - d0 * d5;
+          normal_[2] = d0 * d4 - d1 * d3;
+        }
+      }
+      return normal_;
+    }
+
+    // this will fill normal at the same time
+    inline double NormalGap() const {
+      MIMI_FUNC()
+
+      // here, we apply negative sign to physical_minus_query
+      // normal gap is formulated as query minus physical
+      return -normal_.InnerProduct(physical_minus_query_);
     }
   };
 
@@ -141,6 +215,8 @@ public:
     /// temp sanity check
     assert(splines_.size() == 1);
 
+    // we should keep a temporary result
+    // and copy the minimum distance results
     for (const auto& spline : splines_) {
       spline->Core()->SplinepyVerboseProximity(
           query.query_.data(),

@@ -55,71 +55,66 @@ CreateFaceTransformation() {
 /// base class for precomputed data
 class PrecomputedData {
 public:
+  template<typename T>
+  using Vector_ = mimi::utils::Vector<T>;
+
   int n_threads_{1};
 
   // duplicates to help thread safety
 
   /// @brief size == nthreads -- each object should have its own
-  mimi::utils::Vector<mfem::IntegrationRules> int_rules_;
+  Vector_<mfem::IntegrationRules> int_rules_;
 
   /// @brief size == nthreads -- each object should have its own
-  mimi::utils::Vector<const mfem::IntegrationRule*> int_rule_;
+  Vector_<const mfem::IntegrationRule*> int_rule_;
 
   // following can be shared as long as one thread is using it at a time
 
   /// @brief size == nthreads, can share as long as v_dim are the same
-  mimi::utils::Vector<std::shared_ptr<mfem::FiniteElementSpace>> fe_spaces_;
+  Vector_<std::shared_ptr<mfem::FiniteElementSpace>> fe_spaces_;
 
   /// @brief size == nthreads, can share - just for boundary, we use mesh
   /// extention
-  mimi::utils::Vector<std::shared_ptr<mimi::utils::MeshExt>> meshes_;
+  Vector_<std::shared_ptr<mimi::utils::MeshExt>> meshes_;
 
   /// @brief size == nthreads, can share as long as they are same geometry
-  mimi::utils::Vector<std::shared_ptr<mfem::NURBSFECollection>> fe_collections_;
+  Vector_<std::shared_ptr<mfem::NURBSFECollection>> fe_collections_;
 
   /// @brief size == n_elem, harmless share
-  mimi::utils::Vector<std::shared_ptr<mfem::Array<int>>> v_dofs_;
+  Vector_<std::shared_ptr<mfem::Array<int>>> v_dofs_;
 
   /// @brief size == n_elem, harmless share
-  mimi::utils::Vector<std::shared_ptr<mfem::Array<int>>> boundary_v_dofs_;
+  Vector_<std::shared_ptr<mfem::Array<int>>> boundary_v_dofs_;
 
   /// @brief size == n_elem, harmless share. boundary elements will also refer
   /// to this elem.
-  mimi::utils::Vector<std::shared_ptr<mfem::NURBSFiniteElement>> elements_;
+  Vector_<std::shared_ptr<mfem::NURBSFiniteElement>> elements_;
 
   /// @brief size == n_b_elem, harmless share. boundary elements will also refer
   /// to this elem.
-  mimi::utils::Vector<std::shared_ptr<mfem::NURBSFiniteElement>>
-      boundary_elements_;
+  Vector_<std::shared_ptr<mfem::NURBSFiniteElement>> boundary_elements_;
 
   /// @brief size == n_elem, can share as long as each are separately accessed
   /// wording:
   /// target -> stress free
   /// reference -> quadrature
   /// physical -> current
-  mimi::utils::Vector<std::shared_ptr<mfem::IsoparametricTransformation>>
+  Vector_<std::shared_ptr<mfem::IsoparametricTransformation>>
       reference_to_target_element_trans_;
 
   /// @brief size == n_elem, can share as long as each are separately accessed
-  mimi::utils::Vector<
-      std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>
+  Vector_<std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>
       reference_to_target_boundary_trans_;
 
   /// @brief
-  std::unordered_map<std::string,
-                     mimi::utils::Vector<mimi::utils::Vector<double>>>
-      scalars_;
+  std::unordered_map<std::string, Vector_<Vector_<double>>> scalars_;
 
   /// @brief size == {n_elem; n_patch} x n_quad. each integrator can have its
   /// own.
-  std::unordered_map<std::string,
-                     mimi::utils::Vector<mimi::utils::Vector<mfem::Vector>>>
-      vectors_;
+  std::unordered_map<std::string, Vector_<Vector_<mfem::Vector>>> vectors_;
 
   /// @brief meant to hold jacobians per whatever
-  std::unordered_map<
-      std::string,
-      mimi::utils::Vector<mimi::utils::Vector<mfem::DenseMatrix>>>
+  std::unordered_map<std::string, Vector_<Vector_<mfem::DenseMatrix>>>
       matrices_;
 
   /// @brief relevant markers for nonlinear boundary integrations
@@ -155,8 +150,8 @@ public:
     MIMI_FUNC()
 
     other->int_rules_ =
-        mimi::utils::Vector<mfem::IntegrationRules>(int_rules_.size(),
-                                                    mfem::IntegrationRules());
+        Vector_<mfem::IntegrationRules>(int_rules_.size(),
+                                        mfem::IntegrationRules());
     other->fe_spaces_ = fe_spaces_;
     other->meshes_ = meshes_;
     other->fe_collections_ = fe_collections_;

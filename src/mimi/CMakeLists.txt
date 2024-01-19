@@ -9,6 +9,7 @@ set(SRCS
     py/py_nonlinear_solid.cpp
     py/py_nonlinear_visco_solid.cpp
     py/py_ad.cpp
+    py/py_nonlinear_integrator.cpp
     py/mimi.cpp)
 
 pybind11_add_module(mimi ${SRCS})

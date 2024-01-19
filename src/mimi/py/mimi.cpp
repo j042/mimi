@@ -11,6 +11,7 @@ void init_py_material(py::module_&);
 void init_py_nonlinear_solid(py::module_&);
 void init_py_nonlinear_visco_solid(py::module_&);
 void init_py_ad(py::module_&);
+void init_py_nonlinear_base_integrator(py::module_&);
 } // namespace mimi::py
 
 PYBIND11_MODULE(mimi, m) {
@@ -23,4 +24,5 @@ PYBIND11_MODULE(mimi, m) {
   mimi::py::init_py_nonlinear_solid(m);
   mimi::py::init_py_nonlinear_visco_solid(m);
   mimi::py::init_py_ad(m);
+  mimi::py::init_py_nonlinear_base_integrator(m);
 }

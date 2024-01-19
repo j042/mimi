@@ -104,15 +104,7 @@ public:
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryResidual(current_x);
-
-      // add to global
-      const auto& bel_vecs = *boundary_integ->boundary_element_vectors_;
-      const auto& bel_vdofs = boundary_integ->precomputed_->boundary_v_dofs_;
-      for (const auto& boundary_marks :
-           boundary_integ->marked_boundary_elements_) {
-        residual.AddElementVector(*bel_vdofs[boundary_marks],
-                                  bel_vecs[boundary_marks]);
-      }
+      boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -152,19 +144,7 @@ public:
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryGrad(current_x);
-
-      // add to global
-      const auto& bel_mats = *boundary_integ->boundary_element_matrices_;
-      const auto& bel_vdofs = boundary_integ->precomputed_->boundary_v_dofs_;
-      for (const auto& boundary_marks :
-           boundary_integ->marked_boundary_elements_) {
-        const auto& b_vdofs = *bel_vdofs[boundary_marks];
-
-        Base_::Grad->AddSubMatrix(b_vdofs,
-                                  b_vdofs,
-                                  bel_mats[boundary_marks],
-                                  0 /* skip_zeros */);
-      }
+      boundary_integ->AddToGlobalBoundaryGrad(*Base_::Grad);
     }
 
     if (!Base_::Grad->Finalized()) {

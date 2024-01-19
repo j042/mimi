@@ -9,7 +9,7 @@ nl = mimi.PyNonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
-nl.subdivide(0)
+nl.subdivide(2)
 
 # create material
 # PyMaterial is platzhalter
@@ -19,7 +19,7 @@ mat.density = 1
 mat.viscosity = -1
 
 # define material properties (young's modulus, poisson's ratio)
-mat.set_young_poisson(210000, 0.3)
+mat.set_young_poisson(2100, 0.3)
 
 # instead, one can also use lame's parameter lambda and mu
 # define material properties (lamda, mu)
@@ -33,15 +33,13 @@ to_m, to_s = sp.io.mfem.dof_mapping(s)
 s.cps[:] = s.cps[to_s]
 
 bc = mimi.BoundaryConditions()
-# bc.initial.dirichlet(1, 0).dirichlet(1, 1)
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
-# bc.initial.dirichlet(3, 0).dirichlet(3, 1)
-bc.initial.body_force(1, -1)
+bc.initial.body_force(1, -5)
 
 nl.boundary_condition = bc
 
 nl.setup(2)
-nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 1, False)
+nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 10, False)
 
 rhs = nl.linear_form_view2("rhs")
 
@@ -63,8 +61,5 @@ for i in range(10000):
             interactive=False,
         )
     nl.step_time2()
-
-    if i == 0:
-        exit()
 
 gus.show(s, vedoplot=plt, interactive=True)

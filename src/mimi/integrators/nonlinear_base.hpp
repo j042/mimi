@@ -126,6 +126,27 @@ public:
 
     return true;
   }
+
+  /// boundaries are kept
+  virtual void
+  AddToGlobalBoundaryResidual(mfem::Vector& global_residual) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "AddToGlobalBoundaryResidual not implemented for",
+        Name());
+  }
+
+  virtual void AddToGlobalBoundaryGrad(mfem::SparseMatrix& global_grad) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "AddToGlobalBoundaryGrad not implemented for",
+        Name());
+  }
+  virtual double GapNorm() const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("GapNorm not implemented for", Name());
+    return 0.0;
+  }
 };
 
 } // namespace mimi::integrators
