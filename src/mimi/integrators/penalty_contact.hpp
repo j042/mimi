@@ -79,6 +79,9 @@ public:
     int n_dof_; // this is not true dof
     int n_tdof_;
 
+    // we keep activity info in element level.
+    bool active_ = false;
+
     std::shared_ptr<mfem::Array<int>> v_dofs_;
     mfem::DenseMatrix residual_view_; // we always assemble at the same place
     mfem::DenseMatrix grad_view_;     // we always assemble at the same place
@@ -179,14 +182,13 @@ protected:
   Vector_<BoundaryElementData> boundary_element_data_;
 
   /// residual contribution indices
-  /// can be used to copy al_lambda_
   /// size == n_marked_boundaries_;
   Vector_<int> marked_boundary_v_dofs_;
 
-  /// we can update augmented lagrange vectors just by copying converged force
-  /// https://hal.science/hal-01005280/document
-  /// size == n_marked_boundaries_;
-  mfem::Vector al_lambda_;
+  /// two vectors for load balancing
+  /// first we visit all quad points and also mark quad activity
+  Vector_<bool> element_activity_;
+  Vector_<int> active_elements_;
 
 public:
   PenaltyContact(
@@ -237,14 +239,6 @@ public:
 
     // this is actually number of boundaries that contributes to assembly
     n_marked_boundaries_ = Base_::marked_boundary_elements_.size();
-
-    // we will only keep marked boundary dofs
-    // this means that we need a dof map
-    //
-    // however for now, let's keep the whole size
-    // this should just equal to GetNDofs()
-    al_lambda_.SetSize(precomputed_->fe_spaces_[0]->GetTrueVSize() / dim_);
-    al_lambda_ = 0.0;
 
     // extract boundary geometry type
     boundary_geometry_type_ =
@@ -331,7 +325,7 @@ public:
           q_data.dN_dxi_.SetSize(i_bed.n_dof_, boundary_para_dim_);
 
           q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
-          q_data.distance_query_.SetSize(boundary_para_dim_);
+          q_data.distance_query_.SetSize(dim_);
           q_data.distance_query_.max_iterations_ = 20;
 
           // precompute
@@ -386,7 +380,6 @@ public:
                             marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.erase(last, marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.shrink_to_fit();
-    // we gotta do this twice
   }
 
   // we will average lagrange
@@ -436,6 +429,11 @@ public:
                                                q.distance_results_);
       q.distance_results_.ComputeNormal<true>(); // unit normal
       const double g = q.distance_results_.NormalGap();
+
+      // for some reason, some query hit right at the very very end
+      // and returned super big number / small number
+      // Practical solution was to plant the tree with an odd number.
+      assert(std::isfinite(g));
 
       if (!(q.lagrange_ < 0.0)) {
         // normalgap validity and angle tolerance
@@ -487,6 +485,28 @@ public:
                     residual_begin);
     }
   }
+
+  // /// this one is done once each residual assembly
+  // void PrecomputeNormalGapAndSetActivities(const mfem::Vector& current_x) {
+  //   MIMI_FUNC()
+
+  //   auto g_and_activity = [&] (const int begin, const int end, const int
+  //   i_thread) {
+  //     TemporaryData tmp;
+  //     double element_x_data[kMaxTrueDof];
+  //     tmp.SetData(element_x_data, nullptr, nullptr, nullptr, nullptr,
+  //     boundary_para_dim_, dim_); for (int i{begin}; i < end; ++i) {
+  //       BoundaryElementData& bed = boundary_element_data_[i];
+  //       // initialize residual - maybe we don't need this?
+  //       bed.residual_view_ = 0.0;
+
+  //       // set shape for tmp
+  //       tmp.SetShape(bed.n_dof_, dim_);
+  //       mfem::DenseMatrix& current_element_x =
+  //       tmp.CurrentElementSolutionCopy(current_x, bed);
+  //     }
+  //   };
+  // }
 
   virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
