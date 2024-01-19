@@ -15,10 +15,10 @@ nl.subdivide(2)
 # create material
 mat = mimi.PyCompressibleOgdenNeoHookean()
 mat.density = 1
-mat.viscosity = -1
+mat.viscosity = 1
 
 # define material properties (young's modulus, poisson's ratio)
-mat.set_young_poisson(2100, 0.3)
+mat.set_young_poisson(210, 0.3)
 
 nl.set_material(mat)
 
@@ -41,10 +41,10 @@ b2 = to_s[mi[0, :]]
 
 nl.boundary_condition = bc
 
-nl.setup(2)
+nl.setup(4)
 nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 10, False)
 
-# rhs = nl.linear_form_view2("rhs")
+rhs = nl.linear_form_view2("rhs")
 
 nl.time_step_size = 0.01
 
@@ -75,6 +75,8 @@ for i in range(10000):
     elif i > 900 and i < 1200:
         x[b3] += [-0.01, 0.01]
         x[b2] -= [-0.01, 0.01]
+    if i == 1500:
+        rhs[:] = 0.0
     s.cps[:] = x[to_s]
     gus.show(
         [str(i), s],
