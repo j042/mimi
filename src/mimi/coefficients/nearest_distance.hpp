@@ -29,9 +29,18 @@ public:
     // mimi::utils::Data<double> initial_guess_;
     int max_iterations_ = -1;
 
-    void SetSize(const int& para_dim) {
-      query_.Reallocate(para_dim);
+    void SetSize(const int& dim) {
+      query_.Reallocate(dim);
       // initial_guess_.Reallocate(para_dim);
+    }
+
+    template<typename Stream>
+    void Print(Stream& out) const {
+      out << "Query: [";
+      for (const auto& q : query_) {
+        out << q << ", ";
+      }
+      out << "]\n";
     }
   };
 
@@ -58,6 +67,43 @@ public:
     // double query_metric_tensor_weight_{};
     mimi::utils::Data<double> normal_;
     double normal_norm_;
+
+    template<typename Stream>
+    void Print(Stream& out) const {
+      out << "Parametric Coordinate: [";
+      for (const auto& q : parametric_) {
+        out << q << ", ";
+      }
+      out << "]\n";
+      out << "Physical Coordinate: [";
+      for (const auto& q : physical_) {
+        out << q << ", ";
+      }
+      out << "]\n";
+      out << "Physical Coordinate - Query: [";
+      for (const auto& q : physical_minus_query_) {
+        out << q << ", ";
+      }
+      out << "]\n";
+      out << "Distance: " << distance_ << "\n";
+      out << "Convergence: " << convergence_ << "\n";
+      out << "First Derivatives: [";
+      for (const auto& q : first_derivatives_) {
+        out << q << ", ";
+      }
+      out << "]\n";
+      out << "Second derivatives: [";
+      for (const auto& q : second_derivatives_) {
+        out << q << ", ";
+      }
+      out << "]\n";
+      out << "Normal: [";
+      for (const auto& q : normal_) {
+        out << q << ", ";
+      }
+      out << "]\n";
+      out << "Normal norm: " << normal_norm_ << "\n";
+    }
 
     /// given spline's para_dim and dim, allocates result's size.
     /// set give biggest acceptable size.
