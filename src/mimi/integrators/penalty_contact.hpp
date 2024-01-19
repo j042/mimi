@@ -393,61 +393,8 @@ public:
   virtual void UpdateLagrange() {
     MIMI_FUNC();
 
-    // al_lambda_ = 0.0;
-
-    // // averaging loop - bring value to the nodes
-    // mfem::Vector lambda;
-    // for (auto& be : boundary_element_data_) {
-    //   lambda.SetSize(be.n_dof_);
-    //   lambda = 0.0;
-    //   for (auto& qd : be.quad_data_) {
-    //     // complete irrelevant
-    //     if (qd.new_lagrange_ == 0.0 && qd.lagrange_ == 0.0) {
-    //       continue;
-    //     }
-    //     //if (qd.lagrange_ + qd.penalty_ * qd.g_ > 0) {
-    //     //  continue;
-    //     //}
-    //     // qd.new_lagrange_ = std::max(qd.new_lagrange_, 2 * qd.lagrange_);
-    //     const double value = std::max(qd.new_lagrange_, 2 * qd.lagrange_);
-    //     lambda.Add(qd.integration_weight_ * qd.det_F_ * qd.new_lagrange_,
-    //                qd.N_);
-    //   }
-
-    //   for (int i{}, j{}; i < be.v_dofs_->Size(); i += 2, ++j) {
-    //     const int ii = std::div((*be.v_dofs_)[i], 2).quot;
-    //     al_lambda_[ii] += lambda[j];
-    //   }
-    // }
-
-    // // distribute loop
-    // for (auto& be : boundary_element_data_) {
-    //   lambda.SetSize(be.n_dof_);
-    //   for (int i{}, j{}; i < be.v_dofs_->Size(); i += 2, ++j) {
-    //     const int ii = std::div((*be.v_dofs_)[i], 2).quot;
-    //     lambda[j] = al_lambda_[ii];
-    //   }
-    //   for (auto& qd : be.quad_data_) {
-    //     qd.lagrange_ = lambda * qd.N_;
-    //   }
-    // }
-
     for (auto& be : boundary_element_data_) {
       for (auto& qd : be.quad_data_) {
-        // we only update valid zones
-        // if (qd.g_ < 0.0) {
-        //   if (qd.old_g_ < 0.0) {
-        //     // this is from Wrigger's Computational contact mechanics
-        //     if (qd.g_ >  0.25 * qd.old_g_) {
-        //       mimi::utils::PrintInfo("factor 10!");
-        //       qd.penalty_ *= 10.;
-        //     }
-        //   }
-        // }
-        //   qd.lagrange_ = std::min(qd.new_lagrange_, qd.lagrange_);
-        // } else {
-        //   qd.lagrange_ = qd.new_lagrange_;
-        // }
         qd.lagrange_ = qd.new_lagrange_;
       }
     }
@@ -465,10 +412,6 @@ public:
       }
     }
 
-    // al_lambda_ = 0.0;
-    for (const int& v : marked_boundary_v_dofs_) {
-      al_lambda_[v] = value;
-    }
     mimi::utils::PrintInfo("GAP NORM:", GapNorm());
   }
 
@@ -493,8 +436,7 @@ public:
                                                q.distance_results_);
       q.distance_results_.ComputeNormal<true>(); // unit normal
       const double g = q.distance_results_.NormalGap();
-      // activity check - only done if the following criteria is not met
-      // if (!(q.g_ < q.lagrange_ / q.penalty_)) {
+
       if (!(q.lagrange_ < 0.0)) {
         // normalgap validity and angle tolerance
         constexpr const double angle_tol = 1.e-5;
@@ -515,7 +457,6 @@ public:
 
       // we allow reduction of p, as long as it doesn't change sign
       // see https://doi.org/10.1016/0045-7949(92)90540-G
-      // double p = q.lagrange_ + q.penalty_ * g;
       double p = q.lagrange_ + eps * g;
       if (p > 0.0) {
         p = 0.0;

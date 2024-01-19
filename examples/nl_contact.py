@@ -127,7 +127,7 @@ for i in range(1000):
     old = 1
     b_old = 1
     scene.coefficient = coe
-    for j in range(10):
+    for j in range(20):
         sol()
         le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")

@@ -83,7 +83,7 @@ tic.summary(print_=True)
 
 
 def move():
-    if i < 200:
+    if i < 100:
         curv.cps[:] -= [0, 0.005]
     else:
         curv.cps[:] -= [0.04, 0]
