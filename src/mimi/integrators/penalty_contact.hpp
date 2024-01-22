@@ -119,8 +119,6 @@ public:
     mfem::DenseMatrix F_inv_;
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
-    /// wraps backward residual data
-    mfem::DenseMatrix backward_residual_;
 
     /// @brief
     /// @param element_x_data
@@ -133,7 +131,6 @@ public:
                  double* F_data,
                  double* F_inv_data,
                  double* forward_residual_data,
-                 double* backward_residual_data,
                  const int para_dim,
                  const int dim) {
       MIMI_FUNC()
@@ -145,16 +142,12 @@ public:
       F_.UseExternalData(F_data, dim, para_dim);
       F_inv_.UseExternalData(F_inv_data, para_dim, dim);
       forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
-      backward_residual_.UseExternalData(backward_residual_data,
-                                         kMaxTrueDof,
-                                         1);
     }
 
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
       element_x_mat_.SetSize(n_dof, dim);
       forward_residual_.SetSize(n_dof, dim);
-      backward_residual_.SetSize(n_dof, dim);
     }
 
     mfem::DenseMatrix&
@@ -519,12 +512,10 @@ public:
           double F_data[kDimDim];
           double F_inv_data[kDimDim];
           double fd_forward_data[kMaxTrueDof];
-          double fd_backward_data[kMaxTrueDof];
           tmp.SetData(element_x_data,
                       F_data,
                       F_inv_data,
                       fd_forward_data,
-                      fd_backward_data,
                       boundary_para_dim_,
                       dim_);
 
@@ -541,18 +532,25 @@ public:
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, bed);
 
+            // assemble residual
+            QuadLoop(current_element_x,
+                     i_thread,
+                     bed.quad_data_,
+                     tmp,
+                     bed.residual_view_);
+
             if (assemble_grad_) {
               assert(frozen_state_);
               double* grad_data = bed.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
+              double* residual_data = bed.residual_view_.GetData();
               for (int j{}; j < bed.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
-                tmp.backward_residual_ = 0.0;
 
                 double& with_respect_to = *solution_data++;
                 const double orig_wrt = with_respect_to;
                 const double diff_step = std::abs(orig_wrt) * 1.0e-8;
-                const double two_diff_step_inv = 1. / (2.0 * diff_step);
+                const double diff_step_inv = 1. / diff_step;
 
                 with_respect_to = orig_wrt + diff_step;
                 QuadLoop(current_element_x,
@@ -561,27 +559,14 @@ public:
                          tmp,
                          tmp.forward_residual_);
 
-                with_respect_to = orig_wrt - diff_step;
-                QuadLoop(current_element_x,
-                         i_thread,
-                         bed.quad_data_,
-                         tmp,
-                         tmp.backward_residual_);
-
                 for (int k{}; k < bed.n_tdof_; ++k) {
-                  *grad_data++ = (fd_forward_data[k] - fd_backward_data[k])
-                                 * two_diff_step_inv;
+                  *grad_data++ =
+                      (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
                 }
                 with_respect_to = orig_wrt;
               }
             }
 
-            // assemble residual
-            QuadLoop(current_element_x,
-                     i_thread,
-                     bed.quad_data_,
-                     tmp,
-                     bed.residual_view_);
           } // marked elem loop
         };
 

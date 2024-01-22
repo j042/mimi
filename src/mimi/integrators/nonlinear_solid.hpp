@@ -11,7 +11,7 @@ namespace mimi::integrators {
 /// given current x coordinate (NOT displacement)
 /// Computes F and passes it to material
 class NonlinearSolid : public NonlinearBase {
-  constexpr static const int kMaxTrueDof = 50;
+  constexpr static const int kMaxTrueDof = 100;
   constexpr static const int kDimDim = 9;
 
 public:
@@ -112,8 +112,6 @@ public:
     mfem::DenseMatrix F_inv_;
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
-    /// wraps backward residual data
-    mfem::DenseMatrix backward_residual_;
 
     /// @brief
     /// @param element_x_data
@@ -128,7 +126,6 @@ public:
                  double* F_data,
                  double* F_inv_data,
                  double* forward_residual_data,
-                 double* backward_residual_data,
                  const int dim) {
       MIMI_FUNC()
 
@@ -139,9 +136,6 @@ public:
       F_.UseExternalData(F_data, dim, dim);
       F_inv_.UseExternalData(F_inv_data, dim, dim);
       forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
-      backward_residual_.UseExternalData(backward_residual_data,
-                                         kMaxTrueDof,
-                                         1);
     }
 
     void SetShape(const int n_dof, const int dim) {
@@ -150,7 +144,6 @@ public:
       element_x_mat_.SetSize(n_dof, dim);
       dN_dx_.SetSize(n_dof, dim);
       forward_residual_.SetSize(n_dof, dim);
-      backward_residual_.SetSize(n_dof, dim);
     }
 
     mfem::DenseMatrix&
@@ -334,14 +327,12 @@ public:
           double F_data[kDimDim];
           double F_inv_data[kDimDim];
           double fd_forward_data[kMaxTrueDof];
-          double fd_backward_data[kMaxTrueDof];
           tmp.SetData(element_x_data,
                       stress_data,
                       dN_dx_data,
                       F_data,
                       F_inv_data,
                       fd_forward_data,
-                      fd_backward_data,
                       dim_);
 
           for (int i{begin}; i < end; ++i) {
@@ -362,20 +353,27 @@ public:
               e.MeltStates();
             }
 
+            // assemble residual
+            QuadLoop(current_element_x,
+                     i_thread,
+                     e.quad_data_,
+                     tmp,
+                     e.residual_view_);
+
             // assembly grad
             if (assemble_grad_) {
               assert(frozen_state_);
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
+              double* residual_data = e.residual_view_.GetData();
               for (int j{}; j < e.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
-                tmp.backward_residual_ = 0.0;
 
                 double& with_respect_to = *solution_data++;
                 const double orig_wrt = with_respect_to;
                 const double diff_step = std::abs(orig_wrt) * 1.0e-8;
-                const double two_diff_step_inv = 1. / (2.0 * diff_step);
+                const double diff_step_inv = 1. / diff_step;
 
                 with_respect_to = orig_wrt + diff_step;
                 QuadLoop(current_element_x,
@@ -384,27 +382,13 @@ public:
                          tmp,
                          tmp.forward_residual_);
 
-                with_respect_to = orig_wrt - diff_step;
-                QuadLoop(current_element_x,
-                         i_thread,
-                         e.quad_data_,
-                         tmp,
-                         tmp.backward_residual_);
-
                 for (int k{}; k < e.n_tdof_; ++k) {
-                  *grad_data++ = (fd_forward_data[k] - fd_backward_data[k])
-                                 * two_diff_step_inv;
+                  *grad_data++ =
+                      (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
                 }
                 with_respect_to = orig_wrt;
               }
             }
-
-            // assemble residual
-            QuadLoop(current_element_x,
-                     i_thread,
-                     e.quad_data_,
-                     tmp,
-                     e.residual_view_);
           }
         };
 
