@@ -311,12 +311,7 @@ public:
           auto& q_data = i_bed.quad_data_[j];
           q_data.integration_weight_ = ip.weight;
           q_data.N_.SetSize(i_bed.n_dof_);
-
-          // /// These need to come from volume element!
-          // q_data.dN_dX_.SetSize(i_bed.n_dof_, dim_);
-          // q_data.dxi_dX_.SetSize(dim_, dim_);
           q_data.dN_dxi_.SetSize(i_bed.n_dof_, boundary_para_dim_);
-
           q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
           q_data.distance_query_.SetSize(dim_);
           q_data.distance_query_.max_iterations_ = 20;
@@ -325,19 +320,6 @@ public:
           // shape comes from boundary element
           i_bed.element_->CalcShape(ip, q_data.N_);
           i_bed.element_->CalcDShape(ip, q_data.dN_dxi_);
-          // DShape should come from volume
-          // get volume element
-          // auto& i_el =
-          // precomputed_->elements_[i_bed.element_trans_->Elem1No]; auto&
-          // i_eltrans = i_bed.element_trans_->Elem1;
-          // i_bed.element_trans_->Loc1.Transform(ip, eip);
-          // std::cout << "dshape\n";
-          // i_el->CalcDShape(eip, dN_dxi);
-          // std::cout << "inv\n";
-          // mfem::CalcInverse(i_eltrans->Jacobian(), q_data.dxi_dX_);
-          // std::cout << "mult\n";
-          // mfem::Mult(dN_dxi, q_data.dxi_dX_, q_data.dN_dX_);
-
           q_data.det_dX_dxi_ = i_bed.element_trans_->Weight();
 
           // let's not forget to initialize values
@@ -483,22 +465,28 @@ public:
   // void PrecomputeNormalGapAndSetActivities(const mfem::Vector& current_x) {
   //   MIMI_FUNC()
 
-  //   auto g_and_activity = [&] (const int begin, const int end, const int
-  //   i_thread) {
-  //     TemporaryData tmp;
-  //     double element_x_data[kMaxTrueDof];
-  //     tmp.SetData(element_x_data, nullptr, nullptr, nullptr, nullptr,
-  //     boundary_para_dim_, dim_); for (int i{begin}; i < end; ++i) {
-  //       BoundaryElementData& bed = boundary_element_data_[i];
-  //       // initialize residual - maybe we don't need this?
-  //       bed.residual_view_ = 0.0;
+  //   auto g_and_activity =
+  //       [&](const int begin, const int end, const int i_thread) {
+  //         TemporaryData tmp;
+  //         double element_x_data[kMaxTrueDof];
+  //         tmp.SetData(element_x_data,
+  //                     nullptr,
+  //                     nullptr,
+  //                     nullptr,
+  //                     nullptr,
+  //                     boundary_para_dim_,
+  //                     dim_);
+  //         for (int i{begin}; i < end; ++i) {
+  //           BoundaryElementData& bed = boundary_element_data_[i];
+  //           // initialize residual - maybe we don't need this?
+  //           bed.residual_view_ = 0.0;
 
-  //       // set shape for tmp
-  //       tmp.SetShape(bed.n_dof_, dim_);
-  //       mfem::DenseMatrix& current_element_x =
-  //       tmp.CurrentElementSolutionCopy(current_x, bed);
-  //     }
-  //   };
+  //           // set shape for tmp
+  //           tmp.SetShape(bed.n_dof_, dim_);
+  //           mfem::DenseMatrix& current_element_x =
+  //               tmp.CurrentElementSolutionCopy(current_x, bed);
+  //         }
+  //       };
   // }
 
   virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
