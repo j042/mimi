@@ -162,7 +162,7 @@ public:
 /// Journal of Engineering Mechanics, ASCE, 85 (EM3) 67-94.
 class NewmarkSolver : public mfem::SecondOrderODESolver, public OdeBase {
 protected:
-  mfem::Vector d2xdt2;
+  mfem::Vector d2xdt2, xn, vn, an;
   double beta_, gamma_;
   double fac0_, fac1_, fac2_, fac3_, fac4_, fac5_;
   int nstate;
@@ -190,6 +190,12 @@ public:
     mfem::SecondOrderODESolver::Init(f_);
     d2xdt2.SetSize(f->Width());
     d2xdt2 = 0.0;
+    xn.SetSize(f->Width());
+    xn = 0.0;
+    vn.SetSize(f->Width());
+    vn = 0.0;
+    an.SetSize(f->Width());
+    an = 0.0;
     first = true;
   }
 
@@ -264,12 +270,12 @@ public:
     }
     f->SetTime(t + dt);
 
-    x.Add(dt, dxdt);
-    x.Add(fac0_ * dt * dt, d2xdt2);
-    dxdt.Add(fac2_ * dt, d2xdt2);
+    add(x, dt, dxdt, xn);
+    xn.Add(fac0_ * dt * dt, d2xdt2);
+    add(dxdt, fac2_ * dt, d2xdt2, vn);
 
     f->SetTime(t + dt);
-    f->ImplicitSolve(fac3_ * dt * dt, fac4_ * dt, x, dxdt, d2xdt2);
+    f->ImplicitSolve(fac3_ * dt * dt, fac4_ * dt, xn, vn, d2xdt2);
   }
 
   virtual void FixedPointAdvance2(mfem::Vector& x,
@@ -286,8 +292,8 @@ public:
   AdvanceTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
 
-    x.Add(fac3_ * dt * dt, d2xdt2);
-    dxdt.Add(fac4_ * dt, d2xdt2);
+    add(xn, fac3_ * dt * dt, d2xdt2, x);
+    add(vn, fac4_ * dt, d2xdt2, dxdt);
 
     t += dt;
   }

@@ -2,7 +2,7 @@ import splinepy as sp
 import mimi
 import gustaf as gus
 
-sp.settings.NTHREADS = 4
+sp.settings.NTHREADS = 1
 
 #  create nl solid
 nl = mimi.PyNonlinearSolid()
@@ -72,9 +72,8 @@ for i in range(10000):
         rhs[:] *= -1.0
     if i == 150:
         rhs[:] = 0.0
-
-    nl.step_time2()
-    print(i)
-    print(x[:4])
+    # nl.step_time2()
+    nl.fixed_point_solve2()
+    nl.advance_time2()
 
 gus.show(s, vedoplot=plt, interactive=True)

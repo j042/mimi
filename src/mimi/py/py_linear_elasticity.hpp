@@ -315,7 +315,7 @@ public:
     newton->SetMaxIter(MeshDim() * 10);
 
     // ode
-    auto odesolver = std::make_unique<mimi::solvers::NewmarkSolver>(*le_oper);
+    auto odesolver = std::make_unique<mimi::solvers::GeneralizedAlpha2>(*le_oper);
     odesolver->PrintInfo();
 
     // finally call setup for the operator
