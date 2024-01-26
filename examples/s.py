@@ -16,7 +16,8 @@ le.subdivide(3)
 # mat
 mat = mimi.PyCompressibleOgdenNeoHookean()
 mat.density = 4000
-mat.viscosity = 10000
+#mat.viscosity = 10000
+mat.viscosity = -1
 mat.set_young_poisson(1e7, 0.3)
 le.set_material(mat)
 
@@ -183,6 +184,7 @@ cam = dict(
 
 def move():
     if i > int(ns - 1):
+        x[b3] = np.array([down[-1], *[mm[-1] for mm in mid], up[-1]])
         return
     x[b3] = np.array([down[i], *[mm[i] for mm in mid], up[i]])
     return
@@ -206,7 +208,8 @@ def adv():
 def show():
     s.cps[:] = x[to_s]
     gus.show(
-        [str(i) + " " + str(j) + " " + str(ab) + " " + str(gn()), s, o, u],
+        #[str(i) + " " + str(j) + " " + str(ab) + " " + str(gn()), s, o, u],
+        [str(i) + " " + str(gn()), s, o, u],
         vedoplot=plt,
         interactive=False,
         cam=cam,
@@ -215,7 +218,7 @@ def show():
     move()
 
 
-coe = 1e9
+coe = .9e10
 le.fill_contact_lagrange(0)
 # initialize a plotter
 plt = gus.show([s, o, u], close=False)
@@ -228,15 +231,15 @@ def gn():
     return ni.gap_norm() + ni2.gap_norm()
 
 
-for i in range(5000):
+for i in range(10000):
     move()
     old = 1
     b_old = 1
     scene0.coefficient = coe
     scene1.coefficient = coe
-    for j in range(10):
+    for j in range(20):
         sol()
-        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True)
+        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 3, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
         bdr_norm = np.linalg.norm(n.boundary_residual())
         print("augumenting")
@@ -258,5 +261,6 @@ for i in range(5000):
 
     adv()
     show()
+    plt.screenshot(f"es/{100000+i}.png")
 
 gus.show(s, vedoplot=plt, interactive=True)

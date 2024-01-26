@@ -145,7 +145,7 @@ for i in range(2000):
     old = 1
     b_old = 1
     scene.coefficient = coe
-    for j in range(10):
+    for j in range(20):
         sol()
         le.configure_newton("nonlinear_visco_solid", 1e-6, 1e-8, 5, True)
         rel, ab = le.newton_final_norms("nonlinear_visco_solid")
@@ -156,7 +156,7 @@ for i in range(2000):
             print(ni.gap_norm(), "exit!")
             break
     print("final solve!")
-    le.configure_newton("nonlinear_visco_solid", 1e-8, 1e-8, 20, True)
+    le.configure_newton("nonlinear_visco_solid", 1e-7, 1e-8, 20, True)
     le.update_contact_lagrange()
     scene.coefficient = 0.0
     c_sol()
