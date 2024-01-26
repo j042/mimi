@@ -194,7 +194,7 @@ public:
 
     ComputeFactors();
     Init(oper);
-  };
+  }
   virtual std::string Name() { return "HHTAlpha"; }
 };
 
@@ -217,7 +217,7 @@ public:
 
     ComputeFactors();
     Init(oper);
-  };
+  }
   virtual std::string Name() { return "WBZAlpha"; }
 };
 
@@ -365,7 +365,7 @@ public:
 class LinearAccelerationSolver : public NewmarkSolver {
 public:
   LinearAccelerationSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 1.0 / 6.0, 0.5){};
+      : NewmarkSolver(oper, 1.0 / 6.0, 0.5) {}
 
   virtual std::string Name() { return "LinearAcceleration"; }
 };
@@ -373,14 +373,14 @@ public:
 class CentralDifferenceSolver : public NewmarkSolver {
 public:
   CentralDifferenceSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 0.0, 0.5){};
+      : NewmarkSolver(oper, 0.0, 0.5) {}
   virtual std::string Name() { return "CentralDifference"; }
 };
 
 class FoxGoodwinSolver : public NewmarkSolver {
 public:
   FoxGoodwinSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 1.0 / 12.0, 0.5){};
+      : NewmarkSolver(oper, 1.0 / 12.0, 0.5) {}
   virtual std::string Name() { return "FoxGoodwin"; }
 };
 

@@ -289,7 +289,8 @@ public:
     nl_oper->SetNewtonSolver(newton);
 
     // ode
-    auto odesolver = std::make_unique<mimi::solvers::HHTAlphaSolver>(*nl_oper);
+    auto odesolver =
+        std::make_unique<mimi::solvers::GeneralizedAlpha2>(*nl_oper);
     odesolver->PrintInfo();
 
     // finalize operator
