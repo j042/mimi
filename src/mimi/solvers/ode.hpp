@@ -171,7 +171,7 @@ public:
     ComputeFactors();
     Init(oper);
   }
-  virtual std::string Name() { return "AverageAcceleration"; }
+  virtual std::string Name() const { return "AverageAcceleration"; }
 };
 
 /// HHT-alpha ODE solver
@@ -195,7 +195,7 @@ public:
     ComputeFactors();
     Init(oper);
   }
-  virtual std::string Name() { return "HHTAlpha"; }
+  virtual std::string Name() const { return "HHTAlpha"; }
 };
 
 /// WBZ-alpha ODE solver
@@ -218,7 +218,7 @@ public:
     ComputeFactors();
     Init(oper);
   }
-  virtual std::string Name() { return "WBZAlpha"; }
+  virtual std::string Name() const { return "WBZAlpha"; }
 };
 
 // Imported the parts of Newmark from MFEM manually
@@ -306,7 +306,7 @@ public:
     t += dt;
   }
 
-  virtual std::string Name() { return "Newmark"; }
+  virtual std::string Name() const { return "Newmark"; }
 
   virtual void PrintInfo() {
     MIMI_FUNC()
@@ -367,21 +367,21 @@ public:
   LinearAccelerationSolver(mfem::SecondOrderTimeDependentOperator& oper)
       : NewmarkSolver(oper, 1.0 / 6.0, 0.5) {}
 
-  virtual std::string Name() { return "LinearAcceleration"; }
+  virtual std::string Name() const { return "LinearAcceleration"; }
 };
 
 class CentralDifferenceSolver : public NewmarkSolver {
 public:
   CentralDifferenceSolver(mfem::SecondOrderTimeDependentOperator& oper)
       : NewmarkSolver(oper, 0.0, 0.5) {}
-  virtual std::string Name() { return "CentralDifference"; }
+  virtual std::string Name() const { return "CentralDifference"; }
 };
 
 class FoxGoodwinSolver : public NewmarkSolver {
 public:
   FoxGoodwinSolver(mfem::SecondOrderTimeDependentOperator& oper)
       : NewmarkSolver(oper, 1.0 / 12.0, 0.5) {}
-  virtual std::string Name() { return "FoxGoodwin"; }
+  virtual std::string Name() const { return "FoxGoodwin"; }
 };
 
 } // namespace mimi::solvers
