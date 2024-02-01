@@ -16,7 +16,7 @@ le.subdivide(3)
 # mat
 mat = mimi.PyCompressibleOgdenNeoHookean()
 mat.density = 4000
-#mat.viscosity = 10000
+# mat.viscosity = 10000
 mat.viscosity = -1
 mat.set_young_poisson(1e7, 0.3)
 le.set_material(mat)
@@ -208,7 +208,7 @@ def adv():
 def show():
     s.cps[:] = x[to_s]
     gus.show(
-        #[str(i) + " " + str(j) + " " + str(ab) + " " + str(gn()), s, o, u],
+        # [str(i) + " " + str(j) + " " + str(ab) + " " + str(gn()), s, o, u],
         [str(i) + " " + str(gn()), s, o, u],
         vedoplot=plt,
         interactive=False,
@@ -218,7 +218,7 @@ def show():
     move()
 
 
-coe = .9e10
+coe = 0.9e10
 le.fill_contact_lagrange(0)
 # initialize a plotter
 plt = gus.show([s, o, u], close=False)

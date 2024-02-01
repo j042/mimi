@@ -14,6 +14,9 @@ public:
   using NonlinearFormPointer_ = MimiBase_::NonlinearFormPointer_;
 
 protected:
+  // ways to compute dt_ without being intrusive
+  double dt_{0.0};
+
   // nonlinear stiffness -> Base_::stiffness_ ist left untouched here
   NonlinearFormPointer_ nonlinear_stiffness_;
 
@@ -69,6 +72,7 @@ public:
     x_ = x;
     v_ = v;
 
+    nonlinear_stiffness_->dt_ = dt_;
     nonlinear_stiffness_->first_effective_dt_ = fac0;
     nonlinear_stiffness_->second_effective_dt_ = fac1;
   }

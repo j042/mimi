@@ -4,11 +4,16 @@
 
 #include <mfem.hpp>
 
+#include "mimi/operators/base.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::solvers {
 
 class OdeBase {
+protected:
+  // we keep casted mimi operator base to set dt_
+  mimi::operators::OperatorBase* mimi_operator_;
+
 public:
   virtual ~OdeBase() = default;
   virtual std::string Name() const = 0;
@@ -67,6 +72,8 @@ public:
 
     Base_::Init(oper);
     ComputeFactors();
+    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
+    assert(mimi_operator_);
   }
 
   virtual void ComputeFactors() {
@@ -91,6 +98,7 @@ public:
   StepTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
 
+    mimi_operator_->dt_ = dt;
     Base_::Step(x, dxdt, t, dt);
   }
   virtual void
@@ -109,6 +117,7 @@ public:
     add(dxdt, fac2_ * dt, d2xdt2, va);
 
     // Solve alpha levels
+    mimi_operator_->dt_ = dt;
     f->SetTime(t + dt);
     f->ImplicitSolve(fac3_ * dt * dt, fac4_ * dt, xa, va, aa);
   }
@@ -242,6 +251,9 @@ public:
     beta_ = beta;
     gamma_ = gamma;
     ComputeFactors();
+
+    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
+    assert(mimi_operator_);
   }
 
   virtual void ComputeFactors() {
@@ -292,6 +304,7 @@ public:
       f->Mult(x, dxdt, d2xdt2);
       first = false;
     }
+    mimi_operator_->dt_ = dt;
     f->SetTime(t + dt);
 
     x.Add(dt, dxdt);
@@ -319,6 +332,7 @@ public:
   StepTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
 
+    mimi_operator_->dt_ = dt;
     Step(x, dxdt, t, dt);
   }
 
@@ -331,6 +345,7 @@ public:
       f->Mult(x, dxdt, d2xdt2);
       first = false;
     }
+    mimi_operator_->dt_ = dt;
     f->SetTime(t + dt);
 
     add(x, dt, dxdt, xn);

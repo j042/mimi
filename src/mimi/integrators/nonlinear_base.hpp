@@ -29,6 +29,7 @@ public:
 
   /// time step size, in case you need them
   /// nonlinear forms will set them
+  double dt_{0.0};
   double first_effective_dt_{0.0};  // this is for x
   double second_effective_dt_{0.0}; // this is for x_dot (=v).
 

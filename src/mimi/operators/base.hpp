@@ -21,6 +21,9 @@ public:
 
   mfem::FiniteElementSpace& fe_space_;
 
+  // set dt
+  double dt_{0.0};
+
   /// @brief container to hold any necessary / related linear forms
   std::unordered_map<std::string, LinearFormPointer_> linear_forms_{};
   /// @brief container to hold any necessary / related bilinear forms
