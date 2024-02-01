@@ -315,15 +315,15 @@ public:
     newton->SetMaxIter(MeshDim() * 10);
 
     // ode
-    auto gen_alpha =
+    auto odesolver =
         std::make_unique<mimi::solvers::GeneralizedAlpha2>(*le_oper);
-    gen_alpha->PrintInfo();
+    odesolver->PrintInfo();
 
     // finally call setup for the operator
     le_oper->Setup();
 
     // set dynamic system -> transfer ownership
-    Base_::SetDynamicSystem2(le_oper.release(), gen_alpha.release());
+    Base_::SetDynamicSystem2(le_oper.release(), odesolver.release());
   }
 };
 
