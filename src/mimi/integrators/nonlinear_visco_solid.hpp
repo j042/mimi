@@ -11,7 +11,7 @@ namespace mimi::integrators {
 /// given current x coordinate (NOT displacement)
 /// Computes F and passes it to material
 class NonlinearViscoSolid : public NonlinearSolid {
-  constexpr static const int kMaxTrueDof = 50;
+  constexpr static const int kMaxTrueDof = 100;
   constexpr static const int kDimDim = 9;
 
 public:
@@ -21,7 +21,6 @@ public:
 
   struct TemporaryData : Base_::TemporaryData {
     using BaseTD_ = Base_::TemporaryData;
-    using BaseTD_::backward_residual_;
     using BaseTD_::dN_dx_;
     using BaseTD_::element_x_;     // x
     using BaseTD_::element_x_mat_; // x as matrix
@@ -50,7 +49,6 @@ public:
                  double* F_inv_data,
                  double* F_dot_data,
                  double* forward_residual_data,
-                 double* backward_residual_data,
                  const int dim) {
       MIMI_FUNC()
 
@@ -61,7 +59,6 @@ public:
                        F_data,
                        F_inv_data,
                        forward_residual_data,
-                       backward_residual_data,
                        dim);
 
       element_v_.SetDataAndSize(element_v_data, kMaxTrueDof);
@@ -76,7 +73,6 @@ public:
       element_v_mat_.SetSize(n_dof, dim);
       dN_dx_.SetSize(n_dof, dim);
       forward_residual_.SetSize(n_dof, dim);
-      backward_residual_.SetSize(n_dof, dim);
     }
 
     void CurrentElementSolutionCopy(const mfem::Vector& all_x,
@@ -158,7 +154,6 @@ public:
           double F_inv_data[kDimDim];
           double F_dot_data[kDimDim];
           double fd_forward_data[kMaxTrueDof];
-          double fd_backward_data[kMaxTrueDof];
           tmp.SetData(element_x_data,
                       element_v_data,
                       stress_data,
@@ -167,7 +162,6 @@ public:
                       F_inv_data,
                       F_dot_data,
                       fd_forward_data,
-                      fd_backward_data,
                       dim_);
 
           for (int i{begin}; i < end; ++i) {
@@ -191,20 +185,28 @@ public:
               e.MeltStates();
             }
 
+            // assemble residual
+            QuadLoop(current_element_x,
+                     current_element_v,
+                     i_thread,
+                     e.quad_data_,
+                     tmp,
+                     e.residual_view_);
+
             // assembly grad with FD - currently we only change x value.
             if (assemble_grad_) {
               assert(frozen_state_);
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
+              double* residual_data = e.residual_view_.GetData();
               for (int j{}; j < e.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
-                tmp.backward_residual_ = 0.0;
 
                 double& with_respect_to = *solution_data++;
                 const double orig_wrt = with_respect_to;
                 const double diff_step = std::abs(orig_wrt) * 1.0e-8;
-                const double two_diff_step_inv = 1. / (2.0 * diff_step);
+                const double diff_step_inv = 1. / diff_step;
 
                 with_respect_to = orig_wrt + diff_step;
                 QuadLoop(current_element_x,
@@ -214,29 +216,13 @@ public:
                          tmp,
                          tmp.forward_residual_);
 
-                with_respect_to = orig_wrt - diff_step;
-                QuadLoop(current_element_x,
-                         current_element_v,
-                         i_thread,
-                         e.quad_data_,
-                         tmp,
-                         tmp.backward_residual_);
-
                 for (int k{}; k < e.n_tdof_; ++k) {
-                  *grad_data++ = (fd_forward_data[k] - fd_backward_data[k])
-                                 * two_diff_step_inv;
+                  *grad_data++ =
+                      (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
                 }
                 with_respect_to = orig_wrt;
               }
             }
-
-            // assemble residual
-            QuadLoop(current_element_x,
-                     current_element_v,
-                     i_thread,
-                     e.quad_data_,
-                     tmp,
-                     e.residual_view_);
           }
         };
 
