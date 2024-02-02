@@ -183,6 +183,8 @@ public:
   void AddDomainIntegrator(const NFVIPointer_& nlfi) {
     MIMI_FUNC()
 
+    // this is temp solution to py_nlf.domain_integrator()
+    domain_nfi_.push_back(nlfi);
     domain_nfvi_.push_back(nlfi);
   }
 

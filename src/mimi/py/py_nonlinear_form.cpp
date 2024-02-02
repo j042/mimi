@@ -38,7 +38,9 @@ void init_py_nonlinear_form(py::module_& m) {
           },
           "Returns latest boundary residual of NonlinearForm")
       .def("boundary_integrator",
-           [](NLF& nlf, const int i) { return nlf.boundary_face_nfi_.at(i); });
+           [](NLF& nlf, const int i) { return nlf.boundary_face_nfi_.at(i); })
+      .def("domain_integrator",
+           [](NLF& nlf, const int i) { return nlf.domain_nfi_.at(i); });
 }
 
 } // namespace mimi::py

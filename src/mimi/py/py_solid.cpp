@@ -55,7 +55,8 @@ void init_py_solid(py::module_& m) {
            py::arg("rel_tol"),
            py::arg("abs_tol"),
            py::arg("max_iter"),
-           py::arg("iterative_mode"))
+           py::arg("iterative_mode"),
+           py::arg("freeze"))
       .def("newton_final_norms", &PySolid::NewtonFinalNorms)
       .def("update_contact_lagrange", &PySolid::UpdateContactLagrange)
       .def("fill_contact_lagrange",

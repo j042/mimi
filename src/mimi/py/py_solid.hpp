@@ -46,7 +46,8 @@ protected:
   mfem::GridFunction* x1_;
 
   // solvers
-  std::map<std::string, std::shared_ptr<mimi::solvers::Newton>> newton_solvers_;
+  std::map<std::string, std::shared_ptr<mimi::solvers::LineSearchNewton>>
+      newton_solvers_;
   std::map<std::string, std::shared_ptr<mfem::Solver>> linear_solvers_;
 
   // mesh
@@ -395,7 +396,8 @@ public:
                                const double rel_tol,
                                const double abs_tol,
                                const double max_iter,
-                               const bool iterative_mode) {
+                               const bool iterative_mode,
+                               const bool freeze) {
     MIMI_FUNC()
 
     auto& newton = newton_solvers_.at(name);
@@ -403,6 +405,7 @@ public:
     newton->SetAbsTol(abs_tol);
     newton->SetMaxIter(max_iter);
     newton->iterative_mode = iterative_mode;
+    newton->freeze_ = freeze;
   }
 
   /// get final norms. can be used for augmented langrange iterations
