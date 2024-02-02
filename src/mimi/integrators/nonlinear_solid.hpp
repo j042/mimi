@@ -15,6 +15,12 @@ class NonlinearSolid : public NonlinearBase {
   constexpr static const int kDimDim = 9;
 
 public:
+  /// used to project
+  std::unique_ptr<mfem::BilinearForm> mass_;
+  std::unique_ptr<mfem::SparseMatrix> m_mat_;
+  mfem::CGSolver mass_inv_;
+  mfem::DSmoother mass_inv_prec_;
+
   using Base_ = NonlinearBase;
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
@@ -423,54 +429,50 @@ public:
   virtual void AssembleDomainGrad(const mfem::Vector& current_x) { MIMI_FUNC() }
 
   /// pure integration of temperature at quadrature points
-  virtual void Temperature(mfem::Vector& x, mfem::Vector& integrated) {
+  virtual void Temperature(mfem::Vector& x, mfem::Vector& projected) {
     MIMI_FUNC()
 
-    auto post_process = [&](const int begin,
-                            const int end,
-                            const int i_thread) {
-      TemporaryData tmp;
-      // create some space in stack
-      double element_x_data[kMaxTrueDof];
-      double f_data[kDimDim];
-      tmp.SetData(element_x_data,
-                  nullptr,
-                  nullptr,
-                  f_data,
-                  nullptr,
-                  nullptr,
-                  dim_);
+    mfem::Vector integrated(projected.Size());
 
-      for (int i{begin}; i < end; ++i) {
-        std::cout << i << "elem ";
-        // in
-        ElementData& e = element_data_[i];
-        e.scalar_post_process_view_ = 0.0;
+    auto post_process =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          // create some space in stack
+          double element_x_data[kMaxTrueDof];
+          double f_data[kDimDim];
+          tmp.SetData(element_x_data,
+                      nullptr,
+                      nullptr,
+                      f_data,
+                      nullptr,
+                      nullptr,
+                      dim_);
 
-        // set shape for tmp data
-        tmp.SetShape(e.n_dof_, dim_);
+          for (int i{begin}; i < end; ++i) {
+            // in
+            ElementData& e = element_data_[i];
+            e.scalar_post_process_view_ = 0.0;
 
-        // get current element solution as matrix
-        mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(x, e);
+            // set shape for tmp data
+            tmp.SetShape(e.n_dof_, dim_);
 
-        for (auto& q_data : e.quad_data_) {
-          // get dx_dxi -> we save in tmp.F_ just for convenience
-          mfem::DenseMatrix& dx_dxi = tmp.F_;
-          mfem::MultAtB(current_element_x, q_data.dN_dxi_, dx_dxi);
-          e.scalar_post_process_view_.Add(
-              // dx_dxi.Weight() * q_data.integration_weight_
-              q_data.integration_weight_ * 200.,
-              // * q_data.material_state_
-              //       ->scalars_[J2AdiabaticVisco::State::k_temperature],
-              q_data.N_);
-          std::cout << " "
-                    << (q_data.N_.Size() == e.scalar_post_process_view_.Size())
-                    << " ";
-        }
-      }
-      std::cout << "\n";
-    };
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(x, e);
+
+            for (auto& q_data : e.quad_data_) {
+              // get dx_dxi -> we save in tmp.F_ just for convenience
+              mfem::DenseMatrix& dx_dxi = tmp.F_;
+              mfem::MultAtB(current_element_x, q_data.dN_dxi_, dx_dxi);
+              e.scalar_post_process_view_.Add(
+                  // dx_dxi.Weight() * q_data.integration_weight_
+                  q_data.integration_weight_ * q_data.det_dX_dxi_
+                      * q_data.material_state_
+                            ->scalars_[J2AdiabaticVisco::State::k_temperature],
+                  q_data.N_);
+            }
+          }
+        };
 
     mimi::utils::NThreadExe(post_process, n_elements_, n_threads_);
 
@@ -480,6 +482,37 @@ public:
       integrated.AddElementVector(e_data.scalar_v_dofs_,
                                   e_data.scalar_post_process_view_);
     }
+
+    // prepare mass matrix
+    if (!m_mat_) {
+      m_mat_ = std::make_unique<mfem::SparseMatrix>(integrated.Size());
+
+      mfem::DenseMatrix mat;
+
+      for (auto& e : element_data_) {
+        mat.SetSize(e.n_dof_);
+        mat = 0.0;
+
+        for (auto& q_data : e.quad_data_) {
+          mfem::AddMult_a_VVt(q_data.integration_weight_ * q_data.det_dX_dxi_,
+                              q_data.N_,
+                              mat);
+        }
+
+        m_mat_->AddSubMatrix(e.scalar_v_dofs_, e.scalar_v_dofs_, mat, 0);
+      }
+
+      m_mat_->Finalize();
+      mass_inv_.iterative_mode = false;
+      mass_inv_.SetRelTol(1e-12);
+      // mass_inv_.SetAbsTol(1e-12);
+      mass_inv_.SetMaxIter(5000);
+      mass_inv_.SetPrintLevel(mfem::IterativeSolver::PrintLevel().All());
+      mass_inv_.SetPreconditioner(mass_inv_prec_);
+      mass_inv_.SetOperator(*m_mat_);
+    }
+
+    mass_inv_.Mult(integrated, projected);
   }
 };
 
