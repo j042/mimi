@@ -20,6 +20,7 @@ public:
   std::unique_ptr<mfem::SparseMatrix> m_mat_;
   mfem::CGSolver mass_inv_;
   mfem::DSmoother mass_inv_prec_;
+  mfem::UMFPackSolver mass_inv_direct_;
 
   using Base_ = NonlinearBase;
   template<typename T>
@@ -503,16 +504,22 @@ public:
       }
 
       m_mat_->Finalize();
-      mass_inv_.iterative_mode = false;
-      mass_inv_.SetRelTol(1e-12);
-      // mass_inv_.SetAbsTol(1e-12);
-      mass_inv_.SetMaxIter(5000);
-      mass_inv_.SetPrintLevel(mfem::IterativeSolver::PrintLevel().All());
-      mass_inv_.SetPreconditioner(mass_inv_prec_);
-      mass_inv_.SetOperator(*m_mat_);
+      m_mat_->SortColumnIndices();
+      // mass_inv_.iterative_mode = false;
+      // mass_inv_.SetRelTol(1e-12);
+      // // mass_inv_.SetAbsTol(1e-12);
+      // mass_inv_.SetMaxIter(5000);
+      // mass_inv_.SetPrintLevel(mfem::IterativeSolver::PrintLevel().All());
+      // mass_inv_.SetPreconditioner(mass_inv_prec_);
+      // mass_inv_.SetOperator(*m_mat_);
+
+      mass_inv_direct_.SetOperator(*m_mat_);
+      mass_inv_direct_.SetPrintLevel(1);
     }
 
-    mass_inv_.Mult(integrated, projected);
+    // mass_inv_.Mult(integrated, projected);
+    projected = 0.0;
+    mass_inv_direct_.Mult(integrated, projected);
   }
 };
 
