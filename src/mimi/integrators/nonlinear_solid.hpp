@@ -484,6 +484,24 @@ public:
                                   e_data.scalar_post_process_view_);
     }
 
+    // print max T
+    double max_temp = 0.0;
+    double min_temp = 100000.0;
+    for (const auto& e_data : element_data_) {
+      for (const auto& q_data : e_data.quad_data_) {
+        max_temp =
+            std::max(max_temp,
+                     q_data.material_state_
+                         ->scalars_[J2AdiabaticVisco::State::k_temperature]);
+        min_temp =
+            std::min(min_temp,
+                     q_data.material_state_
+                         ->scalars_[J2AdiabaticVisco::State::k_temperature]);
+      }
+    }
+    std::cout << "\n\n\nmax temp here is " << max_temp;
+    std::cout << "\nmin temp here is " << min_temp << "\n\n\n";
+
     // prepare mass matrix
     if (!m_mat_) {
       m_mat_ = std::make_unique<mfem::SparseMatrix>(integrated.Size());

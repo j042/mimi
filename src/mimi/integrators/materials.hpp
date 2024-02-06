@@ -1055,6 +1055,8 @@ public:
   double specific_heat_;             // for now, constant
   double initial_temperature_{20.0}; //
 
+  double melting_temperature_{}; // taken from hardening
+
   static constexpr const double k_tol{1.e-10};
 
   struct State : public MaterialState {
@@ -1078,6 +1080,8 @@ protected:
   static constexpr const int k_s{1};
   /// N_p
   static constexpr const int k_N_p{2};
+
+  static constexpr const int k_L{3};
 
 public:
   virtual std::string Name() const { return "J2AdiabaticVisco"; }
@@ -1117,7 +1121,14 @@ public:
     /// make space for du_dX
     aux_matrices_.resize(
         n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+        Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
+
+    // temporary solution to getting melt t.
+    // TODO do better
+    melting_temperature_ =
+        std::dynamic_pointer_cast<JohnsonCookAdiabaticRateDependentHardening>(
+            hardening_)
+            ->melting_temperature_;
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -1159,9 +1170,13 @@ public:
     if (dim_ == 2) {
       // sym(F_dot)
       // for large strain, use L
-      const double ed0 = f[0];
+      const double f0 = f[0];
+      const double f3 = f[3];
+      const double trace_over_dim = (f0 + f3) / 2.0;
+
+      const double ed0 = f0 - trace_over_dim;
       const double ed1 = .5 * (f[1] + f[2]);
-      const double ed3 = f[3];
+      const double ed3 = f3 - trace_over_dim;
 
       // get plastic strain rate
       plastic_strain_rate =
@@ -1191,13 +1206,20 @@ public:
       //                         specific_heat_);
 
       // here's alternative approach using abaqus
-      double sig0 = diag + two_mu * e[0];
-      double sig3 = diag + two_mu * e[3];
+      const double e0 = e[0];
+      const double e3 = e[3];
+      const double t_over_dim = (e0 + e3) * 0.5;
+      double sig0 = diag + two_mu * (e0 - t_over_dim);
+      double sig3 = diag + two_mu * (e3 - t_over_dim);
       const double sig1 = two_mu * e[1];
       const double sig2 = two_mu * e[2];
+      // const double sig_trace_over_dim = (sig0 + sig3) / 2.0;
+      //  sig0 -= sig_trace_over_dim;
+      //  sig3 -= sig_trace_over_dim;
 
       const double work = ed0 * sig0 + ed1 * sig1 + ed1 * sig2 + ed3 * sig3;
-
+      // mimi::utils::PrintInfo(sig0, sig1, sig2, sig3, ed0, ed1, ed3, work);
+      // std::cout << "work " << work << "\n";
       if (work < 0.0) {
         temperature_rate = 0.0;
       } else {
@@ -1250,6 +1272,7 @@ public:
     mfem::DenseMatrix& eps = i_aux[k_eps];
     mfem::DenseMatrix& s = i_aux[k_s];
     mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    mfem::DenseMatrix& L = i_aux[k_L];
 
     // get states
     mfem::DenseMatrix& plastic_strain =
@@ -1269,7 +1292,7 @@ public:
     double eqps_rate, temperature_rate;
     // mfem::DenseMatrix L(dim_, dim_);
     // VelocityGradient(F, F_dot, L);
-    //  Dev(L, dim_, 1.0, L);
+    // Dev(L, dim_, 1.0, L);
     PlasticStrainRateAndTemperatureRate(F_dot,
                                         eps,
                                         eqps_rate,
@@ -1314,10 +1337,9 @@ public:
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
 
-        // std::cout << "before " << temperature << " after " << trial_T <<
-        // "rate_"
-        //           << temperature_rate << " dt_ " << dt_ << std::endl;
-        temperature = trial_T;
+        // clip at melting temp + 1, just to make sure that in next simulation,
+        // this will trigger contribution=0.0
+        temperature = std::min(trial_T, melting_temperature_ + 1.0);
       }
     }
 
