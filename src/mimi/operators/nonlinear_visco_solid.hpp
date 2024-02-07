@@ -26,6 +26,9 @@ protected:
   const double* mass_A_ = nullptr;
   int mass_n_nonzeros_ = -1;
 
+  mutable mfem::Vector temp_x;
+  mutable mfem::Vector temp_v;
+
 public:
   using Base_::Base_;
 
@@ -140,15 +143,33 @@ public:
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
 
-    mfem::Vector temp_x(x_->Size());
+    std::cout << "\n\n\n\nd2xdt2[0] " << d2x_dt2[0] << std::endl;
+    std::cout << "d2xdt2[1] " << d2x_dt2[2] << std::endl;
+    std::cout << "d2xdt2[2] " << d2x_dt2[4] << std::endl;
+    std::cout << "d2xdt2[3] " << d2x_dt2[8] << std::endl;
+
+    temp_x.SetSize(x_->Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
-    mfem::Vector temp_v(v_->Size());
+    temp_v.SetSize(v_->Size());
     add(*v_, fac1_, d2x_dt2, temp_v);
+
+    std::cout << "temp_x[0] " << temp_x[0] << std::endl;
+    std::cout << "temp_x[1] " << temp_x[2] << std::endl;
+    std::cout << "temp_x[2] " << temp_x[4] << std::endl;
+    std::cout << "temp_x[3] " << temp_x[8] << std::endl;
+    std::cout << "x[0] " << (*x_)[0] << std::endl;
+    std::cout << "x[1] " << (*x_)[2] << std::endl;
+    std::cout << "x[2] " << (*x_)[4] << std::endl;
+    std::cout << "x[3] " << (*x_)[8] << std::endl;
 
     mass_->Mult(d2x_dt2, y);
 
     nonlinear_visco_stiffness_->AddMult(temp_x, temp_v, y);
+    std::cout << "y[0] " << y[0] << std::endl;
+    std::cout << "y[1] " << y[2] << std::endl;
+    std::cout << "y[2] " << y[4] << std::endl;
+    std::cout << "y[3] " << y[8] << std::endl;
 
     if (viscosity_) {
       viscosity_->AddMult(temp_v, y);
@@ -174,11 +195,11 @@ public:
   virtual mfem::Operator& GetGradient(const mfem::Vector& d2x_dt2) const {
     MIMI_FUNC()
 
-    mfem::Vector temp_x(d2x_dt2.Size());
+    temp_x.SetSize(d2x_dt2.Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
     // if we just assemble grad during residual, we can remove this
-    mfem::Vector temp_v(v_->Size());
+    temp_v.SetSize(v_->Size());
     add(*v_, fac1_, d2x_dt2, temp_v);
 
     // NOTE, if all the values are sorted, we can do nthread local to global
