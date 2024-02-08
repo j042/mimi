@@ -1208,16 +1208,17 @@ public:
       // here's alternative approach using abaqus
       const double e0 = e[0];
       const double e3 = e[3];
-      //const double t_over_dim = (e0 + e3) * 0.5;
-      double sig0 = diag + two_mu * (e0);// - t_over_dim);
-      double sig3 = diag + two_mu * (e3);// - t_over_dim);
+      // const double t_over_dim = (e0 + e3) * 0.5;
+      double sig0 = diag + two_mu * (e0); // - t_over_dim);
+      double sig3 = diag + two_mu * (e3); // - t_over_dim);
       const double sig1 = two_mu * e[1];
       const double sig2 = two_mu * e[2];
       const double sig_trace_over_dim = (sig0 + sig3) / 2.0;
-       sig0 -= sig_trace_over_dim;
-       sig3 -= sig_trace_over_dim;
+      sig0 -= sig_trace_over_dim;
+      sig3 -= sig_trace_over_dim;
 
-      const double work = 0.5 * (ed0 * sig0 + ed1 * sig1 + ed1 * sig2 + ed3 * sig3);
+      const double work =
+          0.5 * (ed0 * sig0 + ed1 * sig1 + ed1 * sig2 + ed3 * sig3);
       // mimi::utils::PrintInfo(sig0, sig1, sig2, sig3, ed0, ed1, ed3, work);
       // std::cout << "work " << work << "\n";
       if (work < 0.0) {
@@ -1292,15 +1293,16 @@ public:
     double eqps_rate, temperature_rate;
     VelocityGradient(F, F_dot, L);
     std::ofstream out;
-    //out.open("efs.txt", std::ios_base::app);
-    //mfem::MultAtB(F_dot, F_dot, L);
-    // Dev(L, dim_, 1.0, L);
-    PlasticStrainRateAndTemperatureRate(F_dot,
-    //PlasticStrainRateAndTemperatureRate(L,
-                                        eps,
-                                        eqps_rate,
-                                        temperature_rate);
-    //out << "\n" << eqps_rate << "     " <<  temperature_rate;
+    // out.open("efs.txt", std::ios_base::app);
+    // mfem::MultAtB(F_dot, F_dot, L);
+    //  Dev(L, dim_, 1.0, L);
+    PlasticStrainRateAndTemperatureRate(
+        F_dot,
+        // PlasticStrainRateAndTemperatureRate(L,
+        eps,
+        eqps_rate,
+        temperature_rate);
+    // out << "\n" << eqps_rate << "     " <<  temperature_rate;
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;

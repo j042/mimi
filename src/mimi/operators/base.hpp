@@ -21,6 +21,8 @@ public:
 
   mfem::FiniteElementSpace& fe_space_;
 
+  const mfem::Array<int>* dirichlet_dofs_{nullptr};
+
   // set dt
   double dt_{0.0};
 

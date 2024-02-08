@@ -67,6 +67,7 @@ public:
     // we upcast to nonlinear_stiffness to avoid re-implementing
     // set parameters and freeze/melt
     nonlinear_stiffness_ = nonlinear_visco_stiffness_;
+    SetupDirichletDofsFromNonlinearStiffness();
 
     // copy jacobian with mass matrix to initialize sparsity pattern
     // technically, we don't have to copy I & J;
@@ -143,33 +144,37 @@ public:
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
 
-    std::cout << "\n\n\n\nd2xdt2[0] " << d2x_dt2[0] << std::endl;
-    std::cout << "d2xdt2[1] " << d2x_dt2[2] << std::endl;
-    std::cout << "d2xdt2[2] " << d2x_dt2[4] << std::endl;
-    std::cout << "d2xdt2[3] " << d2x_dt2[8] << std::endl;
+    // std::cout << "\n\n\n\nd2xdt2[0] " << d2x_dt2[0] << std::endl;
+    // std::cout << "d2xdt2[1] " << d2x_dt2[2] << std::endl;
+    // std::cout << "d2xdt2[2] " << d2x_dt2[4] << std::endl;
+    // std::cout << "d2xdt2[3] " << d2x_dt2[6] << std::endl;
 
     temp_x.SetSize(x_->Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
+    // for (const int& d_id : *dirichlet_dofs_) {
+    //   temp_x[d_id] = (*x_)[d_id];
+    // }
+
     temp_v.SetSize(v_->Size());
     add(*v_, fac1_, d2x_dt2, temp_v);
 
-    std::cout << "temp_x[0] " << temp_x[0] << std::endl;
-    std::cout << "temp_x[1] " << temp_x[2] << std::endl;
-    std::cout << "temp_x[2] " << temp_x[4] << std::endl;
-    std::cout << "temp_x[3] " << temp_x[8] << std::endl;
-    std::cout << "x[0] " << (*x_)[0] << std::endl;
-    std::cout << "x[1] " << (*x_)[2] << std::endl;
-    std::cout << "x[2] " << (*x_)[4] << std::endl;
-    std::cout << "x[3] " << (*x_)[8] << std::endl;
+    // std::cout << "temp_x[0] " << temp_x[0] << std::endl;
+    // std::cout << "temp_x[1] " << temp_x[2] << std::endl;
+    // std::cout << "temp_x[2] " << temp_x[4] << std::endl;
+    // std::cout << "temp_x[3] " << temp_x[6] << std::endl;
+    // std::cout << "x[0] " << (*x_)[0] << std::endl;
+    // std::cout << "x[1] " << (*x_)[2] << std::endl;
+    // std::cout << "x[2] " << (*x_)[4] << std::endl;
+    // std::cout << "x[3] " << (*x_)[6] << std::endl;
 
     mass_->Mult(d2x_dt2, y);
 
     nonlinear_visco_stiffness_->AddMult(temp_x, temp_v, y);
-    std::cout << "y[0] " << y[0] << std::endl;
-    std::cout << "y[1] " << y[2] << std::endl;
-    std::cout << "y[2] " << y[4] << std::endl;
-    std::cout << "y[3] " << y[8] << std::endl;
+    // std::cout << "y[0] " << y[0] << std::endl;
+    // std::cout << "y[1] " << y[2] << std::endl;
+    // std::cout << "y[2] " << y[4] << std::endl;
+    // std::cout << "y[3] " << y[6] << std::endl;
 
     if (viscosity_) {
       viscosity_->AddMult(temp_v, y);
