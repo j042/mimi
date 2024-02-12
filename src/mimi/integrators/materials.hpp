@@ -1217,8 +1217,7 @@ public:
       sig0 -= sig_trace_over_dim;
       sig3 -= sig_trace_over_dim;
 
-      const double work =
-          0.5 * (ed0 * sig0 + ed1 * sig1 + ed1 * sig2 + ed3 * sig3);
+      const double work = (ed0 * sig0 + ed1 * sig1 + ed1 * sig2 + ed3 * sig3);
       // mimi::utils::PrintInfo(sig0, sig1, sig2, sig3, ed0, ed1, ed3, work);
       // std::cout << "work " << work << "\n";
       if (work < 0.0) {
@@ -1291,22 +1290,17 @@ public:
 
     // get eqps_rate and delta temperature
     double eqps_rate, temperature_rate;
-    VelocityGradient(F, F_dot, L);
-    std::ofstream out;
-    // out.open("efs.txt", std::ios_base::app);
-    // mfem::MultAtB(F_dot, F_dot, L);
-    //  Dev(L, dim_, 1.0, L);
-    PlasticStrainRateAndTemperatureRate(
-        F_dot,
-        // PlasticStrainRateAndTemperatureRate(L,
-        eps,
-        eqps_rate,
-        temperature_rate);
-    // out << "\n" << eqps_rate << "     " <<  temperature_rate;
+    // VelocityGradient(F, F_dot, L);
+    PlasticStrainRateAndTemperatureRate(F_dot,
+                                        // L,
+                                        eps,
+                                        eqps_rate,
+                                        temperature_rate);
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    const double trial_T = temperature + temperature_rate * dt_;
+    const double trial_T =
+        temperature + temperature_rate * second_effective_dt_;
     auto residual =
         [eqps_old, eqps_rate, q, trial_T, *this](auto delta_eqps) -> ADScalar_ {
       return q - 3.0 * G_ * delta_eqps

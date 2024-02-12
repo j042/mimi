@@ -315,6 +315,9 @@ public:
           fes.zero_dofs_.Append(fes.boundary_dof_ids_[bid][dim]);
         }
       }
+      // on second thought, it is a bit harmless.
+      fes.zero_dofs_.Sort();
+      fes.zero_dofs_.Unique();
     }
   }
 

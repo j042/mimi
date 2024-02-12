@@ -146,8 +146,7 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
   }
 
   // residual one last time -> This is going to the exactly the same as the last
-  // assembly, but this time, we accumulate state better to come up with more
-  // efficient way to do this
+  // assembly, but this time, we accumulate state.
   if (nl_oper_ && !freeze_) {
     nl_oper_->MeltStates();
     Base_::oper->Mult(x, Base_::r);
