@@ -26,6 +26,9 @@ protected:
   const double* mass_A_ = nullptr;
   int mass_n_nonzeros_ = -1;
 
+  mutable mfem::Vector temp_x;
+  mutable mfem::Vector temp_v;
+
 public:
   using Base_::Base_;
 
@@ -64,6 +67,7 @@ public:
     // we upcast to nonlinear_stiffness to avoid re-implementing
     // set parameters and freeze/melt
     nonlinear_stiffness_ = nonlinear_visco_stiffness_;
+    SetupDirichletDofsFromNonlinearStiffness();
 
     // copy jacobian with mass matrix to initialize sparsity pattern
     // technically, we don't have to copy I & J;
@@ -140,10 +144,10 @@ public:
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
 
-    mfem::Vector temp_x(x_->Size());
+    temp_x.SetSize(x_->Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
-    mfem::Vector temp_v(v_->Size());
+    temp_v.SetSize(v_->Size());
     add(*v_, fac1_, d2x_dt2, temp_v);
 
     mass_->Mult(d2x_dt2, y);
@@ -174,11 +178,11 @@ public:
   virtual mfem::Operator& GetGradient(const mfem::Vector& d2x_dt2) const {
     MIMI_FUNC()
 
-    mfem::Vector temp_x(d2x_dt2.Size());
+    temp_x.SetSize(d2x_dt2.Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
     // if we just assemble grad during residual, we can remove this
-    mfem::Vector temp_v(v_->Size());
+    temp_v.SetSize(v_->Size());
     add(*v_, fac1_, d2x_dt2, temp_v);
 
     // NOTE, if all the values are sorted, we can do nthread local to global

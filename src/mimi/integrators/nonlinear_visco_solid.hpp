@@ -139,6 +139,7 @@ public:
                                       const mfem::Vector& current_v) {
     MIMI_FUNC()
 
+    material_->dt_ = dt_;
     material_->first_effective_dt_ = first_effective_dt_;
     material_->second_effective_dt_ = second_effective_dt_;
 

@@ -29,6 +29,7 @@ public:
 
   /// time step size, in case you need them
   /// nonlinear forms will set them
+  double dt_{0.0};
   double first_effective_dt_{0.0};  // this is for x
   double second_effective_dt_{0.0}; // this is for x_dot (=v).
 
@@ -146,6 +147,40 @@ public:
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("GapNorm not implemented for", Name());
     return 0.0;
+  }
+
+  virtual void AccumulatedPlasticStrain(mfem::Vector& x,
+                                        mfem::Vector& integrated) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "AccumulatedPlasticStrain not implemented for",
+        Name());
+  }
+
+  virtual void Temperature(mfem::Vector& x, mfem::Vector& integrated) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("Temperature not implemented for", Name());
+  }
+
+  virtual void VonMisesStress(mfem::Vector& x, mfem::Vector& integrated) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("VonMisesStress not implemented for",
+                                    Name());
+  }
+
+  virtual void SigmaXX(mfem::Vector& x, mfem::Vector& integrated) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("SigmaXX not implemented for", Name());
+  }
+
+  virtual void SigmaYY(mfem::Vector& x, mfem::Vector& integrated) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("SigmaYY not implemented for", Name());
+  }
+
+  virtual void SigmaZZ(mfem::Vector& x, mfem::Vector& integrated) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("SigmaZZ not implemented for", Name());
   }
 };
 

@@ -15,6 +15,13 @@ class NonlinearSolid : public NonlinearBase {
   constexpr static const int kDimDim = 9;
 
 public:
+  /// used to project
+  std::unique_ptr<mfem::BilinearForm> mass_;
+  std::unique_ptr<mfem::SparseMatrix> m_mat_;
+  mfem::CGSolver mass_inv_;
+  mfem::DSmoother mass_inv_prec_;
+  mfem::UMFPackSolver mass_inv_direct_;
+
   using Base_ = NonlinearBase;
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
@@ -22,6 +29,7 @@ public:
   /// precomputed data at quad points
   struct QuadData {
     double integration_weight_;
+    mfem::Vector N_;           // basis - used for post processing
     mfem::DenseMatrix dN_dxi_; // don't really need to save this
     mfem::DenseMatrix dN_dX_;
     double det_dX_dxi_;
@@ -41,6 +49,11 @@ public:
     std::shared_ptr<mfem::Array<int>> v_dofs_;
     mfem::DenseMatrix residual_view_; // we always assemble at the same place
     mfem::DenseMatrix grad_view_;     // we always assemble at the same place
+
+    mfem::Array<int> scalar_v_dofs_;
+    mfem::Vector
+        scalar_post_process_view_; // this is (residual view / dim) sized vector
+                                   // used for post processing
 
     Vector_<QuadData> quad_data_;
 
@@ -159,6 +172,7 @@ public:
 protected:
   /// number of threads for this system
   int n_threads_;
+  int n_elements_;
   /// material related
   std::shared_ptr<MaterialBase> material_;
   /// element data
@@ -183,7 +197,7 @@ public:
     MIMI_FUNC()
 
     // get numbers to decide loop size
-    const int n_elements = precomputed_->meshes_[0]->NURBSext->GetNE();
+    n_elements_ = precomputed_->meshes_[0]->NURBSext->GetNE();
     // n meshes should equal to nthrea config at the beginning
     n_threads_ = precomputed_->meshes_.size();
 
@@ -195,15 +209,15 @@ public:
 
     // allocate element vectors and matrices
     element_matrices_ =
-        std::make_unique<mimi::utils::Data<mfem::DenseMatrix>>(n_elements);
+        std::make_unique<mimi::utils::Data<mfem::DenseMatrix>>(n_elements_);
     element_vectors_ =
-        std::make_unique<mimi::utils::Data<mfem::Vector>>(n_elements);
+        std::make_unique<mimi::utils::Data<mfem::Vector>>(n_elements_);
 
     // extract element geometry type
     geometry_type_ = precomputed_->elements_[0]->GetGeomType();
 
     // allocate element data
-    element_data_.resize(n_elements);
+    element_data_.resize(n_elements_);
 
     auto precompute_at_elements_and_quads = [&](const int el_begin,
                                                 const int el_end,
@@ -223,6 +237,14 @@ public:
             precomputed_->reference_to_target_element_trans_[i];
         i_el_data.n_dof_ = i_el_data.element_->GetDof();
         i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
+        auto& v_dofs = *i_el_data.v_dofs_;
+
+        // v_dofs are organized in xyzxyzxyz, so we just want to skip through
+        // and divide them to create scalar_vdofs
+        i_el_data.scalar_v_dofs_.SetSize(v_dofs.Size() / dim_);
+        for (int i{}, j{}; i < v_dofs.Size(); i += dim_, ++j) {
+          i_el_data.scalar_v_dofs_[j] = v_dofs[i] / dim_;
+        }
 
         // check suitability of temp data
         // for structure simulations, tdof and vdof are the same
@@ -241,6 +263,9 @@ public:
             i_el_data.element_residual_->GetData(),
             i_el_data.n_dof_,
             dim_);
+        i_el_data.scalar_post_process_view_.SetDataAndSize(
+            i_el_data.element_residual_->GetData(),
+            i_el_data.n_dof_);
         i_el_data.element_grad_ = &(*element_matrices_)[i];
         i_el_data.element_grad_->SetSize(n_tdof, n_tdof);
         i_el_data.grad_view_.UseExternalData(i_el_data.element_grad_->GetData(),
@@ -271,7 +296,9 @@ public:
           q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
           q_data.dxi_dX_.SetSize(dim_, dim_);
           q_data.material_state_ = material_->CreateState();
+          q_data.N_.SetSize(i_el_data.n_dof_);
 
+          i_el_data.element_->CalcShape(ip, q_data.N_);
           i_el_data.element_->CalcDShape(ip, q_data.dN_dxi_);
           mfem::CalcInverse(i_el_data.element_trans_->Jacobian(),
                             q_data.dxi_dX_);
@@ -288,7 +315,7 @@ public:
     };
 
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
-                            n_elements,
+                            n_elements_,
                             n_threads_);
   }
 
@@ -393,7 +420,7 @@ public:
         };
 
     mimi::utils::NThreadExe(assemble_element_residual_and_maybe_grad,
-                            element_vectors_->size(),
+                            n_elements_,
                             n_threads_);
   }
 
@@ -401,6 +428,117 @@ public:
   /// this doesn't do anything.
   /// @param current_x
   virtual void AssembleDomainGrad(const mfem::Vector& current_x) { MIMI_FUNC() }
+
+  /// pure integration of temperature at quadrature points
+  virtual void Temperature(mfem::Vector& x, mfem::Vector& projected) {
+    MIMI_FUNC()
+
+    mfem::Vector integrated(projected.Size());
+
+    auto post_process =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          // create some space in stack
+          double element_x_data[kMaxTrueDof];
+          double f_data[kDimDim];
+          tmp.SetData(element_x_data,
+                      nullptr,
+                      nullptr,
+                      f_data,
+                      nullptr,
+                      nullptr,
+                      dim_);
+
+          for (int i{begin}; i < end; ++i) {
+            // in
+            ElementData& e = element_data_[i];
+            e.scalar_post_process_view_ = 0.0;
+
+            // set shape for tmp data
+            tmp.SetShape(e.n_dof_, dim_);
+
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(x, e);
+
+            for (auto& q_data : e.quad_data_) {
+              // get dx_dxi -> we save in tmp.F_ just for convenience
+              mfem::DenseMatrix& dx_dxi = tmp.F_;
+              mfem::MultAtB(current_element_x, q_data.dN_dxi_, dx_dxi);
+              e.scalar_post_process_view_.Add(
+                  // dx_dxi.Weight() * q_data.integration_weight_
+                  q_data.integration_weight_ * q_data.det_dX_dxi_
+                      * q_data.material_state_
+                            ->scalars_[J2AdiabaticVisco::State::k_temperature],
+                  q_data.N_);
+            }
+          }
+        };
+
+    mimi::utils::NThreadExe(post_process, n_elements_, n_threads_);
+
+    // serial assemble to integrated
+    integrated = 0.0;
+    for (auto& e_data : element_data_) {
+      integrated.AddElementVector(e_data.scalar_v_dofs_,
+                                  e_data.scalar_post_process_view_);
+    }
+
+    // print max T
+    double max_temp = 0.0;
+    double min_temp = 100000.0;
+    for (const auto& e_data : element_data_) {
+      for (const auto& q_data : e_data.quad_data_) {
+        max_temp =
+            std::max(max_temp,
+                     q_data.material_state_
+                         ->scalars_[J2AdiabaticVisco::State::k_temperature]);
+        min_temp =
+            std::min(min_temp,
+                     q_data.material_state_
+                         ->scalars_[J2AdiabaticVisco::State::k_temperature]);
+      }
+    }
+    std::cout << "\n\n\nmax temp here is " << max_temp;
+    std::cout << "\nmin temp here is " << min_temp << "\n\n\n";
+
+    // prepare mass matrix
+    if (!m_mat_) {
+      m_mat_ = std::make_unique<mfem::SparseMatrix>(integrated.Size());
+
+      mfem::DenseMatrix mat;
+
+      for (auto& e : element_data_) {
+        mat.SetSize(e.n_dof_);
+        mat = 0.0;
+
+        for (auto& q_data : e.quad_data_) {
+          mfem::AddMult_a_VVt(q_data.integration_weight_ * q_data.det_dX_dxi_,
+                              q_data.N_,
+                              mat);
+        }
+
+        m_mat_->AddSubMatrix(e.scalar_v_dofs_, e.scalar_v_dofs_, mat, 0);
+      }
+
+      m_mat_->Finalize();
+      m_mat_->SortColumnIndices();
+      // mass_inv_.iterative_mode = false;
+      // mass_inv_.SetRelTol(1e-12);
+      // // mass_inv_.SetAbsTol(1e-12);
+      // mass_inv_.SetMaxIter(5000);
+      // mass_inv_.SetPrintLevel(mfem::IterativeSolver::PrintLevel().All());
+      // mass_inv_.SetPreconditioner(mass_inv_prec_);
+      // mass_inv_.SetOperator(*m_mat_);
+
+      mass_inv_direct_.SetOperator(*m_mat_);
+      mass_inv_direct_.SetPrintLevel(1);
+    }
+
+    // mass_inv_.Mult(integrated, projected);
+    projected = 0.0;
+    mass_inv_direct_.Mult(integrated, projected);
+  }
 };
 
 } // namespace mimi::integrators

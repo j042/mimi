@@ -34,6 +34,7 @@ class MaterialBase {
 public:
   using MaterialStatePtr_ = std::shared_ptr<MaterialState>;
 
+  double dt_;
   double first_effective_dt_;
   double second_effective_dt_;
 
@@ -1054,6 +1055,8 @@ public:
   double specific_heat_;             // for now, constant
   double initial_temperature_{20.0}; //
 
+  double melting_temperature_{}; // taken from hardening
+
   static constexpr const double k_tol{1.e-10};
 
   struct State : public MaterialState {
@@ -1077,6 +1080,8 @@ protected:
   static constexpr const int k_s{1};
   /// N_p
   static constexpr const int k_N_p{2};
+
+  static constexpr const int k_L{3};
 
 public:
   virtual std::string Name() const { return "J2AdiabaticVisco"; }
@@ -1116,7 +1121,14 @@ public:
     /// make space for du_dX
     aux_matrices_.resize(
         n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+        Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
+
+    // temporary solution to getting melt t.
+    // TODO do better
+    melting_temperature_ =
+        std::dynamic_pointer_cast<JohnsonCookAdiabaticRateDependentHardening>(
+            hardening_)
+            ->melting_temperature_;
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -1158,9 +1170,13 @@ public:
     if (dim_ == 2) {
       // sym(F_dot)
       // for large strain, use L
-      const double ed0 = f[0];
+      const double f0 = f[0];
+      const double f3 = f[3];
+      const double trace_over_dim = (f0 + f3) / 2.0;
+
+      const double ed0 = f0 - trace_over_dim;
       const double ed1 = .5 * (f[1] + f[2]);
-      const double ed3 = f[3];
+      const double ed3 = f3 - trace_over_dim;
 
       // get plastic strain rate
       plastic_strain_rate =
@@ -1173,39 +1189,43 @@ public:
       // first, stress using lambda * tr(eps) * I + 2*mu*eps
       const double diag = lambda_ * eps.Trace();
       const double two_mu = 2. * mu_;
-      double sig_eq0 = diag + two_mu * e[0];
-      double sig_eq3 = diag + two_mu * e[3];
-      const double trace_over_dim = (sig_eq0 + sig_eq3) / 2.0;
-      sig_eq0 -= trace_over_dim;
-      sig_eq3 -= trace_over_dim;
-      const double sig_eq1 = two_mu * e[1];
-      const double sig_eq2 = two_mu * e[2];
-      const double equivalent_stress =
-          std::sqrt(3. / 2.
-                    * ((sig_eq0 * sig_eq0) + (sig_eq1 * sig_eq1)
-                       + (sig_eq2 * sig_eq2) + (sig_eq3 * sig_eq3)));
-      temperature_rate = heat_fraction_ * equivalent_stress
-                         * plastic_strain_rate / (density_ * specific_heat_);
 
-      // delta_temp = eta * sigma : eps_dot / (rho * c_p)
-      // delta_T = (heat_fraction_
-      //            * std::abs(((sig0 - trace_over_dim) * ed0)
-      //                       + ((two_mu * e[1]) * ed1) + ((two_mu * e[2]) *
-      //                       ed1)
-      //                       + ((sig3 - trace_over_dim) * ed3)))
-      //           / (density_ * specific_heat_);
-      //  mimi::utils::PrintInfo("ed [", ed0, ed1, ed1, ed3, "]", "sig [", (diag
-      //  + two_mu * e[0]), (two_mu * e[1]), (two_mu * e[2]), (diag + two_mu *
-      //  e[3]), "]", delta_T);
+      //      double sig_eq0 = diag + two_mu * e[0];
+      //      double sig_eq3 = diag + two_mu * e[3];
+      //      const double trace_over_dim = (sig_eq0 + sig_eq3) / 2.0;
+      //      sig_eq0 -= trace_over_dim;
+      //      sig_eq3 -= trace_over_dim;
+      //      const double sig_eq1 = two_mu * e[1];
+      //      const double sig_eq2 = two_mu * e[2];
+      //      const double equivalent_stress =
+      //          std::sqrt(3. / 2.
+      //                    * ((sig_eq0 * sig_eq0) + (sig_eq1 * sig_eq1)
+      //                       + (sig_eq2 * sig_eq2) + (sig_eq3 * sig_eq3)));
+      //      temperature_rate = heat_fraction_ * equivalent_stress
+      //                         * plastic_strain_rate / (density_ *
+      //                         specific_heat_);
 
-      // first, stress using lambda * tr(eps) * I + 2*mu*eps
-      // const double diag = lambda_ * eps.Trace();
-      // const double two_mu = 2. * mu_;
-      // temperature_rate = (heat_fraction_
-      //            * (((diag + two_mu * e[0]) * ed0) + ((two_mu * e[1]) * ed1)
-      //               + ((two_mu * e[2]) * ed1) + ((diag + two_mu * e[3]) *
-      //               ed3)))
-      //           / (density_ * specific_heat_);
+      // here's alternative approach using abaqus
+      const double e0 = e[0];
+      const double e3 = e[3];
+      // const double t_over_dim = (e0 + e3) * 0.5;
+      double sig0 = diag + two_mu * (e0); // - t_over_dim);
+      double sig3 = diag + two_mu * (e3); // - t_over_dim);
+      const double sig1 = two_mu * e[1];
+      const double sig2 = two_mu * e[2];
+      const double sig_trace_over_dim = (sig0 + sig3) / 2.0;
+      sig0 -= sig_trace_over_dim;
+      sig3 -= sig_trace_over_dim;
+
+      const double work = (ed0 * sig0 + ed1 * sig1 + ed1 * sig2 + ed3 * sig3);
+      // mimi::utils::PrintInfo(sig0, sig1, sig2, sig3, ed0, ed1, ed3, work);
+      // std::cout << "work " << work << "\n";
+      if (work < 0.0) {
+        temperature_rate = 0.0;
+      } else {
+        temperature_rate = heat_fraction_ * work / (density_ * specific_heat_);
+      }
+
       return;
     } else {
       // get eps_dot
@@ -1252,6 +1272,7 @@ public:
     mfem::DenseMatrix& eps = i_aux[k_eps];
     mfem::DenseMatrix& s = i_aux[k_s];
     mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    mfem::DenseMatrix& L = i_aux[k_L];
 
     // get states
     mfem::DenseMatrix& plastic_strain =
@@ -1269,17 +1290,17 @@ public:
 
     // get eqps_rate and delta temperature
     double eqps_rate, temperature_rate;
-    // mfem::DenseMatrix L(dim_, dim_);
     // VelocityGradient(F, F_dot, L);
-    //  Dev(L, dim_, 1.0, L);
     PlasticStrainRateAndTemperatureRate(F_dot,
+                                        // L,
                                         eps,
                                         eqps_rate,
                                         temperature_rate);
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    const double trial_T = temperature + temperature_rate * first_effective_dt_;
+    const double trial_T =
+        temperature + temperature_rate * second_effective_dt_;
     auto residual =
         [eqps_old, eqps_rate, q, trial_T, *this](auto delta_eqps) -> ADScalar_ {
       return q - 3.0 * G_ * delta_eqps
@@ -1315,7 +1336,10 @@ public:
       if (!state->freeze_) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
-        temperature = trial_T;
+
+        // clip at melting temp + 1, just to make sure that in next simulation,
+        // this will trigger contribution=0.0
+        temperature = std::min(trial_T, melting_temperature_ + 1.0);
       }
     }
 

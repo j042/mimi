@@ -69,8 +69,15 @@ public:
     x_ = x;
     v_ = v;
 
+    nonlinear_stiffness_->dt_ = dt_;
     nonlinear_stiffness_->first_effective_dt_ = fac0;
     nonlinear_stiffness_->second_effective_dt_ = fac1;
+  }
+
+  virtual void SetupDirichletDofsFromNonlinearStiffness() {
+    MIMI_FUNC()
+
+    dirichlet_dofs_ = &nonlinear_stiffness_->GetEssentialTrueDofs();
   }
 
   virtual void Setup() {
@@ -97,6 +104,8 @@ public:
 
     nonlinear_stiffness_ =
         MimiBase_::nonlinear_forms_.at("nonlinear_stiffness");
+
+    SetupDirichletDofsFromNonlinearStiffness();
 
     assert(!stiffness_);
 

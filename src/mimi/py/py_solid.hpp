@@ -46,7 +46,8 @@ protected:
   mfem::GridFunction* x1_;
 
   // solvers
-  std::map<std::string, std::shared_ptr<mimi::solvers::Newton>> newton_solvers_;
+  std::map<std::string, std::shared_ptr<mimi::solvers::LineSearchNewton>>
+      newton_solvers_;
   std::map<std::string, std::shared_ptr<mfem::Solver>> linear_solvers_;
 
   // mesh
@@ -314,6 +315,9 @@ public:
           fes.zero_dofs_.Append(fes.boundary_dof_ids_[bid][dim]);
         }
       }
+      // on second thought, it is a bit harmless.
+      fes.zero_dofs_.Sort();
+      fes.zero_dofs_.Unique();
     }
   }
 
@@ -395,7 +399,8 @@ public:
                                const double rel_tol,
                                const double abs_tol,
                                const double max_iter,
-                               const bool iterative_mode) {
+                               const bool iterative_mode,
+                               const bool freeze) {
     MIMI_FUNC()
 
     auto& newton = newton_solvers_.at(name);
@@ -403,6 +408,7 @@ public:
     newton->SetAbsTol(abs_tol);
     newton->SetMaxIter(max_iter);
     newton->iterative_mode = iterative_mode;
+    newton->freeze_ = freeze;
   }
 
   /// get final norms. can be used for augmented langrange iterations
@@ -455,6 +461,10 @@ public:
 
     oper2_ = std::unique_ptr<mfem::SecondOrderTimeDependentOperator>(oper2);
     ode2_solver_ = std::unique_ptr<mimi::solvers::OdeBase>(ode2);
+
+    // ode solvers also wants to know dirichlet dofs
+    auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    ode2_solver_->SetupDirichletDofs(op_base->dirichlet_dofs_);
   }
 
   virtual double CurrentTime() const { MIMI_FUNC() return t_; }

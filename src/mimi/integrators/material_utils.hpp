@@ -66,7 +66,7 @@ inline void ElasticStrain(const mfem::DenseMatrix& F,
 
   // substract I
   for (int i{}; i < dim; ++i) {
-    e_data[(dim + 1) * i] -= 1;
+    e_data[(dim + 1) * i] -= 1.;
   }
 
   // subtract plastic_strain

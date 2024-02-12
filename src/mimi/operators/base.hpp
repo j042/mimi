@@ -21,6 +21,11 @@ public:
 
   mfem::FiniteElementSpace& fe_space_;
 
+  const mfem::Array<int>* dirichlet_dofs_{nullptr};
+
+  // set dt
+  double dt_{0.0};
+
   /// @brief container to hold any necessary / related linear forms
   std::unordered_map<std::string, LinearFormPointer_> linear_forms_{};
   /// @brief container to hold any necessary / related bilinear forms

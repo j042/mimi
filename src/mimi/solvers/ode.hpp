@@ -4,14 +4,25 @@
 
 #include <mfem.hpp>
 
+#include "mimi/operators/base.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::solvers {
 
 class OdeBase {
+protected:
+  // we keep casted mimi operator base to set dt_
+  mimi::operators::OperatorBase* mimi_operator_;
+  const mfem::Array<int>* dirichlet_dofs_{nullptr};
+
 public:
   virtual ~OdeBase() = default;
   virtual std::string Name() const = 0;
+  virtual void SetupDirichletDofs(const mfem::Array<int>* dirichlet_dofs) {
+    MIMI_FUNC()
+
+    dirichlet_dofs_ = dirichlet_dofs;
+  }
   virtual void PrintInfo() {
     mimi::utils::PrintInfo("No detailed info for", Name());
   }
@@ -67,6 +78,8 @@ public:
 
     Base_::Init(oper);
     ComputeFactors();
+    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
+    assert(mimi_operator_);
   }
 
   virtual void ComputeFactors() {
@@ -91,6 +104,7 @@ public:
   StepTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
 
+    mimi_operator_->dt_ = dt;
     Base_::Step(x, dxdt, t, dt);
   }
   virtual void
@@ -103,12 +117,23 @@ public:
       nstate = 1;
     }
 
+    // std::cout << "\n";
+    // std::cout << x[0] << "\n";
+    // std::cout << x[2] << "\n";
+    // std::cout << x[4] << "\n";
+    // std::cout << x[6] << "\n";
+    // std::cout << "\n";
+    for (const int& d_id : *dirichlet_dofs_) {
+      d2xdt2[d_id] = 0.0;
+    }
+
     // Predict alpha levels
     add(dxdt, fac0_ * dt, d2xdt2, va);
     add(x, fac1_ * dt, va, xa);
     add(dxdt, fac2_ * dt, d2xdt2, va);
 
     // Solve alpha levels
+    mimi_operator_->dt_ = dt;
     f->SetTime(t + dt);
     f->ImplicitSolve(fac3_ * dt * dt, fac4_ * dt, xa, va, aa);
   }
@@ -242,6 +267,9 @@ public:
     beta_ = beta;
     gamma_ = gamma;
     ComputeFactors();
+
+    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
+    assert(mimi_operator_);
   }
 
   virtual void ComputeFactors() {
@@ -292,6 +320,7 @@ public:
       f->Mult(x, dxdt, d2xdt2);
       first = false;
     }
+    mimi_operator_->dt_ = dt;
     f->SetTime(t + dt);
 
     x.Add(dt, dxdt);
@@ -319,6 +348,7 @@ public:
   StepTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
 
+    mimi_operator_->dt_ = dt;
     Step(x, dxdt, t, dt);
   }
 
@@ -331,6 +361,7 @@ public:
       f->Mult(x, dxdt, d2xdt2);
       first = false;
     }
+    mimi_operator_->dt_ = dt;
     f->SetTime(t + dt);
 
     add(x, dt, dxdt, xn);
