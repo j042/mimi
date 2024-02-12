@@ -188,6 +188,11 @@ public:
 
   virtual const std::string& Name() const { return name_; }
 
+  virtual Vector_<ElementData>& GetElementData() { return element_data_; }
+  virtual const Vector_<ElementData>& GetElementData() const {
+    return element_data_;
+  }
+
   /// This one needs / stores
   /// - basis(shape) function derivative (at reference)
   /// - reference to target jacobian weight (det)
@@ -437,36 +442,13 @@ public:
 
     auto post_process =
         [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
-          // create some space in stack
-          double element_x_data[kMaxTrueDof];
-          double f_data[kDimDim];
-          tmp.SetData(element_x_data,
-                      nullptr,
-                      nullptr,
-                      f_data,
-                      nullptr,
-                      nullptr,
-                      dim_);
-
           for (int i{begin}; i < end; ++i) {
             // in
             ElementData& e = element_data_[i];
             e.scalar_post_process_view_ = 0.0;
 
-            // set shape for tmp data
-            tmp.SetShape(e.n_dof_, dim_);
-
-            // get current element solution as matrix
-            mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(x, e);
-
             for (auto& q_data : e.quad_data_) {
-              // get dx_dxi -> we save in tmp.F_ just for convenience
-              mfem::DenseMatrix& dx_dxi = tmp.F_;
-              mfem::MultAtB(current_element_x, q_data.dN_dxi_, dx_dxi);
               e.scalar_post_process_view_.Add(
-                  // dx_dxi.Weight() * q_data.integration_weight_
                   q_data.integration_weight_ * q_data.det_dX_dxi_
                       * q_data.material_state_
                             ->scalars_[J2AdiabaticVisco::State::k_temperature],
@@ -517,7 +499,6 @@ public:
                               q_data.N_,
                               mat);
         }
-
         m_mat_->AddSubMatrix(e.scalar_v_dofs_, e.scalar_v_dofs_, mat, 0);
       }
 

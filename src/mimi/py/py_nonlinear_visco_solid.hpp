@@ -305,6 +305,31 @@ public:
     // set dynamic system -> transfer ownership of those to base
     Base_::SetDynamicSystem2(nl_oper.release(), gen_alpha.release());
   }
+
+  virtual void FillTemperature(const double value) {
+    MIMI_FUNC()
+
+    auto* mimi_oper =
+        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    if (mimi_oper) {
+      // this is not a robust solution
+      auto* nvs = dynamic_cast<mimi::integrators::NonlinearSolid*>(
+          dynamic_cast<mimi::forms::Nonlinear*>(
+              mimi_oper->nonlinear_forms_.at("nonlinear_visco_stiffness").get())
+              ->domain_nfi_[0]
+              .get());
+      for (auto& e_data : nvs->GetElementData()) {
+        for (auto& q_data : e_data.quad_data_) {
+          q_data.material_state_->scalars_
+              [mimi::integrators::J2AdiabaticVisco::State::k_temperature] =
+              value;
+        }
+      }
+    } else {
+      mimi::utils::PrintAndThrowError(
+          "Failed to cast operator to mimi's base.");
+    }
+  }
 };
 
 } // namespace mimi::py

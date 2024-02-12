@@ -11,7 +11,12 @@ void init_py_nonlinear_visco_solid(py::module_& m) {
              PySolid>
       klasse(m, "PyNonlinearViscoSolid");
   klasse.def(py::init<>())
-      .def("set_material", &PyNonlinearSolid::SetMaterial, py::arg("material"));
+      .def("set_material",
+           &PyNonlinearViscoSolid::SetMaterial,
+           py::arg("material"))
+      .def("fill_temperature",
+           &PyNonlinearViscoSolid::FillTemperature,
+           py::arg("temperature"));
 }
 
 } // namespace mimi::py
