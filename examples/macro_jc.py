@@ -22,7 +22,7 @@ n_threads = 4
 # create material
 mat = mimi.PyJ2NonlinearIsotropicHardening()
 mat.density = 7800
-mat.viscosity = -1  # maybe some higher value?
+mat.viscosity = 100  # maybe some higher value?
 mat.set_young_poisson(205.0e9, 0.29)
 mat.hardening = mimi.PyJohnsonCookHardening()
 mat.hardening.A = 288e6

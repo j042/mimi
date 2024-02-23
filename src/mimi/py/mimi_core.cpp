@@ -14,7 +14,7 @@ void init_py_ad(py::module_&);
 void init_py_nonlinear_base_integrator(py::module_&);
 } // namespace mimi::py
 
-PYBIND11_MODULE(mimi, m) {
+PYBIND11_MODULE(mimi_core, m) {
   mimi::py::init_py_boundary_conditions(m);
   mimi::py::init_py_solid(m);
   mimi::py::init_py_linear_elasticity(m);
