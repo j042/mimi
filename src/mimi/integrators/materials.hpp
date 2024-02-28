@@ -829,6 +829,16 @@ struct JohnsonCookConstantTemperatureHardening
                        / (melting_temperature_ - reference_temperature_),
                    m_);
 
+    mimi::utils::PrintInfo(Name(),
+                           "Temp:",
+                           temperature_,
+                           "Ref Temp:",
+                           reference_temperature_,
+                           "Melting Temp:",
+                           melting_temperature_,
+                           "Contribution:",
+                           temperature_contribution_);
+
     if (temperature_contribution_ <= 0.0) {
       mimi::utils::PrintAndThrowError("Invalid temperature contribution",
                                       temperature_contribution_);
