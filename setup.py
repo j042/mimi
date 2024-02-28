@@ -173,7 +173,8 @@ setup(
     author_email="jaewooklee042@gmail.com",
     description="Collection of mfem based IGA computations.",
     long_description="",
-    ext_modules=[CMakeExtension("mimi")],
+    packages=["mimi"],
+    ext_modules=[CMakeExtension("mimi.mimi_core")],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )

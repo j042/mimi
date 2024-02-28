@@ -10,17 +10,17 @@ set(SRCS
     py/py_nonlinear_visco_solid.cpp
     py/py_ad.cpp
     py/py_nonlinear_integrator.cpp
-    py/mimi.cpp)
+    py/mimi_core.cpp)
 
-pybind11_add_module(mimi ${SRCS})
+pybind11_add_module(mimi_core ${SRCS})
 
 # include
-target_include_directories(mimi PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_include_directories(mimi_core PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 # link
-target_link_libraries(mimi PRIVATE mfem)
-target_link_libraries(mimi PRIVATE splinepy::splinepy_python)
+target_link_libraries(mimi_core PRIVATE mfem)
+target_link_libraries(mimi_core PRIVATE splinepy::splinepy_python)
 
-target_compile_options(mimi PRIVATE ${MIMI_FLAGS})
-target_compile_definitions(mimi PRIVATE ${MIMI_DEFS})
-set_property(TARGET mimi PROPERTY CXX_STANDARD 17)
+target_compile_options(mimi_core PRIVATE ${MIMI_FLAGS})
+target_compile_definitions(mimi_core PRIVATE ${MIMI_DEFS})
+set_property(TARGET mimi_core PROPERTY CXX_STANDARD 17)
