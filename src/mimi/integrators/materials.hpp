@@ -365,8 +365,9 @@ public:
     static constexpr const int k_state_matrices{2};
     static constexpr const int k_state_scalars{2};
     /// matrix indices
-    static constexpr const int k_beta{0};
-    static constexpr const int k_plastic_strain{1};
+    static constexpr const int k_plastic_strain{0};
+    static constexpr const int k_beta{1};
+
     /// scalar indices
     static constexpr const int k_accumulated_plastic_strain{0};
   };
@@ -829,7 +830,8 @@ struct JohnsonCookConstantTemperatureHardening
                    m_);
 
     if (temperature_contribution_ <= 0.0) {
-      mimi::utils::PrintAndThrowError("Invalid temperature contribution", temperature_contribution_);
+      mimi::utils::PrintAndThrowError("Invalid temperature contribution",
+                                      temperature_contribution_);
     }
   }
 
@@ -928,7 +930,6 @@ public:
     aux_matrices_.resize(
         n_threads_,
         Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
-
   }
 
   virtual MaterialStatePtr_ CreateState() const {

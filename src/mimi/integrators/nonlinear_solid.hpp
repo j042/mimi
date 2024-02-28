@@ -21,6 +21,7 @@ public:
   mfem::CGSolver mass_inv_;
   mfem::DSmoother mass_inv_prec_;
   mfem::UMFPackSolver mass_inv_direct_;
+  mfem::Vector integrated_;
 
   using Base_ = NonlinearBase;
   template<typename T>
@@ -434,11 +435,57 @@ public:
   /// @param current_x
   virtual void AssembleDomainGrad(const mfem::Vector& current_x) { MIMI_FUNC() }
 
+  /// Create mass matrix if we don't have one.
+  virtual void CreateMassMatrix(const int size) {
+
+    // size check
+    if (m_mat_) {
+      // if size differs (it shouldn't), remove
+      if (m_mat_->Height() != size) {
+        m_mat_ = nullptr;
+      }
+    }
+
+    // prepare mass matrix
+    if (!m_mat_) {
+      m_mat_ = std::make_unique<mfem::SparseMatrix>(size);
+
+      mfem::DenseMatrix mat;
+
+      for (auto& e : element_data_) {
+        mat.SetSize(e.n_dof_);
+        mat = 0.0;
+
+        for (auto& q_data : e.quad_data_) {
+          mfem::AddMult_a_VVt(q_data.integration_weight_ * q_data.det_dX_dxi_,
+                              q_data.N_,
+                              mat);
+        }
+        m_mat_->AddSubMatrix(e.scalar_v_dofs_, e.scalar_v_dofs_, mat, 0);
+      }
+
+      m_mat_->Finalize();
+      m_mat_->SortColumnIndices();
+      // mass_inv_.iterative_mode = fal se;
+      // mass_inv_.SetRelTol(1e-12);
+      // // mass_inv_.SetAbsTol(1e-12);
+      // mass_inv_.SetMaxIter(5000);
+      // mass_inv_.SetPrintLevel(mfem::IterativeSolver::PrintLevel().All());
+      // mass_inv_.SetPreconditioner(mass_inv_prec_);
+      // mass_inv_.SetOperator(*m_mat_);
+
+      mass_inv_direct_.SetOperator(*m_mat_);
+      mass_inv_direct_.SetPrintLevel(1);
+    }
+  }
+
   /// pure integration of temperature at quadrature points
   virtual void Temperature(mfem::Vector& x, mfem::Vector& projected) {
     MIMI_FUNC()
 
-    mfem::Vector integrated(projected.Size());
+    CreateMassMatrix(projected.Size());
+
+    integrated_.SetSize(projected.Size());
 
     auto post_process =
         [&](const int begin, const int end, const int i_thread) {
@@ -460,65 +507,55 @@ public:
     mimi::utils::NThreadExe(post_process, n_elements_, n_threads_);
 
     // serial assemble to integrated
-    integrated = 0.0;
+    integrated_ = 0.0;
     for (auto& e_data : element_data_) {
-      integrated.AddElementVector(e_data.scalar_v_dofs_,
-                                  e_data.scalar_post_process_view_);
-    }
-
-    // // print max T
-    // double max_temp = 0.0;
-    // double min_temp = 100000.0;
-    // for (const auto& e_data : element_data_) {
-    //   for (const auto& q_data : e_data.quad_data_) {
-    //     max_temp =
-    //         std::max(max_temp,
-    //                  q_data.material_state_
-    //                      ->scalars_[J2AdiabaticVisco::State::k_temperature]);
-    //     min_temp =
-    //         std::min(min_temp,
-    //                  q_data.material_state_
-    //                      ->scalars_[J2AdiabaticVisco::State::k_temperature]);
-    //   }
-    // }
-    // std::cout << "\n\n\nmax temp here is " << max_temp;
-    // std::cout << "\nmin temp here is " << min_temp << "\n\n\n";
-
-    // prepare mass matrix
-    if (!m_mat_) {
-      m_mat_ = std::make_unique<mfem::SparseMatrix>(integrated.Size());
-
-      mfem::DenseMatrix mat;
-
-      for (auto& e : element_data_) {
-        mat.SetSize(e.n_dof_);
-        mat = 0.0;
-
-        for (auto& q_data : e.quad_data_) {
-          mfem::AddMult_a_VVt(q_data.integration_weight_ * q_data.det_dX_dxi_,
-                              q_data.N_,
-                              mat);
-        }
-        m_mat_->AddSubMatrix(e.scalar_v_dofs_, e.scalar_v_dofs_, mat, 0);
-      }
-
-      m_mat_->Finalize();
-      m_mat_->SortColumnIndices();
-      // mass_inv_.iterative_mode = false;
-      // mass_inv_.SetRelTol(1e-12);
-      // // mass_inv_.SetAbsTol(1e-12);
-      // mass_inv_.SetMaxIter(5000);
-      // mass_inv_.SetPrintLevel(mfem::IterativeSolver::PrintLevel().All());
-      // mass_inv_.SetPreconditioner(mass_inv_prec_);
-      // mass_inv_.SetOperator(*m_mat_);
-
-      mass_inv_direct_.SetOperator(*m_mat_);
-      mass_inv_direct_.SetPrintLevel(1);
+      integrated_.AddElementVector(e_data.scalar_v_dofs_,
+                                   e_data.scalar_post_process_view_);
     }
 
     // mass_inv_.Mult(integrated, projected);
     projected = 0.0;
-    mass_inv_direct_.Mult(integrated, projected);
+    mass_inv_direct_.Mult(integrated_, projected);
+  }
+
+  virtual void AccumulatedPlasticStrain(mfem::Vector& x,
+                                        mfem::Vector& projected) {
+    MIMI_FUNC()
+
+    CreateMassMatrix(projected.Size());
+
+    integrated_.SetSize(projected.Size());
+
+    auto post_process =
+        [&](const int begin, const int end, const int i_thread) {
+          for (int i{begin}; i < end; ++i) {
+            // in
+            ElementData& e = element_data_[i];
+            e.scalar_post_process_view_ = 0.0;
+
+            for (auto& q_data : e.quad_data_) {
+              e.scalar_post_process_view_.Add(
+                  q_data.integration_weight_ * q_data.det_dX_dxi_
+                      * q_data.material_state_
+                            ->scalars_[J2NonlinearIsotropicHardening::State::
+                                           k_plastic_strain],
+                  q_data.N_);
+            }
+          }
+        };
+
+    mimi::utils::NThreadExe(post_process, n_elements_, n_threads_);
+
+    // serial assemble to integrated
+    integrated_ = 0.0;
+    for (auto& e_data : element_data_) {
+      integrated_.AddElementVector(e_data.scalar_v_dofs_,
+                                   e_data.scalar_post_process_view_);
+    }
+
+    // mass_inv_.Mult(integrated, projected);
+    projected = 0.0;
+    mass_inv_direct_.Mult(integrated_, projected);
   }
 };
 
