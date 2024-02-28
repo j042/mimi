@@ -365,8 +365,9 @@ public:
     static constexpr const int k_state_matrices{2};
     static constexpr const int k_state_scalars{2};
     /// matrix indices
-    static constexpr const int k_beta{0};
-    static constexpr const int k_plastic_strain{1};
+    static constexpr const int k_plastic_strain{0};
+    static constexpr const int k_beta{1};
+
     /// scalar indices
     static constexpr const int k_accumulated_plastic_strain{0};
   };
@@ -779,6 +780,93 @@ struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
   }
 };
 
+struct JohnsonCookConstantTemperatureHardening
+    : public JohnsonCookRateDependentHardening {
+  using Base_ = JohnsonCookRateDependentHardening;
+  using ADScalar_ = Base_::ADScalar_;
+
+  using Base_::A_;
+  using Base_::B_;
+  using Base_::C_;
+  using Base_::effective_plastic_strain_rate_;
+  using Base_::n_;
+
+  // temperature related
+  double reference_temperature_;
+  double melting_temperature_;
+  double m_;
+  double temperature_; // this will stay constant
+
+  // temperature contribution
+  mutable double temperature_contribution_;
+
+  /// @brief  this is a long name for a hardening model
+  /// @return
+  virtual std::string Name() const {
+    return "JohnsonCookConstantTemperatureHardening";
+  }
+
+  virtual bool IsRateDependent() const { return true; }
+
+  virtual bool IsTemperatureDependent() const { return false; }
+
+  virtual void Validate() const {
+    MIMI_FUNC()
+
+    if (reference_temperature_ > melting_temperature_) {
+      mimi::utils::PrintAndThrowError(
+          "reference temperature,",
+          reference_temperature_,
+          ",can't be bigger than melting temperature,",
+          melting_temperature_,
+          ".");
+    }
+
+    // compute frequently used value
+    temperature_contribution_ =
+        1.0
+        - std::pow((temperature_ - reference_temperature_)
+                       / (melting_temperature_ - reference_temperature_),
+                   m_);
+
+    mimi::utils::PrintInfo(Name(),
+                           "Temp:",
+                           temperature_,
+                           "Ref Temp:",
+                           reference_temperature_,
+                           "Melting Temp:",
+                           melting_temperature_,
+                           "Contribution:",
+                           temperature_contribution_);
+
+    if (temperature_contribution_ <= 0.0) {
+      mimi::utils::PrintAndThrowError("Invalid temperature contribution",
+                                      temperature_contribution_);
+    }
+  }
+
+  virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
+                             const double& equivalent_plastic_strain_rate,
+                             const double& temperature) const {
+    MIMI_FUNC()
+
+    // get visco contribution
+    double visco_contribution{1.0};
+    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
+      visco_contribution += C_
+                            * std::log(equivalent_plastic_strain_rate
+                                       / effective_plastic_strain_rate_);
+    }
+
+    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
+      return ADScalar_(A_) * visco_contribution * temperature_contribution_;
+    }
+
+    return (A_ + B_ * pow(accumulated_plastic_strain, n_)) * visco_contribution
+           * temperature_contribution_;
+  }
+};
+
 /// @brief Computational Methods for plasticity p260, box 7.5
 /// specialized for visco plasticity.
 /// Then eta = s, instead of eta = s - beta
@@ -843,6 +931,7 @@ public:
         mimi::utils::PrintAndThrowError(hardening_->Name(),
                                         "is not rate-dependent.");
       }
+      hardening_->Validate();
     } else {
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }

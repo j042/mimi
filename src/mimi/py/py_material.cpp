@@ -24,6 +24,8 @@ void init_py_material(py::module_& m) {
   using VoceHardening = mimi::integrators::VoceHardening;
   using JCHardening = mimi::integrators::JohnsonCookHardening;
   using JCViscoHardening = mimi::integrators::JohnsonCookRateDependentHardening;
+  using JCConstTemperatureHardening =
+      mimi::integrators::JohnsonCookConstantTemperatureHardening;
   using JCThermoViscoHardening =
       mimi::integrators::JohnsonCookAdiabaticRateDependentHardening;
 
@@ -111,6 +113,18 @@ void init_py_material(py::module_& m) {
       .def_readwrite("C", &JCViscoHardening::C_)
       .def_readwrite("eps0_dot",
                      &JCViscoHardening::effective_plastic_strain_rate_);
+
+  py::class_<JCConstTemperatureHardening,
+             std::shared_ptr<JCConstTemperatureHardening>,
+             JCViscoHardening>
+      jc_visco_const_temp(m, "PyJohnsonCookViscoConstantTemperatureHardening");
+  jc_visco_const_temp.def(py::init<>())
+      .def_readwrite("reference_temperature",
+                     &JCConstTemperatureHardening::reference_temperature_)
+      .def_readwrite("melting_temperature",
+                     &JCConstTemperatureHardening::melting_temperature_)
+      .def_readwrite("m", &JCConstTemperatureHardening::m_)
+      .def_readwrite("temperature", &JCConstTemperatureHardening::temperature_);
 
   py::class_<JCThermoViscoHardening,
              std::shared_ptr<JCThermoViscoHardening>,
