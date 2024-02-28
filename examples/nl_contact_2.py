@@ -15,7 +15,7 @@ le.read_mesh("tests/data/sqn.mesh")
 
 # refine
 le.elevate_degrees(1)
-le.subdivide(3)
+le.subdivide(4)
 
 # mat
 mat = mimi.PyCompressibleOgdenNeoHookean()
@@ -60,7 +60,7 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
+le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False, False)
 
 tic.toc("bilinear, linear forms assembly")
 
@@ -131,7 +131,7 @@ for i in range(1000):
     scene.coefficient = coe
     for j in range(10):
         sol()
-        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True)
+        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
         bdr_norm = np.linalg.norm(n.boundary_residual())
         print("augumenting")
@@ -140,13 +140,13 @@ for i in range(1000):
             print(ni.gap_norm(), "exit!")
             break
     print("final solve!")
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True)
+    le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True, False)
     le.update_contact_lagrange()
     scene.coefficient = 0.0
     c_sol()
     rel, ab = le.newton_final_norms("nonlinear_solid")
 
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
+    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False, True)
     scene.coefficient = coe
     adv()
     show()
