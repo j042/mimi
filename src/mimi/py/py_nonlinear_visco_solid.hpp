@@ -2,6 +2,10 @@
 
 #include <memory>
 
+#ifdef MIMI_USE_OMP
+#include <omp.h>
+#endif
+
 #include "mimi/integrators/materials.hpp"
 #include "mimi/integrators/nonlinear_visco_solid.hpp"
 #include "mimi/integrators/penalty_contact.hpp"
@@ -36,6 +40,8 @@ public:
 
     // quick 0 and -1 filtering
     const int n_threads = (nthreads < 1) ? 1 : nthreads;
+
+    SetupNTheads(n_threads);
 
     // get fespace - this should be owned by GridFunc
     // and grid func should own the fespace
