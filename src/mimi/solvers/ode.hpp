@@ -22,7 +22,7 @@ protected:
 
 public:
   virtual ~OdeBase() = default;
-  virtual std::string Name() const = 0;
+  virtual std::string Name() const { return "OdeBase"; };
   virtual void SetupDirichletDofs(const mfem::Array<int>* dirichlet_dofs) {
     MIMI_FUNC()
 
@@ -68,9 +68,10 @@ public:
   }
 
   /// returns internal acceleration vector.
-  virtual mfem::Vector& Acceleration() {
+  virtual mfem::Vector* Acceleration() {
     mimi::utils::PrintAndThrowError("Acceleration is not implemented for",
                                     Name());
+    return nullptr;
   }
 };
 
@@ -155,21 +156,21 @@ public:
                                   double& dt) {
     MIMI_FUNC()
 
-    tmp_xa.SetSize(x.Size());
-    tmp_va.SetSize(dxdt.size());
+    tmp_xa_.SetSize(x.Size());
+    tmp_va_.SetSize(dxdt.Size());
 
     // Correct alpha levels
     // xa.Add(fac3_ * dt * dt, aa); // <- do this
-    add(xa, fac3_ * dt * dt, Base_::aa, tmp_xa);
+    add(xa, fac3_ * dt * dt, Base_::aa, tmp_xa_);
     // va.Add(fac4_ * dt, aa); // <- do this
-    add(va, fac4_ * dt, Base_::aa, tmp_va);
+    add(va, fac4_ * dt, Base_::aa, tmp_va_);
 
     // extrapolate using temp vectors
     x *= 1.0 - 1.0 / fac1_;
-    x.Add(1.0 / fac1_, tmp_xa);
+    x.Add(1.0 / fac1_, tmp_xa_);
 
     dxdt *= 1.0 - 1.0 / fac1_;
-    dxdt.Add(1.0 / fac1_, tmp_va);
+    dxdt.Add(1.0 / fac1_, tmp_va_);
   }
 
   virtual void
@@ -195,7 +196,7 @@ public:
 
   /// returns internal acceleration vector. converged acceleration is
   /// after either Step() or AdvanceTime2()
-  virtual mfem::Vector& Acceleration() { return d2xdt2; }
+  virtual mfem::Vector* Acceleration() { return &d2xdt2; }
 };
 
 /// The classical midpoint method.
@@ -405,7 +406,7 @@ public:
 
   /// returns internal acceleration vector. converged acceleration is
   /// after either Step() or AdvanceTime2()
-  virtual mfem::Vector& Acceleration() { return d2xdt2; }
+  virtual mfem::Vector* Acceleration() { return &d2xdt2; }
 };
 
 class LinearAcceleration : public Newmark {

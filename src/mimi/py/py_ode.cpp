@@ -18,7 +18,9 @@ void init_py_ode(py::module_& m) {
   using FoxGoodwin = mimi::solvers::FoxGoodwin;
 
   py::class_<OdeBase, std::shared_ptr<OdeBase>> klasse(m, "PyOde");
-  klasse.def(py::init<>()).def("acceleration", &OdeBase::Acceleration);
+  klasse.def(py::init<>())
+      .def("acceleration", &OdeBase::Acceleration)
+      .def("name", &OdeBase::Name);
 
   py::class_<GeneralizedAlpha2, std::shared_ptr<GeneralizedAlpha2>, OdeBase>
       gen_alpha(m, "PyGeneralizedAlpha2");
