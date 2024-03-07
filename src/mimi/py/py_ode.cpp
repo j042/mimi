@@ -1,5 +1,7 @@
 // mimi
+#include "mimi/py/py_utils.hpp"
 #include "mimi/solvers/ode.hpp"
+#include "mimi/utils/print.hpp"
 
 namespace mimi::py {
 
@@ -19,7 +21,17 @@ void init_py_ode(py::module_& m) {
 
   py::class_<OdeBase, std::shared_ptr<OdeBase>> klasse(m, "PyOde");
   klasse.def(py::init<>())
-      .def("acceleration", &OdeBase::Acceleration)
+      .def("acceleration",
+           [](OdeBase& ob) {
+             mfem::Vector* acc = ob.Acceleration();
+             if (!acc) {
+               mimi::utils::PrintAndThrowError(
+                   "Acceeleration vector does not exist.");
+               return nullptr;
+             }
+
+             return mimi::utils::NumpyView(*acc, acc->Size());
+           })
       .def("name", &OdeBase::Name);
 
   py::class_<GeneralizedAlpha2, std::shared_ptr<GeneralizedAlpha2>, OdeBase>
