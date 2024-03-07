@@ -15,6 +15,11 @@ protected:
   mimi::operators::OperatorBase* mimi_operator_;
   const mfem::Array<int>* dirichlet_dofs_{nullptr};
 
+  // xa and va are always freshly overwritten in fixedpointsolve,
+  // but would duplicate in AdvanceTime2, so assign a temp vector
+  mfem::Vector tmp_xa_;
+  mfem::Vector tmp_va_;
+
 public:
   virtual ~OdeBase() = default;
   virtual std::string Name() const = 0;
@@ -59,6 +64,12 @@ public:
   AdvanceTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("AdvanceTime2 is not implemented for",
+                                    Name());
+  }
+
+  /// returns internal acceleration vector.
+  virtual mfem::Vector& Acceleration() {
+    mimi::utils::PrintAndThrowError("Acceleration is not implemented for",
                                     Name());
   }
 };
@@ -144,10 +155,8 @@ public:
                                   double& dt) {
     MIMI_FUNC()
 
-    // xa and va are always freshly overwritten in fixedpointsolve,
-    // but would duplicate in AdvanceTime2, so assign a temp vector
-    mfem::Vector tmp_xa(x.Size());
-    mfem::Vector tmp_va(dxdt.Size());
+    tmp_xa.SetSize(x.Size());
+    tmp_va.SetSize(dxdt.size());
 
     // Correct alpha levels
     // xa.Add(fac3_ * dt * dt, aa); // <- do this
@@ -183,12 +192,16 @@ public:
 
     t += dt;
   }
+
+  /// returns internal acceleration vector. converged acceleration is
+  /// after either Step() or AdvanceTime2()
+  virtual mfem::Vector& Acceleration() { return d2xdt2; }
 };
 
 /// The classical midpoint method.
-class AverageAccelerationSolver : public GeneralizedAlpha2 {
+class AverageAcceleration : public GeneralizedAlpha2 {
 public:
-  AverageAccelerationSolver(mfem::SecondOrderTimeDependentOperator& oper) {
+  AverageAcceleration(mfem::SecondOrderTimeDependentOperator& oper) {
     alpha_m = 0.5;
     alpha_f = 0.5;
     beta = 0.25;
@@ -205,10 +218,9 @@ public:
 /// H.M. Hilber, T.J.R. Hughes and R.L. Taylor 1977
 /// https://doi.org/10.1002/eqe.4290050306
 /// alpha in [2/3,1] --> Defined differently than in paper.
-class HHTAlphaSolver : public GeneralizedAlpha2 {
+class HHTAlpha : public GeneralizedAlpha2 {
 public:
-  HHTAlphaSolver(mfem::SecondOrderTimeDependentOperator& oper,
-                 double alpha = 1.0) {
+  HHTAlpha(mfem::SecondOrderTimeDependentOperator& oper, double alpha = 1.0) {
     alpha = (alpha > 1.0) ? 1.0 : alpha;
     alpha = (alpha < 2.0 / 3.0) ? 2.0 / 3.0 : alpha;
 
@@ -228,10 +240,9 @@ public:
 /// W.L. Wood, M. Bossak and O.C. Zienkiewicz 1980
 /// https://doi.org/10.1002/nme.1620151011
 /// rho_inf in [0,1]
-class WBZAlphaSolver : public GeneralizedAlpha2 {
+class WBZAlpha : public GeneralizedAlpha2 {
 public:
-  WBZAlphaSolver(mfem::SecondOrderTimeDependentOperator& oper,
-                 double rho_inf = 1.0) {
+  WBZAlpha(mfem::SecondOrderTimeDependentOperator& oper, double rho_inf = 1.0) {
     rho_inf = (rho_inf > 1.0) ? 1.0 : rho_inf;
     rho_inf = (rho_inf < 0.0) ? 0.0 : rho_inf;
 
@@ -251,7 +262,7 @@ public:
 /// The classical newmark method.
 /// Newmark, N. M. (1959) A method of computation for structural dynamics.
 /// Journal of Engineering Mechanics, ASCE, 85 (EM3) 67-94.
-class NewmarkSolver : public mfem::SecondOrderODESolver, public OdeBase {
+class Newmark : public mfem::SecondOrderODESolver, public OdeBase {
 protected:
   mfem::Vector d2xdt2, xn, vn;
   double beta_, gamma_;
@@ -259,9 +270,9 @@ protected:
   bool first;
 
 public:
-  NewmarkSolver(mfem::SecondOrderTimeDependentOperator& oper,
-                double beta = 0.25,
-                double gamma = 0.5) {
+  Newmark(mfem::SecondOrderTimeDependentOperator& oper,
+          double beta = 0.25,
+          double gamma = 0.5) {
 
     Init(oper);
     beta_ = beta;
@@ -391,27 +402,31 @@ public:
 
     t += dt;
   }
+
+  /// returns internal acceleration vector. converged acceleration is
+  /// after either Step() or AdvanceTime2()
+  virtual mfem::Vector& Acceleration() { return d2xdt2; }
 };
 
-class LinearAccelerationSolver : public NewmarkSolver {
+class LinearAcceleration : public Newmark {
 public:
-  LinearAccelerationSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 1.0 / 6.0, 0.5) {}
+  LinearAcceleration(mfem::SecondOrderTimeDependentOperator& oper)
+      : Newmark(oper, 1.0 / 6.0, 0.5) {}
 
   virtual std::string Name() const { return "LinearAcceleration"; }
 };
 
-class CentralDifferenceSolver : public NewmarkSolver {
+class CentralDifference : public Newmark {
 public:
-  CentralDifferenceSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 0.0, 0.5) {}
+  CentralDifference(mfem::SecondOrderTimeDependentOperator& oper)
+      : Newmark(oper, 0.0, 0.5) {}
   virtual std::string Name() const { return "CentralDifference"; }
 };
 
-class FoxGoodwinSolver : public NewmarkSolver {
+class FoxGoodwin : public Newmark {
 public:
-  FoxGoodwinSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 1.0 / 12.0, 0.5) {}
+  FoxGoodwin(mfem::SecondOrderTimeDependentOperator& oper)
+      : Newmark(oper, 1.0 / 12.0, 0.5) {}
   virtual std::string Name() const { return "FoxGoodwin"; }
 };
 

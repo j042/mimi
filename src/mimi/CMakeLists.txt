@@ -10,6 +10,7 @@ set(SRCS
     py/py_nonlinear_visco_solid.cpp
     py/py_ad.cpp
     py/py_nonlinear_integrator.cpp
+    py/py_ode.cpp
     py/mimi_core.cpp)
 
 pybind11_add_module(mimi_core ${SRCS})
