@@ -274,6 +274,12 @@ public:
     if (ode2_solver_ && ode2_solver->GetMimiOperator()) {
       ode2->ResetOperator2(ode2_solver->GetMfemOperator2());
     }
+    ode2_solver_ = ode2;
+  }
+
+  virtual std::shared_ptr<mimi::solvers::OdeBase> GetOdeSolver2() {
+    MIMI_FUNC()
+    return ode2_solver_;
   }
 
   /// @brief finds true dof ids for each boundary this also finds zero_dofs_
