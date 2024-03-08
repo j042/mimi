@@ -643,6 +643,14 @@ public:
     }
     return op->nonlinear_forms_.at(name);
   }
+
+  // returns F, where F = M * a
+  virtual void ReactionForce(mfem::Vector& f) {
+    MIMI_FUNC()
+
+    auto& mass_mat = BilinearForm2("mass");
+    auto& contact_form = NonlinearForm2("contact");
+  }
 };
 
 } // namespace mimi::py

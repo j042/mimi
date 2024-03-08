@@ -200,7 +200,8 @@ public:
     mimi_operator_->dt_ = dt;
     f->SetTime(t + dt);
 
-    PasteDirichlet2(x, dxdt);
+    // pasting goes to temp vec
+    PasteDirichlet2(xa, va);
     f->ImplicitSolve(fac3_ * dt * dt, fac4_ * dt, xa, va, aa);
   }
 
