@@ -73,7 +73,10 @@ void init_py_solid(py::module_& m) {
       .def("nonlinear_form2", &PySolid::NonlinearForm2)
       .def_property("ode2_solver",
                     &PySolid::GetTimeStepSize,
-                    &PySolid::SetTimeStepSize);
+                    &PySolid::SetTimeStepSize)
+      .def("reaction_force2",
+           &PySolid::ReactionForce2,
+           py::arg("reaction_force"));
 }
 
 } // namespace mimi::py

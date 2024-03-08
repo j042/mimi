@@ -36,8 +36,9 @@ public:
     MIMI_FUNC()
 
     // ensure size
-    tmp_x_dirichlet_.SetSize(dirichlet_dofs_.GetSize());
-    tmp_v_dirichlet_.SetSize(dirichlet_dofs_.GetSize());
+    const int n_dirichlet = dirichlet_dofs_->Size();
+    tmp_x_dirichlet_.SetSize(n_dirichlet);
+    tmp_v_dirichlet_.SetSize(n_dirichlet);
 
     // we set dirichlet values of x and dxdt through script.
     // so, we just overwrite them after all adding and all

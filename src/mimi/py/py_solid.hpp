@@ -271,8 +271,8 @@ public:
   virtual void
   SetOdeSolver2(const std::shared_ptr<mimi::solvers::OdeBase>& ode2) {
     MIMI_FUNC()
-    if (ode2_solver_ && ode2_solver->GetMimiOperator()) {
-      ode2->ResetOperator2(ode2_solver->GetMfemOperator2());
+    if (ode2_solver_ && ode2_solver_->GetMimiOperator()) {
+      ode2->ResetOperator2(*ode2_solver_->GetMfemOperator2());
     }
     ode2_solver_ = ode2;
   }
@@ -509,10 +509,7 @@ public:
     dt_ = dt;
   }
 
-  virtual std::
-
-      virtual py::array_t<double>
-      LinearFormView2(const std::string lf_name) {
+  virtual py::array_t<double> LinearFormView2(const std::string lf_name) {
     MIMI_FUNC()
 
     auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
@@ -555,23 +552,6 @@ public:
     auto& fes = fe_spaces_.at(fes_name);
 
     return mimi::py::NumpyCopy<int>(fes.zero_dofs_, fes.zero_dofs_.Size());
-  }
-
-  virtual std::shared_ptr<mimi::forms::Nonlinear>
-  NonlinearForm2(const std::string& nlf_name) {
-    MIMI_FUNC()
-
-    assert(oper2_);
-
-    auto* mimi_oper2 =
-        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
-
-    if (!mimi_oper2) {
-      mimi::utils::PrintAndThrowError(
-          "2nd order dynamic system does not exist yet.");
-    }
-
-    return mimi_oper2->nonlinear_forms_.at(nlf_name);
   }
 
   virtual void StepTime2() {
@@ -627,7 +607,7 @@ public:
     if (!op_base) {
       mimi::utils::PrintAndThrowError("Operator2 does not exist.");
     }
-    return op->linear_forms_.at(name);
+    return op_base->linear_forms_.at(name);
   }
 
   virtual typename mimi::operators::OperatorBase::BilinearFormPointer_
@@ -637,7 +617,7 @@ public:
     if (!op_base) {
       mimi::utils::PrintAndThrowError("Operator2 does not exist.");
     }
-    return op->bilinear_forms_.at(name);
+    return op_base->bilinear_forms_.at(name);
   }
 
   virtual typename mimi::operators::OperatorBase::NonlinearFormPointer_
@@ -647,15 +627,17 @@ public:
     if (!op_base) {
       mimi::utils::PrintAndThrowError("Operator2 does not exist.");
     }
-    return op->nonlinear_forms_.at(name);
+    return op_base->nonlinear_forms_.at(name);
   }
 
   // returns F, where F = M * a
-  virtual void ReactionForce(mfem::Vector& f) {
+  virtual void ReactionForce2(mfem::Vector& f) {
     MIMI_FUNC()
 
-    auto& mass_mat = BilinearForm2("mass");
-    auto& contact_form = NonlinearForm2("contact");
+    const auto& mass_mat = BilinearForm2("mass");             //
+    const auto& acceleration = *ode2_solver_->Acceleration(); // returns Vector*
+
+    mass_mat->Mult(acceleration, f); // do we need L2?
   }
 };
 

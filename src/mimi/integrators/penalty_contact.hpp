@@ -613,14 +613,14 @@ public:
     for (auto& be : boundary_element_data_) {
       for (auto& qd : be.quad_data_) {
         // ignore inactive
-        if (!q.active_) {
+        if (!qd.active_) {
           continue;
         }
 
         // integrate
-        const int weight = qd.integration_weight_ * qd.detF_;
+        const int weight = qd.integration_weight_ * qd.det_F_;
         for (int i{}; i < dim_; ++i) {
-          f_data[i] += weight * q.t_n_[i];
+          f_data[i] += weight * qd.t_n_[i];
         }
       }
     }

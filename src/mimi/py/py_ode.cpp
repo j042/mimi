@@ -22,15 +22,15 @@ void init_py_ode(py::module_& m) {
   py::class_<OdeBase, std::shared_ptr<OdeBase>> klasse(m, "PyOde");
   klasse.def(py::init<>())
       .def("acceleration",
-           [](OdeBase& ob) {
+           [](OdeBase& ob) -> py::array_t<double> {
              mfem::Vector* acc = ob.Acceleration();
              if (!acc) {
                mimi::utils::PrintAndThrowError(
                    "Acceeleration vector does not exist.");
-               return nullptr;
+               return py::array_t<double>();
              }
 
-             return mimi::utils::NumpyView(*acc, acc->Size());
+             return NumpyView<double>(*acc, acc->Size());
            })
       .def("name", &OdeBase::Name);
 
