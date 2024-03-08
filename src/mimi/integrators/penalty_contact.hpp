@@ -48,11 +48,12 @@ public:
     double integration_weight_;
     double det_dX_dxi_;
     double det_F_;
-    double lagrange_;     // lambda_k
-    double new_lagrange_; // lambda_k+1
-    double penalty_;      // penalty factor
-    double g_;            // normal gap
-    double old_g_;        // normal gap
+    double lagrange_;               // lambda_k
+    double new_lagrange_;           // lambda_k+1
+    double penalty_;                // penalty factor
+    double g_;                      // normal gap
+    double old_g_;                  // normal gap
+    mimi::utils::Data<double> t_n_; // normal traction
 
     mfem::Vector N_; // shape
     /// thanks to Jac's hint, it turns out we can just work with this for
@@ -315,6 +316,7 @@ public:
           q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
           q_data.distance_query_.SetSize(dim_);
           q_data.distance_query_.max_iterations_ = 20;
+          q_data.t_n_.Reallocate(dim_);
 
           // precompute
           // shape comes from boundary element
@@ -389,8 +391,6 @@ public:
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) {
     MIMI_FUNC()
-    double t_n_data[3];
-    mimi::utils::Data<double> t_n(t_n_data, dim_);
 
     double* residual_begin = residual_matrix.GetData();
     for (QuadData& q : q_data) {
@@ -449,14 +449,14 @@ public:
         continue;
       }
 
-      t_n.MultiplyAssign(p, q.distance_results_.normal_.data());
+      q.t_n_.MultiplyAssign(p, q.distance_results_.normal_.data());
 
       // again, note no negative sign.
       AddMult_a_VWt(q.integration_weight_ * det_F,
                     q.N_.begin(),
                     q.N_.end(),
-                    t_n.begin(),
-                    t_n.end(),
+                    q.t_n_.begin(),
+                    q.t_n_.end(),
                     residual_begin);
     }
   }
@@ -599,6 +599,31 @@ public:
     }
 
     return std::sqrt(std::abs(negative_gap_sum));
+  }
+
+  /// Integrates last saved force
+  virtual void IntegrateLastForce(mfem::Vector& force_vector) {
+    MIMI_FUNC()
+    assert(force_vector.Size() == dim_);
+
+    // zero init
+    force_vector = 0.0;
+    double* f_data = force_vector.GetData();
+    // create local doubles
+    for (auto& be : boundary_element_data_) {
+      for (auto& qd : be.quad_data_) {
+        // ignore inactive
+        if (!q.active_) {
+          continue;
+        }
+
+        // integrate
+        const int weight = qd.integration_weight_ * qd.detF_;
+        for (int i{}; i < dim_; ++i) {
+          f_data[i] += weight * q.t_n_[i];
+        }
+      }
+    }
   }
 };
 

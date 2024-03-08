@@ -149,6 +149,13 @@ public:
     return 0.0;
   }
 
+  /// Integrates last saved force
+  virtual void IntegrateLastForce(mfem::Vector& force_vector) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("IntegrateLastForce is not implemented for",
+                                    Name());
+  }
+
   virtual void AccumulatedPlasticStrain(mfem::Vector& x,
                                         mfem::Vector& integrated) {
     MIMI_FUNC()

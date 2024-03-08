@@ -35,6 +35,13 @@ void init_py_nonlinear_base_integrator(py::module_& m) {
                                 temperature.size());
 
              nlb.AccumulatedPlasticStrain(x_vec, t_vec);
+           })
+      .def("integrate_last_force",
+           [](NonlinearBase& nlb, py::array_t<double>& force) {
+             mfem::Vector f_vec(static_cast<double*>(force.request().ptr),
+                                force.size());
+
+             nlb.IntegrateLastForce(f_vec);
            });
 }
 

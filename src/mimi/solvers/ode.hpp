@@ -20,6 +20,10 @@ protected:
   mfem::Vector tmp_xa_;
   mfem::Vector tmp_va_;
 
+  // place to hold dirichlet values that's set from the script during runtime
+  mfem::Vector tmp_x_dirichlet_;
+  mfem::Vector tmp_v_dirichlet_;
+
 public:
   virtual ~OdeBase() = default;
   virtual std::string Name() const { return "OdeBase"; };
@@ -27,6 +31,28 @@ public:
     MIMI_FUNC()
 
     dirichlet_dofs_ = dirichlet_dofs;
+  }
+  virtual void CopyDirichlet2(const mfem::Vector& x, const mfem::Vector& v) {
+    MIMI_FUNC()
+
+    // ensure size
+    tmp_x_dirichlet_.SetSize(dirichlet_dofs_.GetSize());
+    tmp_v_dirichlet_.SetSize(dirichlet_dofs_.GetSize());
+
+    // we set dirichlet values of x and dxdt through script.
+    // so, we just overwrite them after all adding and all
+    for (const int& d_id : *dirichlet_dofs_) {
+      tmp_x_dirichlet_[d_id] = x[d_id];
+      tmp_v_dirichlet_[d_id] = v[d_id];
+    }
+  }
+  virtual void PasteDirichlet2(mfem::Vector& x, mfem::Vector& v) const {
+    MIMI_FUNC()
+
+    for (const int& d_id : *dirichlet_dofs_) {
+      x[d_id] = tmp_x_dirichlet_[d_id];
+      v[d_id] = tmp_v_dirichlet_[d_id];
+    }
   }
   virtual void PrintInfo() {
     mimi::utils::PrintInfo("No detailed info for", Name());
@@ -158,15 +184,12 @@ public:
       nstate = 1;
     }
 
-    // std::cout << "\n";
-    // std::cout << x[0] << "\n";
-    // std::cout << x[2] << "\n";
-    // std::cout << x[4] << "\n";
-    // std::cout << x[6] << "\n";
-    // std::cout << "\n";
-    for (const int& d_id : *dirichlet_dofs_) {
-      d2xdt2[d_id] = 0.0;
-    }
+    // // we set dirichlet values of x and dxdt through script.
+    // // so, we just overwrite them after all adding and all
+    // for (const int& d_id : *dirichlet_dofs_) {
+    //   d2xdt2[d_id] = 0.0;
+    // }
+    CopyDirichlet2(x, dxdt);
 
     // Predict alpha levels
     add(dxdt, fac0_ * dt, d2xdt2, va);
@@ -176,6 +199,8 @@ public:
     // Solve alpha levels
     mimi_operator_->dt_ = dt;
     f->SetTime(t + dt);
+
+    PasteDirichlet2(x, dxdt);
     f->ImplicitSolve(fac3_ * dt * dt, fac4_ * dt, xa, va, aa);
   }
 
