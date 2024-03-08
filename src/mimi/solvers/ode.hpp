@@ -32,6 +32,11 @@ public:
     mimi::utils::PrintInfo("No detailed info for", Name());
   }
 
+  virtual void ResetOperator2(mfem::SecondOrderTimeDependentOperator& oper) {
+    mimi::utils::PrintAndThrowError("ResetOperator2 is not implemented for",
+                                    Name());
+  }
+
   virtual void
   StepTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
@@ -73,6 +78,23 @@ public:
                                     Name());
     return nullptr;
   }
+
+  virtual mimi::operators::OperatorBase* GetMimiOperator() {
+    assert(mimi_operator_);
+    return mimi_operator_;
+  }
+
+  virtual mfem::SecondOrderTimeDependentOperator* GetMfemOperator2() {
+    assert(mimi_operator_);
+    mfem::SecondOrderTimeDependentOperator* sotdo =
+        dynamic_cast<mfem::SecondOrderTimeDependentOperator*>(mimi_operator_);
+
+    if (!sotdo) {
+      mimi::utils::PrintAndThrowError("Failed casting to MfemOperator2");
+    }
+
+    return sotdo;
+  }
 };
 
 class GeneralizedAlpha2 : public mfem::GeneralizedAlpha2Solver, public OdeBase {
@@ -110,6 +132,13 @@ public:
 
     mimi::utils::PrintInfo("Info for", Name());
     Base_::PrintProperties();
+  }
+
+  virtual void ResetOperator2(mfem::SecondOrderTimeDependentOperator& oper) {
+    Init(oper);
+    ComputeFactors();
+    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
+    assert(mimi_operator_);
   }
 
   virtual void
@@ -280,6 +309,13 @@ public:
     gamma_ = gamma;
     ComputeFactors();
 
+    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
+    assert(mimi_operator_);
+  }
+
+  virtual void ResetOperator2(mfem::SecondOrderTimeDependentOperator& oper) {
+    Init(oper);
+    ComputeFactors();
     mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
     assert(mimi_operator_);
   }

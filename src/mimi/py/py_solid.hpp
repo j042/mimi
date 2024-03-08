@@ -29,7 +29,7 @@ namespace py = pybind11;
 class PySolid {
 protected:
   // second order time dependent systems
-  std::unique_ptr<mimi::solvers::OdeBase> ode2_solver_ = nullptr;
+  std::shared_ptr<mimi::solvers::OdeBase> ode2_solver_ = nullptr;
   std::unique_ptr<mfem::SecondOrderTimeDependentOperator> oper2_ = nullptr;
   // non-owning ptr to solution vectors.
   // you don't need to set this if you plan to implement time stepping yourself.
@@ -38,7 +38,7 @@ protected:
   mfem::GridFunction* x2_dot_;
 
   // first order time dependent systems
-  std::unique_ptr<mimi::solvers::OdeBase> ode1_solver_ = nullptr;
+  std::shared_ptr<mimi::solvers::OdeBase> ode1_solver_ = nullptr;
   std::unique_ptr<mfem::TimeDependentOperator> oper1_ = nullptr;
   // non-owning ptr to solution vectors.
   // you don't need to set this if you plan to implement time stepping yourself.
@@ -268,6 +268,14 @@ public:
     return boundary_conditions_;
   }
 
+  virtual void
+  SetOdeSolver2(const std::shared_ptr<mimi::solvers::OdeBase>& ode2) {
+    MIMI_FUNC()
+    if (ode2_solver_ && ode2_solver->GetMimiOperator()) {
+      ode2->ResetOperator2(ode2_solver->GetMfemOperator2());
+    }
+  }
+
   /// @brief finds true dof ids for each boundary this also finds zero_dofs_
   virtual void FindBoundaryDofIds() {
     MIMI_FUNC()
@@ -495,7 +503,10 @@ public:
     dt_ = dt;
   }
 
-  virtual py::array_t<double> LinearFormView2(const std::string lf_name) {
+  virtual std::
+
+      virtual py::array_t<double>
+      LinearFormView2(const std::string lf_name) {
     MIMI_FUNC()
 
     auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
@@ -601,6 +612,36 @@ public:
     assert(x2_dot_);
 
     ode2_solver_->AdvanceTime2(*x2_, *x2_dot_, t_, dt_);
+  }
+
+  virtual typename mimi::operators::OperatorBase::LinearFormPointer_
+  LinearForm2(const std::string& name) {
+    mimi::operators::OperatorBase* op_base =
+        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    if (!op_base) {
+      mimi::utils::PrintAndThrowError("Operator2 does not exist.");
+    }
+    return op->linear_forms_.at(name);
+  }
+
+  virtual typename mimi::operators::OperatorBase::BilinearFormPointer_
+  BilinearForm2(const std::string& name) {
+    mimi::operators::OperatorBase* op_base =
+        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    if (!op_base) {
+      mimi::utils::PrintAndThrowError("Operator2 does not exist.");
+    }
+    return op->bilinear_forms_.at(name);
+  }
+
+  virtual typename mimi::operators::OperatorBase::NonlinearFormPointer_
+  NonlinearForm2(const std::string& name) {
+    mimi::operators::OperatorBase* op_base =
+        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    if (!op_base) {
+      mimi::utils::PrintAndThrowError("Operator2 does not exist.");
+    }
+    return op->nonlinear_forms_.at(name);
   }
 };
 

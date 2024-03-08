@@ -67,7 +67,13 @@ void init_py_solid(py::module_& m) {
            &PySolid::FixedPointAdvance2,
            py::arg("x"),
            py::arg("x_dot"))
-      .def("advance_time2", &PySolid::AdvanceTime2);
+      .def("advance_time2", &PySolid::AdvanceTime2)
+      .def("linear_form2", &PySolid::LinearForm2)
+      .def("bilinear_form2", &PySolid::BilinearForm2)
+      .def("nonlinear_form2", &PySolid::NonlinearForm2)
+      .def_property("ode2_solver",
+                    &PySolid::GetTimeStepSize,
+                    &PySolid::SetTimeStepSize);
 }
 
 } // namespace mimi::py
