@@ -74,9 +74,15 @@ void init_py_solid(py::module_& m) {
       .def_property("ode2_solver",
                     &PySolid::GetTimeStepSize,
                     &PySolid::SetTimeStepSize)
-      .def("reaction_force2",
-           &PySolid::ReactionForce2,
-           py::arg("reaction_force"));
+      .def(
+          "reaction_force2",
+          [](PySolid& pys, py::array_t<double> force) {
+            mfem::Vector f_vec(static_cast<double*>(force.request().ptr),
+                               force.size());
+
+            pys.ReactionForce2(f_vec);
+          },
+          py::arg("reaction_force"));
 }
 
 } // namespace mimi::py

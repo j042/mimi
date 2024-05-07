@@ -42,17 +42,21 @@ public:
 
     // we set dirichlet values of x and dxdt through script.
     // so, we just overwrite them after all adding and all
+    int i{};
     for (const int& d_id : *dirichlet_dofs_) {
-      tmp_x_dirichlet_[d_id] = x[d_id];
-      tmp_v_dirichlet_[d_id] = v[d_id];
+      tmp_x_dirichlet_[i] = x[d_id];
+      tmp_v_dirichlet_[i] = v[d_id];
+      ++i;
     }
   }
   virtual void PasteDirichlet2(mfem::Vector& x, mfem::Vector& v) const {
     MIMI_FUNC()
 
+    int i{};
     for (const int& d_id : *dirichlet_dofs_) {
-      x[d_id] = tmp_x_dirichlet_[d_id];
-      v[d_id] = tmp_v_dirichlet_[d_id];
+      x[d_id] = tmp_x_dirichlet_[i];
+      v[d_id] = tmp_v_dirichlet_[i];
+      ++i;
     }
   }
   virtual void PrintInfo() {

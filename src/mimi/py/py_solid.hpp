@@ -492,7 +492,7 @@ public:
     MIMI_FUNC()
 
     oper2_ = std::unique_ptr<mfem::SecondOrderTimeDependentOperator>(oper2);
-    ode2_solver_ = std::unique_ptr<mimi::solvers::OdeBase>(ode2);
+    ode2_solver_ = std::shared_ptr<mimi::solvers::OdeBase>(ode2);
 
     // ode solvers also wants to know dirichlet dofs
     auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
