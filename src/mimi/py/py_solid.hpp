@@ -402,6 +402,10 @@ public:
                            omp_get_max_threads(),
                            "Num threads:",
                            omp_get_num_threads());
+#elif MIMI_USE_BS_POOL
+    mimi::utils::PrintInfo("Resetting thread pool");
+    mimi::utils::thread_pool.reset(n_threads);
+    mimi::utils::PrintInfo("Reset BS thread pool");
 #endif
   }
 

@@ -32,4 +32,6 @@ if(MIMI_USE_OMP)
   # target_compile_options(mimi_core PRIVATE -fopenmp)
   target_compile_options(mimi_core PRIVATE ${OpenMP_C_FLAGS}
                                            ${OpenMP_CXX_FLAGS})
+elseif(MIMI_USE_BS_POOL)
+  target_compile_definitions(mimi_core PRIVATE MIMI_USE_BS_POOL)
 endif()

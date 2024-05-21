@@ -4,10 +4,19 @@
 
 #ifdef MIMI_USE_OMP
 #include <omp.h>
+#elif MIMI_USE_BS_POOL
+#include "mimi/utils/BS_thread_pool.hpp"
 #endif
+
 #include <thread>
 
+#include "mimi/utils/print.hpp"
+
 namespace mimi::utils {
+
+#ifdef MIMI_USE_BS_POOL
+static BS::thread_pool thread_pool;
+#endif
 
 /// @brief multi thread execution helper based on chunked batches
 /// @tparam Func
@@ -59,6 +68,10 @@ void NThreadExe(const Func& f, const IndexT total, const IndexT nthread) {
     f(from(i), to(i), i);
   }
 
+#elif MIMI_USE_BS_POOL
+  // need to pass n usable threads, else it may give max threads
+  thread_pool.detach_blocks<int>(0, total, f, n_usable_threads);
+  thread_pool.wait();
 #else
   std::vector<std::thread> tpool;
   tpool.reserve(n_usable_threads);
