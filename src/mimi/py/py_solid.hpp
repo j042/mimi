@@ -403,9 +403,11 @@ public:
                            "Num threads:",
                            omp_get_num_threads());
 #elif MIMI_USE_BS_POOL
-    mimi::utils::PrintInfo("Resetting thread pool");
+    mimi::utils::PrintInfo("Using BS_THREAD_POOL");
     mimi::utils::thread_pool.reset(n_threads);
     mimi::utils::PrintInfo("Reset BS thread pool");
+#else
+    mimi::utils::PrintInfo("Using std::threads");
 #endif
   }
 
