@@ -1,6 +1,10 @@
 #pragma once
 
 #include <algorithm>
+
+#ifdef MIMI_USE_OMP
+#include <omp.h>
+#endif
 #include <thread>
 
 namespace mimi::utils {
@@ -33,6 +37,29 @@ void NThreadExe(const Func& f, const IndexT total, const IndexT nthread) {
 
   // get chunk size and prepare threads
   const IndexT chunk_size = (total + n_usable_threads - 1) / n_usable_threads;
+
+#ifdef MIMI_USE_OMP
+  auto from = [&](const int i) {
+    if (i < n_usable_threads - 1) {
+      return i * chunk_size;
+    } else {
+      return (n_usable_threads - 1) * chunk_size;
+    }
+  };
+  auto to = [&](const int i) {
+    if (i < n_usable_threads - 1) {
+      return (i + 1) * chunk_size;
+    } else {
+      return total;
+    }
+  };
+
+#pragma omp parallel for
+  for (int i = 0; i < n_usable_threads; ++i) {
+    f(from(i), to(i), i);
+  }
+
+#else
   std::vector<std::thread> tpool;
   tpool.reserve(n_usable_threads);
 
@@ -50,6 +77,7 @@ void NThreadExe(const Func& f, const IndexT total, const IndexT nthread) {
   for (auto& t : tpool) {
     t.join();
   }
+#endif
 }
 
 } // namespace mimi::utils

@@ -32,6 +32,8 @@ public:
     // quick 0 and -1 filtering
     const int n_threads = (nthreads < 1) ? 1 : nthreads;
 
+    SetupNTheads(n_threads);
+
     // get fespace - this should be owned by GridFunc
     // and grid func should own the fespace
     // first get nurbs fecollection

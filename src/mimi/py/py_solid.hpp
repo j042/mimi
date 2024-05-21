@@ -387,6 +387,24 @@ public:
     mimi::utils::PrintInfo("I got a spline", spline->WhatAmI());
   }
 
+  /// Setup multi threading basics. currently relevant only for OMP
+  virtual void SetupNTheads(const int n_threads) {
+    MIMI_FUNC()
+
+    if (n_threads < 1) {
+      mimi::utils::PrintAndThrowError("nthreads can't be smaller than 1.");
+    }
+
+#ifdef MIMI_USE_OMP
+    omp_set_num_threads(n_threads);
+    mimi::utils::PrintInfo("Using OPENMP.",
+                           "Max threads:",
+                           omp_get_max_threads(),
+                           "Num threads:",
+                           omp_get_num_threads());
+#endif
+  }
+
   virtual void Setup(const int nthreads = -1) {
     MIMI_FUNC()
 
