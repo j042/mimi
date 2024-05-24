@@ -57,6 +57,13 @@ public:
 template<typename Type>
 using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
 
+/// @brief short-cut to vector that default initializes, we name it PerThread to
+/// indicate that this is meant for each thread. This is merely for notation -
+/// we try to let allocation done by each thread to avoid false sharing
+/// @tparam Type
+template<typename Type>
+using PerThreadVector = Vector<type>;
+
 /// @brief Fully dynamic array that can view another data. Equipped with basic
 /// math operations.
 /// @tparam DataType

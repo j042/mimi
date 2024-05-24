@@ -55,55 +55,52 @@ CreateFaceTransformation() {
 /// base class for precomputed data
 class PrecomputedData {
 public:
-  template<typename T>
-  using Vector_ = mimi::utils::Vector<T>;
-
   int n_threads_{1};
 
   // duplicates to help thread safety
 
   /// @brief size == nthreads -- each object should have its own
-  Vector_<mfem::IntegrationRules> int_rules_;
+  PerThreadVector<std::shared_ptr<mfem::IntegrationRules>> int_rules_;
 
   /// @brief size == nthreads -- each object should have its own
-  Vector_<const mfem::IntegrationRule*> int_rule_;
+  PerThreadVector<const mfem::IntegrationRule*> int_rule_;
 
   // following can be shared as long as one thread is using it at a time
 
   /// @brief size == nthreads, can share as long as v_dim are the same
-  Vector_<std::shared_ptr<mfem::FiniteElementSpace>> fe_spaces_;
+  PerThreadVector<std::shared_ptr<mfem::FiniteElementSpace>> fe_spaces_;
 
   /// @brief size == nthreads, can share - just for boundary, we use mesh
   /// extention
-  Vector_<std::shared_ptr<mimi::utils::MeshExt>> meshes_;
+  PerThreadVector<std::shared_ptr<mimi::utils::MeshExt>> meshes_;
 
   /// @brief size == nthreads, can share as long as they are same geometry
-  Vector_<std::shared_ptr<mfem::NURBSFECollection>> fe_collections_;
+  PerThreadVector<std::shared_ptr<mfem::NURBSFECollection>> fe_collections_;
 
-  /// @brief size == n_elem, harmless share
-  Vector_<std::shared_ptr<mfem::Array<int>>> v_dofs_;
+  /// @brief size == nthreads x m_elem, harmless share
+  PerThreadVector<Vector<std::shared_ptr<mfem::Array<int>>>> v_dofs_;
 
-  /// @brief size == n_elem, harmless share
-  Vector_<std::shared_ptr<mfem::Array<int>>> boundary_v_dofs_;
+  /// @brief size == nthreads x m_elem, harmless share
+  PerThreadVector<Vector<std::shared_ptr<mfem::Array<int>>>> boundary_v_dofs_;
 
-  /// @brief size == n_elem, harmless share. boundary elements will also refer
-  /// to this elem.
-  Vector_<std::shared_ptr<mfem::NURBSFiniteElement>> elements_;
+  /// @brief size == nthreads x m_elem, harmless share. boundary elements will
+  /// also refer to this elem.
+  PerThreadVector<Vector<std::shared_ptr<mfem::NURBSFiniteElement>>> elements_;
 
-  /// @brief size == n_b_elem, harmless share. boundary elements will also refer
-  /// to this elem.
-  Vector_<std::shared_ptr<mfem::NURBSFiniteElement>> boundary_elements_;
+  /// @brief size == nthreads x m_b_elem, harmless share. boundary elements will
+  /// also refer to this elem.
+  PerThreadVector<Vector<std::shared_ptr<mfem::NURBSFiniteElement>>>
+      boundary_elements_;
 
-  /// @brief size == n_elem, can share as long as each are separately accessed
-  /// wording:
-  /// target -> stress free
-  /// reference -> quadrature
-  /// physical -> current
-  Vector_<std::shared_ptr<mfem::IsoparametricTransformation>>
+  /// @brief size == nthreads x m_elem, can share as long as each are separately
+  /// accessed wording: target -> stress free reference -> quadrature physical
+  /// -> current
+  PerThreadVector<Vector<std::shared_ptr<mfem::IsoparametricTransformation>>>
       reference_to_target_element_trans_;
 
   /// @brief size == n_elem, can share as long as each are separately accessed
-  Vector_<std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>
+  PerThreadVector<
+      Vector<std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>>
       reference_to_target_boundary_trans_;
 
   /// @brief
@@ -179,52 +176,71 @@ public:
     // save nthreads
     n_threads_ = nthreads;
 
-    // create for each threads
-    for (int i{}; i < nthreads; ++i) {
-      // create int rules
-      int_rules_.emplace_back(mfem::IntegrationRules{});
+    // create pointer spaces for each threads
+    // they all hold shared_ptr
+    int_rules_.resize(n_threads_);
+    int_rule_.resize(n_threads_);
+    fe_spaces_.resize(n_threads_);
+    meshes_.resize(n_threads_);
+    fe_collections_.resize(n_threads_);
 
-      // deep copy mesh
-      meshes_.emplace_back(
-          std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(), true));
-
-      // create fe_collection - TODO - what do they really do?
-      fe_collections_.emplace_back(
-          std::make_shared<mfem::NURBSFECollection>()); // default is varing
-                                                        // degrees
-
-      // create fe spaces
-      fe_spaces_.emplace_back(
-          std::make_shared<mfem::FiniteElementSpace>(fe_space,
-                                                     meshes_[i].get(),
-                                                     fe_collections_[i].get()));
-    }
-
+    // critical sizes - these are total sizes
     const int n_elem = fe_space.GetNE();
     const int n_b_elem = fe_space.GetNBE();
+    // and dim
     const int dim = fe_space.GetMesh()->Dimension();
 
-    // allocate vectors
-    v_dofs_.resize(n_elem);
-    boundary_v_dofs_.resize(n_b_elem);
-    elements_.resize(n_elem);
-    boundary_elements_.resize(n_b_elem);
-    reference_to_target_element_trans_.resize(n_elem);
-    reference_to_target_boundary_trans_.resize(n_b_elem);
-
+    // define per-thread init
     auto process_elems =
         [&](const int begin, const int end, const int i_thread) {
+          // now, each thread creates its own instances
+          int_rules_[i_thread] = std::make_shared<mfem::IntegrationRules>{};
+          meshes_[i_thread] =
+              std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(),
+                                                     true); // deep copy mesh
+          fe_collections_[i_thread] =
+              std::make_shared<mfem::NURBSFECollection>(); // default is varing
+                                                           // degrees
+          // create fe spaces
+          fe_spaces_[i_thread] = std::make_shared<mfem::FiniteElementSpace>(
+              fe_space,
+              meshes_[i_thread].get(),
+              fe_collections_[i_thread].get());
+
+          // deref for following parts
           auto& mesh = *meshes_[i_thread];
           auto& fes = *fe_spaces_[i_thread];
 
-          for (int i{begin}; i < end; ++i) {
+          // we need to know workload for each thread
+          const int m_elem = end - begin;
+          // deref thread locals
+          auto& v_dofs = v_dofs_[i_thread];
+          auto& elements = elements_[i_thread];
+          auto& dX_dxi = reference_to_target_element_trans_[i_thread];
+          // now, alloc
+          v_dofs.resize(m_elem);
+          elements.resize(m_elem);
+          dX_dxi.resize(m_elem);
+          // loop changes to local indices
+          for (int i{}; i < m_elem; ++i) {
+            // is there a dof trans? I am pretty sure not
+            // if so, we can extend here
+            auto& v_dof = v_dofs[i];
+            v_dof = std::make_shared<mfem::Array<int>>();
+            mfem::DofTransformation* doftrans = fes.GetElementVDofs(i, *v_dof);
+            if (doftrans) {
+              mimi::utils::PrintAndThrowError(
+                  "There's doftrans. There shouldn't be one according to the "
+                  "documentations.");
+            }
+
             // we will create elements and v dof trans (dof trans is used in
             // case of prolongation, but not used here.)
             // 1. create element
-            auto& elem = elements_[i];
+            auto& elem = elements[i];
             elem = CreatFiniteElement(dim); // make_shared
 
-            auto& e_tr = reference_to_target_element_trans_[i];
+            auto& e_tr = dX_dxi[i];
             e_tr = CreateTransformation(); // make_shared
 
             // process/set FE
@@ -236,28 +252,41 @@ public:
             // however, we do need to set FE to this newly created, as it is a
             // ptr to internal obj
             e_tr->SetFE(elem.get());
-
-            // is there a dof trans? I am pretty sure not
-            // if so, we can extend here
-            auto& v_dof = v_dofs_[i];
-            v_dof = std::make_shared<mfem::Array<int>>();
-            mfem::DofTransformation* doftrans = fes.GetElementVDofs(i, *v_dof);
-
-            if (doftrans) {
-              mimi::utils::PrintAndThrowError(
-                  "There's doftrans. There shouldn't be one according to the "
-                  "documentations.");
-            }
           }
         };
 
+    // define per-thread init
     auto process_boundary_elems = [&](const int begin,
                                       const int end,
                                       const int i_thread) {
+      // deref basics
       auto& mesh = *meshes_[i_thread];
       auto& fes = *fe_spaces_[i_thread];
 
-      for (int i{begin}; i < end; ++i) {
+      // we need to know workload for each thread
+      const int m_b_elem = end - begin;
+      // deref thread locals
+      auto& boundary_v_dofs = boundary_v_dofs_[i_thread];
+      auto& boundary_elements = boundary_elements_[i_thread];
+      auto& dX_dxi = reference_to_target_boundary_trans_[i_thread];
+      // then alloc
+      boundary_v_dofs.resize(m_b_elem);
+      boundary_elements.resize(m_b_elem);
+      dX_dxi.resize(m_b_elem);
+      for (int i{}; i < m_b_elem; ++i) {
+        // is there a dof trans? I am pretty sure not
+        // if so, we can extend here
+        auto& boundary_v_dof = boundary_v_dofs_[i];
+        boundary_v_dof = std::make_shared<mfem::Array<int>>();
+        mfem::DofTransformation* doftrans =
+            fes.GetBdrElementVDofs(i, *boundary_v_dof);
+
+        if (doftrans) {
+          mimi::utils::PrintAndThrowError(
+              "There's doftrans. There shouldn't be one according to the "
+              "documentations.");
+        }
+
         // create element,
         auto& b_el = boundary_elements_[i];
         b_el = CreatFiniteFaceElement(dim);
@@ -279,24 +308,19 @@ public:
         // we need to create b_elem of our own
         fes.GetNURBSext()->LoadBE(i, b_el.get());
         b_tr->SetFE(b_el.get());
-
-        // is there a dof trans? I am pretty sure not
-        // if so, we can extend here
-        auto& boundary_v_dof = boundary_v_dofs_[i];
-        boundary_v_dof = std::make_shared<mfem::Array<int>>();
-        mfem::DofTransformation* doftrans =
-            fes.GetBdrElementVDofs(i, *boundary_v_dof);
-
-        if (doftrans) {
-          mimi::utils::PrintAndThrowError(
-              "There's doftrans. There shouldn't be one according to the "
-              "documentations.");
-        }
       }
     };
 
+    // allocate vectors for each thread
+    v_dofs_.resize(n_threads_);
+    elements_.resize(n_threads_);
+    reference_to_target_element_trans_.resize(n_threads_);
     mimi::utils::NThreadExe(process_elems, n_elem, nthreads);
 
+    // now for boundaries
+    boundary_v_dofs_.resize(n_threads_);
+    boundary_elements_.resize(n_threads_);
+    reference_to_target_boundary_trans_.resize(n_threads_);
     mimi::utils::NThreadExe(process_boundary_elems, n_b_elem, nthreads);
   }
 };
