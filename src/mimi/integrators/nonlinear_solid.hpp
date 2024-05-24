@@ -11,7 +11,6 @@ namespace mimi::integrators {
 /// given current x coordinate (NOT displacement)
 /// Computes F and passes it to material
 class NonlinearSolid : public NonlinearBase {
-  constexpr static const int kMaxTrueDof = 100;
   constexpr static const int kDimDim = 9;
 
 public:
@@ -127,36 +126,14 @@ public:
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
 
-    /// @brief
-    /// @param element_x_data
-    /// @param stress_data
-    /// @param dN_dx_data
-    /// @param F_data
-    /// @param F_inv_data
-    /// @param dim
-    void SetData(double* element_x_data,
-                 double* stress_data,
-                 double* dN_dx_data,
-                 double* F_data,
-                 double* F_inv_data,
-                 double* forward_residual_data,
-                 const int dim) {
-      MIMI_FUNC()
-
-      element_x_.SetDataAndSize(element_x_data, kMaxTrueDof);
-      element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
-      stress_.UseExternalData(stress_data, dim, dim);
-      dN_dx_.UseExternalData(dN_dx_data, kMaxTrueDof, 1);
-      F_.UseExternalData(F_data, dim, dim);
-      F_inv_.UseExternalData(F_inv_data, dim, dim);
-      forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
-    }
-
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
-
+      element_x_.SetSize(n_dof * dim); // will be resized in getsubvector
       element_x_mat_.SetSize(n_dof, dim);
+      stress_.SetSize(dim, dim);
       dN_dx_.SetSize(n_dof, dim);
+      F_.SetSize(dim, dim);
+      F_inv_.SetSize(dim, dim);
       forward_residual_.SetSize(n_dof, dim);
     }
 
@@ -177,7 +154,8 @@ protected:
   /// material related
   std::shared_ptr<MaterialBase> material_;
   /// element data
-  Vector_<ElementData> element_data_;
+  PerThreadVector<Vector<ElementData>> element_data_;
+  RefVector<ElementData> element_data_flat_;
 
 public:
   NonlinearSolid(
@@ -203,67 +181,66 @@ public:
     MIMI_FUNC()
 
     // get numbers to decide loop size
-    n_elements_ = precomputed_->meshes_[0]->NURBSext->GetNE();
+    n_elements_ = precomputed_->n_elements_;
     // n meshes should equal to nthrea config at the beginning
-    n_threads_ = precomputed_->meshes_.size();
+    n_threads_ = precomputed_->n_threads_;
 
     // get dim
-    dim_ = precomputed_->meshes_[0]->Dimension();
+    dim_ = precomputed_->dim_;
 
     // setup material
     material_->Setup(dim_, n_threads_);
 
     // allocate element vectors and matrices
-    element_matrices_ =
-        std::make_unique<mimi::utils::Data<mfem::DenseMatrix>>(n_elements_);
-    element_vectors_ =
-        std::make_unique<mimi::utils::Data<mfem::Vector>>(n_elements_);
+    element_matrices_.resize(n_threads_);
+    element_vectors_.resize(n_threads_);
 
     // extract element geometry type
     geometry_type_ = precomputed_->elements_[0]->GetGeomType();
 
     // allocate element data
-    element_data_.resize(n_elements_);
+    element_data_.resize(n_threads_);
 
     auto precompute_at_elements_and_quads = [&](const int el_begin,
                                                 const int el_end,
                                                 const int i_thread) {
       // thread's obj
       auto& int_rules = precomputed_->int_rules_[i_thread];
+      // local alloc
+      const int m_elem = el_end - el_begin;
+      auto& element_matrices = element_matrices_[i_thread];
+      auto& element_vectors = element_vectors_[i_thread];
+      element_matrices.resize(m_elem);
+      element_vectors.resize(m_elem);
 
       // element loop
-      for (int i{el_begin}; i < el_end; ++i) {
+      for (int g{el_begin}, i{}; g < el_end; ++g, ++i) {
         // prepare element level data
         auto& i_el_data = element_data_[i];
 
         // save (shared) pointers to element and el_trans
-        i_el_data.element_ = precomputed_->elements_[i];
+        i_el_data.element_ = precomputed_->elements_flat_[g];
         i_el_data.geometry_type_ = i_el_data.element_->GetGeomType();
         i_el_data.element_trans_ =
-            precomputed_->reference_to_target_element_trans_[i];
+            precomputed_->reference_to_target_element_trans_flat_[g];
         i_el_data.n_dof_ = i_el_data.element_->GetDof();
-        i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
+        i_el_data.v_dofs_ = precomputed_->v_dofs_flat_[g];
         auto& v_dofs = *i_el_data.v_dofs_;
 
         // v_dofs are organized in xyzxyzxyz, so we just want to skip through
         // and divide them to create scalar_vdofs
         i_el_data.scalar_v_dofs_.SetSize(v_dofs.Size() / dim_);
-        for (int i{}, j{}; i < v_dofs.Size(); i += dim_, ++j) {
-          i_el_data.scalar_v_dofs_[j] = v_dofs[i] / dim_;
+        for (int k{}, l{}; k < v_dofs.Size(); k += dim_, ++l) {
+          i_el_data.scalar_v_dofs_[l] = v_dofs[k] / dim_;
         }
 
         // check suitability of temp data
         // for structure simulations, tdof and vdof are the same
         const int n_tdof = i_el_data.n_dof_ * dim_;
         i_el_data.n_tdof_ = n_tdof;
-        if (kMaxTrueDof < n_tdof) {
-          mimi::utils::PrintAndThrowError(
-              "kMaxTrueDof smaller than required space.",
-              "Please recompile after setting a bigger number");
-        }
 
         // also allocate element based vectors and matrix (assembly output)
-        i_el_data.element_residual_ = &(*element_vectors_)[i];
+        i_el_data.element_residual_ = &element_vectors[i];
         i_el_data.element_residual_->SetSize(n_tdof);
         i_el_data.residual_view_.UseExternalData(
             i_el_data.element_residual_->GetData(),
@@ -272,7 +249,7 @@ public:
         i_el_data.scalar_post_process_view_.SetDataAndSize(
             i_el_data.element_residual_->GetData(),
             i_el_data.n_dof_);
-        i_el_data.element_grad_ = &(*element_matrices_)[i];
+        i_el_data.element_grad_ = &element_matrices_[i];
         i_el_data.element_grad_->SetSize(n_tdof, n_tdof);
         i_el_data.grad_view_.UseExternalData(i_el_data.element_grad_->GetData(),
                                              n_tdof,
@@ -353,20 +330,6 @@ public:
     auto assemble_element_residual_and_maybe_grad =
         [&](const int begin, const int end, const int i_thread) {
           TemporaryData tmp;
-          // create some space in stack
-          double element_x_data[kMaxTrueDof];
-          double stress_data[kDimDim];
-          double dN_dx_data[kMaxTrueDof];
-          double F_data[kDimDim];
-          double F_inv_data[kDimDim];
-          double fd_forward_data[kMaxTrueDof];
-          tmp.SetData(element_x_data,
-                      stress_data,
-                      dN_dx_data,
-                      F_data,
-                      F_inv_data,
-                      fd_forward_data,
-                      dim_);
 
           for (int i{begin}; i < end; ++i) {
             // in

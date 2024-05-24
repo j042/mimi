@@ -59,6 +59,9 @@ CreateFaceTransformation() {
 class PrecomputedData {
 public:
   int n_threads_{1};
+  int n_elem_{};
+  int n_b_elem_{};
+  int dim_{};
 
   // duplicates to help thread safety
 
@@ -200,6 +203,11 @@ public:
     const int n_b_elem = fe_space.GetNBE();
     // and dim
     const int dim = fe_space.GetMesh()->Dimension();
+
+    // local copies
+    n_elem_ = n_elem;
+    n_b_elem_ = n_b_elem;
+    dim_ = dim;
 
     // define per-thread init
     auto process_elems =

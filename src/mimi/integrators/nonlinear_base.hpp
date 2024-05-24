@@ -6,6 +6,7 @@
 
 #include <splinepy/py/py_spline.hpp>
 
+#include "mimi/utils/containers.hpp"
 #include "mimi/utils/precomputed.hpp"
 #include "mimi/utils/print.hpp"
 
@@ -14,11 +15,14 @@ namespace mimi::integrators {
 class NonlinearBase : public mfem::NonlinearFormIntegrator {
 public:
   std::shared_ptr<mimi::utils::PrecomputedData> precomputed_;
-  std::unique_ptr<mimi::utils::Data<mfem::Vector>> element_vectors_;
-  std::unique_ptr<mimi::utils::Data<mfem::Vector>> boundary_element_vectors_;
-  std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>> element_matrices_;
-  std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>>
-      boundary_element_matrices_;
+  PerThreadVector<Vector<mfem::Vector>> element_vectors_;
+  RefVector<mfem::Vector> element_vectors_flat_;
+  PerThreadVector<Vector<mfem::Vector>> boundary_element_vectors_;
+  RefVector<mfem::Vector> boundary_element_vectors_flat_;
+  PerThreadVector<Vector<mfem::DenseMatrix>> element_matrices_;
+  RefVector<mfem::DenseMatrix> element_matrices_flat_;
+  PerThreadVector<Vector<mfem::DenseMatrix>> boundary_element_matrices_;
+  RefVector<mfem::DenseMatrix> boundary_element_matrices_flat_;
 
   std::string name_;
 
@@ -66,6 +70,26 @@ public:
 
   /// Name of the integrator
   virtual const std::string& Name() const { return name_; }
+
+  virtual void PrepareFlat() {
+    MIMI_FUNC()
+
+    mimi::utils::MakeFlat2(element_vectors_,
+                           element_vectors_flat_,
+                           precomputed_->n_elem_);
+
+    mimi::utils::MakeFlat2(boundary_element_vectors_,
+                           boundary_element_vectors_flat_,
+                           precomputed_->n_b_elem);
+
+    mimi::utils::MakeFlat2(element_matrices_,
+                           element_matrices_flat_,
+                           precomputed_->n_elem_);
+
+    mimi::utils::MakeFlat2(boundary_element_matrices_,
+                           boundary_element_matrices_flat_,
+                           precomputed_->n_b_elem_);
+  }
 
   /// Precompute call interface
   virtual void Prepare(const int quadrature_order) {
