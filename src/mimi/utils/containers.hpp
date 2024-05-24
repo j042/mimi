@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <type_traits>
 
@@ -62,7 +63,37 @@ using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
 /// we try to let allocation done by each thread to avoid false sharing
 /// @tparam Type
 template<typename Type>
-using PerThreadVector = Vector<type>;
+using PerThreadVector = Vector<Type>;
+
+/// @brief easy access vector. used to gather per-thread-vector to one single
+/// vector
+/// @tparam T
+template<typename T>
+using RefVector = Vector<std::ref<T>>;
+
+/// @brief Creates flat access to twice nested (e.g., vector of vector)
+/// container. If element is not a pointer, and you want to keep reference, use
+/// RefVector.
+/// @tparam NestedVector
+/// @tparam FlatVector
+/// @param nested2
+/// @param flat
+/// @param total
+template<typename NestedVector, typename FlatVector>
+void MakeFlat2(NestedVector& nested2, FlatVector& flat, const int total = -1) {
+  // reserve if we know total flat count
+  if (total > 0) {
+    flat.reserve(total);
+  }
+
+  // first peeling
+  for (auto& nested : nested2) {
+    // second peeling - element
+    for (auto& elem : nested) {
+      flat.emplace_back(elem);
+    }
+  }
+}
 
 /// @brief Fully dynamic array that can view another data. Equipped with basic
 /// math operations.
@@ -541,3 +572,12 @@ public:
 };
 
 } // namespace mimi::utils
+
+namespace mimi::integrators {
+template<typename T>
+using Vector = mimi::utils::Vector<T>;
+template<typename T>
+using PerThreadVector = mimi::utils::PerThreadVector<T>;
+template<typename T>
+using RefVector = Vector<std::ref<T>>;
+} // namespace mimi::integrators

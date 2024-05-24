@@ -55,10 +55,10 @@ public:
       mfem::DenseMatrix d_shape, d_shape_dxt, p_elmat;
 
       for (int i{begin}; i < end; ++i) {
-        auto& int_rules = precomputed.int_rules_[i_thread];
+        auto& int_rules = precomputed.int_rules_flat_[i_thread];
         auto& el = *precomputed.elements_[i];
         auto& eltrans_reference_to_target =
-            *precomputed.reference_to_target_element_trans_[i];
+            *precomputed.reference_to_target_element_trans_flat_[i];
 
         // basic infos for this elem
         const int n_dof = el.GetDof();
