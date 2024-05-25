@@ -167,9 +167,11 @@ public:
 
   virtual const std::string& Name() const { return name_; }
 
-  virtual Vector_<ElementData>& GetElementData() { return element_data_; }
-  virtual const Vector_<ElementData>& GetElementData() const {
-    return element_data_;
+  virtual RefVector<ElementData>& GetElementData() {
+    return element_data_flat_;
+  }
+  virtual const RefVector<ElementData>& GetElementData() const {
+    return element_data_flat_;
   }
 
   /// This one needs / stores
@@ -203,20 +205,23 @@ public:
 
     auto precompute_at_elements_and_quads = [&](const int el_begin,
                                                 const int el_end,
-                                                const int i_thread) {
+                                                const int thread_num) {
+      const int i_thread = mimi::utils::ThisThreadId(thread_num);
+
       // thread's obj
       auto& int_rules = precomputed_->int_rules_[i_thread];
       // local alloc
       const int m_elem = el_end - el_begin;
       auto& element_matrices = element_matrices_[i_thread];
       auto& element_vectors = element_vectors_[i_thread];
+      auto& element_data = element_data_[i_thread];
       element_matrices.resize(m_elem);
       element_vectors.resize(m_elem);
-
+      element_data.resize(m_elem);
       // element loop
       for (int g{el_begin}, i{}; g < el_end; ++g, ++i) {
         // prepare element level data
-        auto& i_el_data = element_data_[i];
+        auto& i_el_data = element_data[i];
 
         // save (shared) pointers to element and el_trans
         i_el_data.element_ = precomputed_->elements_flat_[g];
@@ -300,6 +305,13 @@ public:
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
                             n_elements_,
                             n_threads_);
+
+    // flat iter for element vec and mat
+    PrepareFlatViewsForVectorsAndMatrices()
+        // and element data
+        mimi::utils::MakeFlat2(element_data_,
+                               element_data_flat_,
+                               precomputed_->n_elem);
   }
 
   /// Performs quad loop with element data and temporary data
@@ -328,12 +340,15 @@ public:
 
     // lambda for nthread assemble
     auto assemble_element_residual_and_maybe_grad =
-        [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
-
-          for (int i{begin}; i < end; ++i) {
+        [&](const int begin, const int end, const int ith_call) {
+          const int i_thread = mimi::utils::ThisThreadId(ith_call);
+          TemporaryData tmp; // see if allocating this beforehand would increase
+                             // any performance
+          // local alloc
+          auto& element_data = element_data_[i_thread];
+          for (int g{begin}, i{}; g < end; ++i, ++g) {
             // in
-            ElementData& e = element_data_[i];
+            ElementData& e = element_data[i];
             e.residual_view_ = 0.0;
 
             // set shape for tmp data
@@ -415,7 +430,7 @@ public:
 
       mfem::DenseMatrix mat;
 
-      for (auto& e : element_data_) {
+      for (auto& e : element_data_flat_) {
         mat.SetSize(e.n_dof_);
         mat = 0.0;
 
@@ -454,7 +469,7 @@ public:
         [&](const int begin, const int end, const int i_thread) {
           for (int i{begin}; i < end; ++i) {
             // in
-            ElementData& e = element_data_[i];
+            ElementData& e = element_data_flat_[i];
             e.scalar_post_process_view_ = 0.0;
 
             for (auto& q_data : e.quad_data_) {
@@ -493,7 +508,7 @@ public:
         [&](const int begin, const int end, const int i_thread) {
           for (int i{begin}; i < end; ++i) {
             // in
-            ElementData& e = element_data_[i];
+            ElementData& e = element_data_flat_[i];
             e.scalar_post_process_view_ = 0.0;
 
             for (auto& q_data : e.quad_data_) {

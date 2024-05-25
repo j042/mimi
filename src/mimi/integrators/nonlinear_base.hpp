@@ -71,24 +71,28 @@ public:
   /// Name of the integrator
   virtual const std::string& Name() const { return name_; }
 
-  virtual void PrepareFlat() {
+  virtual void PrepareFlatViewsForVectorsAndMatrices() {
     MIMI_FUNC()
 
-    mimi::utils::MakeFlat2(element_vectors_,
-                           element_vectors_flat_,
-                           precomputed_->n_elem_);
+    // if this is a domain integrator, flatten  element vec and mat
+    if (element_vectors_.size() != 0) {
+      mimi::utils::MakeFlat2(element_vectors_,
+                             element_vectors_flat_,
+                             precomputed_->n_elem_);
+      mimi::utils::MakeFlat2(element_matrices_,
+                             element_matrices_flat_,
+                             precomputed_->n_elem_);
+    }
 
-    mimi::utils::MakeFlat2(boundary_element_vectors_,
-                           boundary_element_vectors_flat_,
-                           precomputed_->n_b_elem);
-
-    mimi::utils::MakeFlat2(element_matrices_,
-                           element_matrices_flat_,
-                           precomputed_->n_elem_);
-
-    mimi::utils::MakeFlat2(boundary_element_matrices_,
-                           boundary_element_matrices_flat_,
-                           precomputed_->n_b_elem_);
+    // or maybe boundary integrator
+    if (boundary_element_vectors_.size() != 0) {
+      mimi::utils::MakeFlat2(boundary_element_vectors_,
+                             boundary_element_vectors_flat_,
+                             precomputed_->n_b_elem);
+      mimi::utils::MakeFlat2(boundary_element_matrices_,
+                             boundary_element_matrices_flat_,
+                             precomputed_->n_b_elem_);
+    }
   }
 
   /// Precompute call interface

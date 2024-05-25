@@ -14,6 +14,20 @@
 
 namespace mimi::utils {
 
+/// @brief helper function that returns id of
+/// @param i_thread
+/// @return
+int ThisThreadId(const int i_thread) {
+#ifdef MIMI_USE_BS_POOL
+  return static_cast<int>(*BS::this_thread::get_index());
+#elif MIMI_USE_OMP
+  return static_cast<int>(omp_get_thread_num());
+#else
+  // this has no meaningful statement
+  return i_thread;
+#endif
+}
+
 #ifdef MIMI_USE_BS_POOL
 static BS::thread_pool thread_pool;
 #endif
@@ -65,7 +79,7 @@ void NThreadExe(const Func& f, const IndexT total, const IndexT nthread) {
 
 #pragma omp parallel for
   for (int i = 0; i < n_usable_threads; ++i) {
-    f(from(i), to(i), i);
+    f(from(i), to(i), omp_get_thread_num());
   }
 
 #elif MIMI_USE_BS_POOL
