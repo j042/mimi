@@ -324,8 +324,8 @@ public:
               mimi_oper->nonlinear_forms_.at("nonlinear_visco_stiffness").get())
               ->domain_nfi_[0]
               .get());
-      for (auto& e_data : nvs->GetElementData()) {
-        for (auto& q_data : e_data.quad_data_) {
+      for (auto& e_data_ref : nvs->GetElementData()) {
+        for (auto& q_data : e_data_ref.get().quad_data_) {
           q_data.material_state_->scalars_
               [mimi::integrators::J2AdiabaticVisco::State::k_temperature] =
               value;

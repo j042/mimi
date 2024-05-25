@@ -69,7 +69,7 @@ using PerThreadVector = Vector<Type>;
 /// vector
 /// @tparam T
 template<typename T>
-using RefVector = Vector<std::ref<T>>;
+using RefVector = Vector<std::reference_wrapper<T>>;
 
 /// @brief Creates flat access to twice nested (e.g., vector of vector)
 /// container. If element is not a pointer, and you want to keep reference, use
@@ -579,5 +579,5 @@ using Vector = mimi::utils::Vector<T>;
 template<typename T>
 using PerThreadVector = mimi::utils::PerThreadVector<T>;
 template<typename T>
-using RefVector = Vector<std::ref<T>>;
+using RefVector = mimi::utils::RefVector<T>;
 } // namespace mimi::integrators

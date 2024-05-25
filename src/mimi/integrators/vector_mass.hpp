@@ -68,7 +68,7 @@ public:
         elmat = 0.0;
 
         // prepare quad loop
-        const mfem::IntegrationRule& ir = int_rules.Get(
+        const mfem::IntegrationRule& ir = int_rules->Get(
             el.GetGeomType(),
             2 * el.GetOrder() + eltrans_reference_to_target.OrderW());
 

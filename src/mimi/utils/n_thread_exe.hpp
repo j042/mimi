@@ -17,7 +17,7 @@ namespace mimi::utils {
 /// @brief helper function that returns id of
 /// @param i_thread
 /// @return
-int ThisThreadId(const int i_thread) {
+inline int ThisThreadId(const int i_thread) {
 #ifdef MIMI_USE_BS_POOL
   return static_cast<int>(*BS::this_thread::get_index());
 #elif MIMI_USE_OMP

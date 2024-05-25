@@ -93,8 +93,8 @@ public:
       domain_integ->AssembleDomainResidual(current_x);
 
       // add to global
-      const auto& el_vecs = *domain_integ->element_vectors_;
-      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
+      const auto& el_vecs = domain_integ->element_vectors_flat_;
+      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_flat_;
 
       for (int i{}; i < el_vecs.size(); ++i) {
         residual.AddElementVector(*el_vdofs[i], el_vecs[i]);
@@ -134,8 +134,8 @@ public:
       domain_integ->AssembleDomainGrad(current_x);
 
       // add to global
-      const auto& el_mats = *domain_integ->element_matrices_;
-      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
+      const auto& el_mats = domain_integ->element_matrices_flat_;
+      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_flat_;
 
       for (int i{}; i < el_mats.size(); ++i) {
         const auto& vdofs = *el_vdofs[i];

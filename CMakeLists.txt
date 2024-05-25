@@ -6,8 +6,8 @@ option(MIMI_COMPILE_SPLINEPY "compile splinepy" OFF)
 
 # list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/install)
 
-option(MIMI_USE_OMP "Use openmp. else std::thread" ON)
-option(MIMI_USE_BS_POOL "Use BS_thread_pool else std::thread" OFF)
+option(MIMI_USE_OMP "Use openmp. else std::thread" OFF)
+option(MIMI_USE_BS_POOL "Use BS_thread_pool else std::thread" ON)
 
 # we need to set `-fPIC` flag to any dependency that we build with mimi this
 # include mfem.

@@ -33,13 +33,8 @@ void AddMult_a_VWt(const DataType a,
 /// implements methods presented in "Sauer and De Lorenzis. An unbiased
 /// computational contact formulation for 3D friction (DOI: 10.1002/nme.4794)
 class PenaltyContact : public NonlinearBase {
-  constexpr static const int kMaxTrueDof = 50;
-  constexpr static const int kDimDim = 9;
-
 public:
   using Base_ = NonlinearBase;
-  template<typename T>
-  using Vector_ = mimi::utils::Vector<T>;
 
   /// precomputed data at quad points
   struct QuadData {
@@ -47,7 +42,7 @@ public:
 
     double integration_weight_;
     double det_dX_dxi_;
-    double det_F_;
+    double det_J_;
     double lagrange_;     // lambda_k
     double new_lagrange_; // lambda_k+1
     double penalty_;      // penalty factor
@@ -86,7 +81,7 @@ public:
     mfem::DenseMatrix residual_view_; // we always assemble at the same place
     mfem::DenseMatrix grad_view_;     // we always assemble at the same place
 
-    Vector_<QuadData> quad_data_;
+    Vector<QuadData> quad_data_;
 
     /// pointer to element and eltrans. don't need it,
     /// but maybe for further processing or something
@@ -109,44 +104,16 @@ public:
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
   struct TemporaryData {
-    /// wraps element_state_data_
     mfem::Vector element_x_;
-    /// wraps element_x_
     mfem::DenseMatrix element_x_mat_;
-    /// wraps F_data
-    mfem::DenseMatrix F_;
-    /// wraps F_inv_data
-    mfem::DenseMatrix F_inv_;
-    /// wraps forward_residual data
+    mfem::DenseMatrix dX_dxi_;
     mfem::DenseMatrix forward_residual_;
-
-    /// @brief
-    /// @param element_x_data
-    /// @param stress_data
-    /// @param dN_dx_data
-    /// @param F_data
-    /// @param F_inv_data
-    /// @param dim
-    void SetData(double* element_x_data,
-                 double* F_data,
-                 double* F_inv_data,
-                 double* forward_residual_data,
-                 const int para_dim,
-                 const int dim) {
-      MIMI_FUNC()
-
-      element_x_.SetDataAndSize(element_x_data, kMaxTrueDof);
-      element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
-      // F_.UseExternalData(F_data, dim, para_dim);
-      // F_inv_.UseExternalData(F_inv_data, dim, para_dim);
-      F_.UseExternalData(F_data, dim, para_dim);
-      F_inv_.UseExternalData(F_inv_data, para_dim, dim);
-      forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
-    }
 
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
+      element_x_.SetSize(n_dof * dim);
       element_x_mat_.SetSize(n_dof, dim);
+      dX_dxi_.SetSize(dim, dim - 1);
       forward_residual_.SetSize(n_dof, dim);
     }
 
@@ -172,16 +139,17 @@ protected:
 
   int n_marked_boundaries_;
 
-  Vector_<BoundaryElementData> boundary_element_data_;
+  PerThreadVector<Vector<BoundaryElementData>> boundary_element_data_;
+  RefVector<BoundaryElementData> boundary_element_data_flat_;
 
   /// residual contribution indices
   /// size == n_marked_boundaries_;
-  Vector_<int> marked_boundary_v_dofs_;
+  Vector<int> marked_boundary_v_dofs_;
 
   /// two vectors for load balancing
   /// first we visit all quad points and also mark quad activity
-  Vector_<bool> element_activity_;
-  Vector_<int> active_elements_;
+  Vector<bool> element_activity_;
+  Vector<int> active_elements_;
 
 public:
   PenaltyContact(
@@ -199,13 +167,11 @@ public:
     MIMI_FUNC()
 
     // get numbers to decide loop size
-    const int n_boundary_elements =
-        precomputed_->meshes_[0]->NURBSext->GetNBE();
-    n_threads_ =
-        precomputed_->meshes_.size(); // size of mesh is nthread from Setup()
+    const int n_boundary_elements = precomputed_->n_b_elem_;
+    n_threads_ = precomputed_->n_threads_;
 
     // get dimension
-    dim_ = precomputed_->meshes_[0]->Dimension();
+    dim_ = precomputed_->dim_;
     boundary_para_dim_ = dim_ - 1;
 
     // get marked boundary elements: this reduces size of the loop
@@ -235,59 +201,59 @@ public:
 
     // extract boundary geometry type
     boundary_geometry_type_ =
-        precomputed_->boundary_elements_[0]->GetGeomType();
+        precomputed_->boundary_elements_flat_[0]->GetGeomType();
 
     // allocate element vectors and matrices
-    Base_::boundary_element_matrices_ =
-        std::make_unique<mimi::utils::Data<mfem::DenseMatrix>>();
-    Base_::boundary_element_matrices_->Reallocate(n_marked_boundaries_);
-    Base_::boundary_element_vectors_ =
-        std::make_unique<mimi::utils::Data<mfem::Vector>>();
-    Base_::boundary_element_vectors_->Reallocate(n_marked_boundaries_);
-
-    boundary_element_data_.resize(n_marked_boundaries_);
+    boundary_element_matrices_.resize(n_threads_);
+    boundary_element_vectors_.resize(n_threads_);
+    boundary_element_data_.resize(n_threads_);
 
     // now, weight of jacobian.
     auto precompute_at_elem_and_quad = [&](const int marked_b_el_begin,
                                            const int marked_b_el_end,
-                                           const int i_thread) {
+                                           const int ith_call) {
       // thread's obj
+      const int i_thread = mimi::utils::ThisThreadId(ith_call);
       auto& int_rules = precomputed_->int_rules_[i_thread];
+      const int m_m_b_elem =
+          marked_b_el_end - marked_b_el_begin; // m number of marked b elem
+      auto& boundary_element_vectors = boundary_element_vectors_[i_thread];
+      auto& boundary_element_matrices = boundary_element_matrices_[i_thread];
+      auto& boundary_element_data = boundary_element_data_[i_thread];
+      boundary_element_vectors.resize(m_m_b_elem);
+      boundary_element_matrices.resize(m_m_b_elem);
+      boundary_element_data.resize(m_m_b_elem);
+      // here, unlike domain integrator, we iterate only marked boundaries
+      // global id, g, refers to true global
+      for (int m{marked_b_el_begin}, i{}; m < marked_b_el_end; ++m, ++i) {
+        // we only need global id of marked elements
+        const int g = Base_::marked_boundary_elements_[m];
 
-      for (int i{marked_b_el_begin}; i < marked_b_el_end; ++i) {
-        // we only need makred boundaries
-        const int m = Base_::marked_boundary_elements_[i];
-
-        // get boundary element data - note index i, not m!
-        auto& i_bed = boundary_element_data_[i];
-        i_bed.id_ = i;
-        i_bed.true_id_ = m;
+        // get boundary element data - note index i, not m/g!
+        auto& i_bed = boundary_element_data[i];
+        i_bed.id_ = m;
+        i_bed.true_id_ = g;
 
         // save (shared) pointers from global numbering
-        i_bed.element_ = precomputed_->boundary_elements_[m];
+        i_bed.element_ = precomputed_->boundary_elements_flat_[g];
         i_bed.geometry_type_ = i_bed.element_->GetGeomType();
         i_bed.element_trans_ =
-            precomputed_->reference_to_target_boundary_trans_[m];
+            precomputed_->reference_to_target_boundary_trans_flat_[g];
         i_bed.n_dof_ = i_bed.element_->GetDof();
         i_bed.n_tdof_ = i_bed.n_dof_ * dim_;
-        i_bed.v_dofs_ = precomputed_->boundary_v_dofs_[m];
+        i_bed.v_dofs_ = precomputed_->boundary_v_dofs_flat_[g];
 
         // quick size check
         const int n_tdof = i_bed.n_tdof_;
-        if (kMaxTrueDof < n_tdof) {
-          mimi::utils::PrintAndThrowError(
-              "kMaxTrueDof smaller than required space.",
-              "Please recompile after setting a bigger number");
-        }
 
         // now, setup some more from local properties
-        i_bed.element_residual_ = &(*boundary_element_vectors_)[i];
+        i_bed.element_residual_ = &boundary_element_vectors[i];
         i_bed.element_residual_->SetSize(n_tdof);
         i_bed.residual_view_.UseExternalData(i_bed.element_residual_->GetData(),
                                              i_bed.n_dof_,
                                              dim_);
 
-        i_bed.element_grad_ = &(*boundary_element_matrices_)[i];
+        i_bed.element_grad_ = &boundary_element_matrices[i];
         i_bed.element_grad_->SetSize(n_tdof, n_tdof);
         i_bed.grad_view_.UseExternalData(i_bed.element_grad_->GetData(),
                                          n_tdof,
@@ -298,7 +264,7 @@ public:
                                       ? i_bed.element_->GetOrder() * 2 + 3
                                       : quadrature_order;
 
-        const mfem::IntegrationRule& ir = i_bed.GetIntRule(int_rules);
+        const mfem::IntegrationRule& ir = i_bed.GetIntRule(*int_rules);
         i_bed.n_quad_ = ir.GetNPoints();
         i_bed.quad_data_.resize(i_bed.n_quad_);
 
@@ -343,8 +309,9 @@ public:
         n_marked_boundaries_ * dim_
         * std::pow((precomputed_->fe_spaces_[0]->GetMaxElementOrder() + 1),
                    boundary_para_dim_));
-    for (const BoundaryElementData& bed : boundary_element_data_) {
-      for (const int& vdof : *bed.v_dofs_) {
+    for (const std::reference_wrapper<BoundaryElementData>& bed_ref :
+         boundary_element_data_flat_) {
+      for (const int& vdof : *bed_ref.get().v_dofs_) {
         marked_boundary_v_dofs_.push_back(vdof);
       }
     }
@@ -355,14 +322,19 @@ public:
                             marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.erase(last, marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.shrink_to_fit();
+
+    PrepareFlatViewsForVectorsAndMatrices();
+    mimi::utils::MakeFlat2(boundary_element_data_,
+                           boundary_element_data_flat_,
+                           n_marked_boundaries_);
   }
 
   // we will average lagrange
   virtual void UpdateLagrange() {
     MIMI_FUNC();
 
-    for (auto& be : boundary_element_data_) {
-      for (auto& qd : be.quad_data_) {
+    for (auto& be_ref : boundary_element_data_flat_) {
+      for (auto& qd : be_ref.get().quad_data_) {
         qd.lagrange_ = qd.new_lagrange_;
       }
     }
@@ -372,8 +344,8 @@ public:
   virtual void FillLagrange(const double value) {
     MIMI_FUNC()
 
-    for (auto& be : boundary_element_data_) {
-      for (auto& qd : be.quad_data_) {
+    for (auto& be_ref : boundary_element_data_flat_) {
+      for (auto& qd : be_ref.get().quad_data_) {
         qd.lagrange_ = value;
         qd.new_lagrange_ = value;
         qd.penalty_ = nearest_distance_coeff_->coefficient_;
@@ -385,7 +357,7 @@ public:
 
   void QuadLoop(const mfem::DenseMatrix& x,
                 const int i_thread,
-                Vector_<QuadData>& q_data,
+                Vector<QuadData>& q_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) {
     MIMI_FUNC()
@@ -396,7 +368,7 @@ public:
     for (QuadData& q : q_data) {
       // get current position and F
       x.MultTranspose(q.N_, q.distance_query_.query_.data());
-      mfem::MultAtB(x, q.dN_dxi_, tmp.F_);
+      mfem::MultAtB(x, q.dN_dxi_, tmp.dX_dxi_);
 
       // nearest distance query
       q.active_ = false; // init
@@ -435,12 +407,12 @@ public:
         p = 0.0;
       }
 
-      const double det_F = tmp.F_.Weight();
+      const double det_J = tmp.dX_dxi_.Weight();
 
       if (!frozen_state_) {
         q.active_ = true;
         q.new_lagrange_ = p;
-        q.det_F_ = det_F;
+        q.det_J_ = det_J;
         q.old_g_ = q.g_;
         q.g_ = g;
       }
@@ -452,7 +424,7 @@ public:
       t_n.MultiplyAssign(p, q.distance_results_.normal_.data());
 
       // again, note no negative sign.
-      AddMult_a_VWt(q.integration_weight_ * det_F,
+      AddMult_a_VWt(q.integration_weight_ * det_J,
                     q.N_.begin(),
                     q.N_.end(),
                     t_n.begin(),
@@ -493,24 +465,14 @@ public:
     MIMI_FUNC()
 
     auto assemble_face_residual_and_maybe_grad =
-        [&](const int begin, const int end, const int i_thread) {
+        [&](const int begin, const int end, const int ith_call) {
+          const int i_thread = mimi::utils::ThisThreadId(ith_call);
           TemporaryData tmp;
-          // create some space in stack
-          double element_x_data[kMaxTrueDof];
-          double F_data[kDimDim];
-          double F_inv_data[kDimDim];
-          double fd_forward_data[kMaxTrueDof];
-          tmp.SetData(element_x_data,
-                      F_data,
-                      F_inv_data,
-                      fd_forward_data,
-                      boundary_para_dim_,
-                      dim_);
-
           // this loops marked boundary elements
-          for (int i{begin}; i < end; ++i) {
+          auto& boundary_element_data = boundary_element_data_[i_thread];
+          for (int m{begin}, i{}; m < end; ++m, ++i) {
             // get bed
-            BoundaryElementData& bed = boundary_element_data_[i];
+            BoundaryElementData& bed = boundary_element_data[i];
 
             // reset residual
             bed.residual_view_ = 0.0;
@@ -531,7 +493,8 @@ public:
               assert(frozen_state_);
               double* grad_data = bed.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
-              double* residual_data = bed.residual_view_.GetData();
+              const double* residual_data = bed.residual_view_.GetData();
+              const double* fd_forward_data = tmp.forward_residual_.GetData();
               for (int j{}; j < bed.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
 
@@ -571,14 +534,18 @@ public:
   virtual void
   AddToGlobalBoundaryResidual(mfem::Vector& global_residual) const {
     MIMI_FUNC()
-    for (const BoundaryElementData& bed : boundary_element_data_) {
+    for (const std::reference_wrapper<BoundaryElementData>& bed_ref :
+         boundary_element_data_flat_) {
+      auto& bed = bed_ref.get();
       global_residual.AddElementVector(*bed.v_dofs_, *bed.element_residual_);
     }
   }
 
   virtual void AddToGlobalBoundaryGrad(mfem::SparseMatrix& global_grad) const {
     MIMI_FUNC()
-    for (const BoundaryElementData& bed : boundary_element_data_) {
+    for (const std::reference_wrapper<BoundaryElementData>& bed_ref :
+         boundary_element_data_flat_) {
+      auto& bed = bed_ref.get();
       global_grad.AddSubMatrix(*bed.v_dofs_,
                                *bed.v_dofs_,
                                *bed.element_grad_,
@@ -590,8 +557,8 @@ public:
     MIMI_FUNC()
 
     double negative_gap_sum{};
-    for (auto& be : boundary_element_data_) {
-      for (auto& qd : be.quad_data_) {
+    for (auto& be_ref : boundary_element_data_flat_) {
+      for (auto& qd : be_ref.get().quad_data_) {
         if (qd.g_ < 0.0) {
           negative_gap_sum += qd.g_ * qd.g_;
         }

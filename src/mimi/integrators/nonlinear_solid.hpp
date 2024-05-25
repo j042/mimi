@@ -183,7 +183,7 @@ public:
     MIMI_FUNC()
 
     // get numbers to decide loop size
-    n_elements_ = precomputed_->n_elements_;
+    n_elements_ = precomputed_->n_elem_;
     // n meshes should equal to nthrea config at the beginning
     n_threads_ = precomputed_->n_threads_;
 
@@ -198,7 +198,7 @@ public:
     element_vectors_.resize(n_threads_);
 
     // extract element geometry type
-    geometry_type_ = precomputed_->elements_[0]->GetGeomType();
+    geometry_type_ = precomputed_->elements_flat_[0]->GetGeomType();
 
     // allocate element data
     element_data_.resize(n_threads_);
@@ -254,7 +254,7 @@ public:
         i_el_data.scalar_post_process_view_.SetDataAndSize(
             i_el_data.element_residual_->GetData(),
             i_el_data.n_dof_);
-        i_el_data.element_grad_ = &element_matrices_[i];
+        i_el_data.element_grad_ = &element_matrices[i];
         i_el_data.element_grad_->SetSize(n_tdof, n_tdof);
         i_el_data.grad_view_.UseExternalData(i_el_data.element_grad_->GetData(),
                                              n_tdof,
@@ -266,7 +266,7 @@ public:
                                    : quadrature_order;
 
         // get int rule
-        const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);
+        const mfem::IntegrationRule& ir = i_el_data.GetIntRule(*int_rules);
 
         // prepare quad loop
         i_el_data.n_quad_ = ir.GetNPoints();
@@ -307,11 +307,11 @@ public:
                             n_threads_);
 
     // flat iter for element vec and mat
-    PrepareFlatViewsForVectorsAndMatrices()
-        // and element data
-        mimi::utils::MakeFlat2(element_data_,
-                               element_data_flat_,
-                               precomputed_->n_elem);
+    PrepareFlatViewsForVectorsAndMatrices();
+    // and element data
+    mimi::utils::MakeFlat2(element_data_,
+                           element_data_flat_,
+                           precomputed_->n_elem_);
   }
 
   /// Performs quad loop with element data and temporary data
@@ -377,7 +377,8 @@ public:
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
-              double* residual_data = e.residual_view_.GetData();
+              const double* residual_data = e.residual_view_.GetData();
+              const double* fd_forward_data = tmp.forward_residual_.GetData();
               for (int j{}; j < e.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
 
@@ -430,7 +431,8 @@ public:
 
       mfem::DenseMatrix mat;
 
-      for (auto& e : element_data_flat_) {
+      for (auto& e_ref : element_data_flat_) {
+        auto& e = e_ref.get();
         mat.SetSize(e.n_dof_);
         mat = 0.0;
 
@@ -486,7 +488,8 @@ public:
 
     // serial assemble to integrated
     integrated_ = 0.0;
-    for (auto& e_data : element_data_) {
+    for (auto& e_data_ref : element_data_flat_) {
+      auto& e_data = e_data_ref.get();
       integrated_.AddElementVector(e_data.scalar_v_dofs_,
                                    e_data.scalar_post_process_view_);
     }
@@ -526,7 +529,8 @@ public:
 
     // serial assemble to integrated
     integrated_ = 0.0;
-    for (auto& e_data : element_data_) {
+    for (auto& e_data_ref : element_data_flat_) {
+      auto& e_data = e_data_ref.get();
       integrated_.AddElementVector(e_data.scalar_v_dofs_,
                                    e_data.scalar_post_process_view_);
     }

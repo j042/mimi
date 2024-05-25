@@ -118,15 +118,14 @@ public:
       reference_to_target_boundary_trans_flat_;
 
   /// @brief
-  std::unordered_map<std::string, Vector_<Vector_<double>>> scalars_;
+  std::unordered_map<std::string, Vector<Vector<double>>> scalars_;
 
   /// @brief size == {n_elem; n_patch} x n_quad. each integrator can have its
   /// own.
-  std::unordered_map<std::string, Vector_<Vector_<mfem::Vector>>> vectors_;
+  std::unordered_map<std::string, Vector<Vector<mfem::Vector>>> vectors_;
 
   /// @brief meant to hold jacobians per whatever
-  std::unordered_map<std::string, Vector_<Vector_<mfem::DenseMatrix>>>
-      matrices_;
+  std::unordered_map<std::string, Vector<Vector<mfem::DenseMatrix>>> matrices_;
 
   /// @brief relevant markers for nonlinear boundary integrations
   /// this is integrator dependant
@@ -160,9 +159,7 @@ public:
   virtual void PasteCommonTo(std::shared_ptr<PrecomputedData>& other) {
     MIMI_FUNC()
 
-    other->int_rules_ =
-        Vector_<mfem::IntegrationRules>(int_rules_.size(),
-                                        mfem::IntegrationRules());
+    other->int_rules_ = int_rules_;
     other->fe_spaces_ = fe_spaces_;
     other->meshes_ = meshes_;
     other->fe_collections_ = fe_collections_;
@@ -211,9 +208,10 @@ public:
 
     // define per-thread init
     auto process_elems =
-        [&](const int begin, const int end, const int i_thread) {
+        [&](const int begin, const int end, const int ith_call) {
+          const int i_thread = mimi::utils::ThisThreadId(ith_call);
           // now, each thread creates its own instances
-          int_rules_[i_thread] = std::make_shared<mfem::IntegrationRules>{};
+          int_rules_[i_thread] = std::make_shared<mfem::IntegrationRules>();
           meshes_[i_thread] =
               std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(),
                                                      true); // deep copy mesh
@@ -296,7 +294,7 @@ public:
           for (int i{}, g{begin}; i < m_b_elem; ++i, ++g) {
             // is there a dof trans? I am pretty sure not
             // if so, we can extend here
-            auto& boundary_v_dof = boundary_v_dofs_[i];
+            auto& boundary_v_dof = boundary_v_dofs[i];
             boundary_v_dof = std::make_shared<mfem::Array<int>>();
             mfem::DofTransformation* doftrans =
                 fes.GetBdrElementVDofs(i, *boundary_v_dof);
@@ -308,7 +306,7 @@ public:
             }
 
             // create element,
-            auto& b_el = boundary_elements_[i];
+            auto& b_el = boundary_elements[i];
             b_el = CreatFiniteFaceElement(dim);
             // get bdr element
             fes.GetNURBSext()->LoadBE(g, b_el.get());

@@ -88,7 +88,7 @@ public:
     if (boundary_element_vectors_.size() != 0) {
       mimi::utils::MakeFlat2(boundary_element_vectors_,
                              boundary_element_vectors_flat_,
-                             precomputed_->n_b_elem);
+                             precomputed_->n_b_elem_);
       mimi::utils::MakeFlat2(boundary_element_matrices_,
                              boundary_element_matrices_flat_,
                              precomputed_->n_b_elem_);
