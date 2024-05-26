@@ -26,6 +26,10 @@
   TOC()                                                                        \
   std::cout << title << " - " << TASK_NAME << "Elasped: " << now - last        \
             << " Cummulative: " << now - start << std::endl;
+#define TOC_REPORT_MASTER(TASK_NAME, TID)                                      \
+  if (TID == 0) {                                                              \
+    TOC_REPORT(TASK_NAME) std::cout << " master reporting." << std::endl;      \
+  }
 #else
 #define TIC(A)
 #define TOC()

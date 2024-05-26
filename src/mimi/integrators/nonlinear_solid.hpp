@@ -133,47 +133,6 @@ public:
 
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
-      // // order matters
-      // const std::array<int, 6> offsets = {n_dof * dim,
-      //                                     dim * dim,
-      //                                     n_dof * dim,
-      //                                     dim * dim,
-      //                                     dim * dim,
-      //                                     n_dof * dim};
-      // const int total =
-      //     std::reduce(offsets.begin(), offsets.end()); // default is 0 and
-      //     plus
-      // if (mem_.EnsureSize(total) && last_n_dof_ == n_dof && last_dim_ == dim)
-      // {
-      //   // nothing to reset, exit
-      //   return;
-      // }
-      // double* mem_ptr = mem_.data();
-      // const int* o_ptr = offsets.data();
-
-      // element_x_.SetDataAndSize(mem_ptr, n_dof * dim);
-      // element_x_mat_.UseExternalData(mem_ptr, n_dof, dim);
-
-      // mem_ptr += *o_ptr++;
-
-      // stress_.UseExternalData(mem_ptr, dim, dim);
-
-      // mem_ptr += *o_ptr++;
-
-      // dN_dx_.UseExternalData(mem_ptr, n_dof, dim);
-
-      // mem_ptr += *o_ptr++;
-
-      // F_.UseExternalData(mem_ptr, dim, dim);
-
-      // mem_ptr += *o_ptr++;
-
-      // F_inv_.UseExternalData(mem_ptr, dim, dim);
-
-      // mem_ptr += *o_ptr++;
-
-      // forward_residual_.UseExternalData(mem_ptr, n_dof, dim);
-
       element_x_.SetSize(n_dof * dim); // will be resized in getsubvector
       element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
       stress_.SetSize(dim, dim);
@@ -389,25 +348,28 @@ public:
           const int i_thread = mimi::utils::ThisThreadId(ith_call);
           TemporaryData tmp; // see if allocating this beforehand would increase
                              // any performance
+          TIC()
           // local alloc
           auto& element_data = element_data_[i_thread];
           for (int g{begin}, i{}; g < end; ++i, ++g) {
             // in
             ElementData& e = element_data[i];
             e.residual_view_ = 0.0;
-
+            TOC_REPORT_MASTER("ElementData deref, residual zero.")
             // set shape for tmp data
             tmp.SetShape(e.n_dof_, dim_);
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, e);
+            TOC_REPORT_MASTER("Element solution copy.")
 
             if (frozen_state_) {
               e.FreezeStates();
             } else {
               e.MeltStates();
             }
+            TOC_REPORT_MASTER("Element frozen state ensuring.")
 
             // assemble residual
             QuadLoop(current_element_x,
@@ -415,6 +377,7 @@ public:
                      e.quad_data_,
                      tmp,
                      e.residual_view_);
+            TOC_REPORT_MASTER("Quad Loop")
 
             // assembly grad
             if (assemble_grad_) {
@@ -445,6 +408,7 @@ public:
                 }
                 with_respect_to = orig_wrt;
               }
+              TOC_REPORT_MASTER("Grad FD")
             }
           }
         };
