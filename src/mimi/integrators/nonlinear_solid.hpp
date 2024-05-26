@@ -348,28 +348,24 @@ public:
           const int i_thread = mimi::utils::ThisThreadId(ith_call);
           TemporaryData tmp; // see if allocating this beforehand would increase
                              // any performance
-          TIC()
           // local alloc
           auto& element_data = element_data_[i_thread];
           for (int g{begin}, i{}; g < end; ++i, ++g) {
             // in
             ElementData& e = element_data[i];
             e.residual_view_ = 0.0;
-            TOC_REPORT_MASTER("ElementData deref, residual zero.")
             // set shape for tmp data
             tmp.SetShape(e.n_dof_, dim_);
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, e);
-            TOC_REPORT_MASTER("Element solution copy.")
 
             if (frozen_state_) {
               e.FreezeStates();
             } else {
               e.MeltStates();
             }
-            TOC_REPORT_MASTER("Element frozen state ensuring.")
 
             // assemble residual
             QuadLoop(current_element_x,
@@ -377,7 +373,6 @@ public:
                      e.quad_data_,
                      tmp,
                      e.residual_view_);
-            TOC_REPORT_MASTER("Quad Loop")
 
             // assembly grad
             if (assemble_grad_) {
@@ -408,7 +403,6 @@ public:
                 }
                 with_respect_to = orig_wrt;
               }
-              TOC_REPORT_MASTER("Grad FD")
             }
           }
         };
