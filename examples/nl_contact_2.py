@@ -58,7 +58,7 @@ le.boundary_condition = bc
 tic.toc()
 
 # setup needs to be called this assembles bilinear forms, linear forms
-le.setup(4)
+le.setup(2)
 
 le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False, False)
 

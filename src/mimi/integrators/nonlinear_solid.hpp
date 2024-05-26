@@ -129,7 +129,7 @@ public:
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
       element_x_.SetSize(n_dof * dim); // will be resized in getsubvector
-      element_x_mat_.SetSize(n_dof, dim);
+      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
       stress_.SetSize(dim, dim);
       dN_dx_.SetSize(n_dof, dim);
       F_.SetSize(dim, dim);
@@ -207,7 +207,6 @@ public:
                                                 const int el_end,
                                                 const int thread_num) {
       const int i_thread = mimi::utils::ThisThreadId(thread_num);
-
       // thread's obj
       auto& int_rules = precomputed_->int_rules_[i_thread];
       // local alloc

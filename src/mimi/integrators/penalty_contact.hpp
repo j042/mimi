@@ -96,7 +96,6 @@ public:
     const mfem::IntegrationRule&
     GetIntRule(mfem::IntegrationRules& thread_int_rules) const {
       MIMI_FUNC()
-
       return thread_int_rules.Get(geometry_type_, quadrature_order_);
     }
   };
@@ -112,7 +111,7 @@ public:
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
       element_x_.SetSize(n_dof * dim);
-      element_x_mat_.SetSize(n_dof, dim);
+      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
       dX_dxi_.SetSize(dim, dim - 1);
       forward_residual_.SetSize(n_dof, dim);
     }

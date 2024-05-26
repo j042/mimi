@@ -159,18 +159,30 @@ public:
   virtual void PasteCommonTo(std::shared_ptr<PrecomputedData>& other) {
     MIMI_FUNC()
 
+    other->n_threads_ = n_threads_;
+    other->n_elem_ = n_elem_;
+    other->n_b_elem_ = n_b_elem_;
+    other->dim_ = dim_;
     other->int_rules_ = int_rules_;
     other->fe_spaces_ = fe_spaces_;
     other->meshes_ = meshes_;
     other->fe_collections_ = fe_collections_;
     other->v_dofs_ = v_dofs_;
+    other->v_dofs_flat_ = v_dofs_flat_;
     other->boundary_v_dofs_ = boundary_v_dofs_;
+    other->boundary_v_dofs_flat_ = boundary_v_dofs_flat_;
     other->elements_ = elements_;
+    other->elements_flat_ = elements_flat_;
     other->boundary_elements_ = boundary_elements_;
+    other->boundary_elements_flat_ = boundary_elements_flat_;
     other->reference_to_target_element_trans_ =
         reference_to_target_element_trans_;
+    other->reference_to_target_element_trans_flat_ =
+        reference_to_target_element_trans_flat_;
     other->reference_to_target_boundary_trans_ =
         reference_to_target_boundary_trans_;
+    other->reference_to_target_boundary_trans_flat_ =
+        reference_to_target_boundary_trans_flat_;
   }
 
   virtual void Setup(const mfem::FiniteElementSpace& fe_space,
@@ -211,7 +223,9 @@ public:
         [&](const int begin, const int end, const int ith_call) {
           const int i_thread = mimi::utils::ThisThreadId(ith_call);
           // now, each thread creates its own instances
-          int_rules_[i_thread] = std::make_shared<mfem::IntegrationRules>();
+          int_rules_[i_thread] = std::make_shared<mfem::IntegrationRules>(
+              0,
+              mfem::Quadrature1D::GaussLegendre);
           meshes_[i_thread] =
               std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(),
                                                      true); // deep copy mesh
@@ -260,13 +274,13 @@ public:
 
             auto& e_tr = dX_dxi[i];
             e_tr = CreateTransformation(); // make_shared
-
             // process/set FE
             fes.GetNURBSext()->LoadFE(g, elem.get());
 
             // prepare transformation - we could just copy paste the code, and
             // this will save GetElementVDofs, but let's not go too crazy
             fes.GetElementTransformation(g, e_tr.get());
+
             // however, we do need to set FE to this newly created, as it is a
             // ptr to internal obj
             e_tr->SetFE(elem.get());
@@ -297,7 +311,7 @@ public:
             auto& boundary_v_dof = boundary_v_dofs[i];
             boundary_v_dof = std::make_shared<mfem::Array<int>>();
             mfem::DofTransformation* doftrans =
-                fes.GetBdrElementVDofs(i, *boundary_v_dof);
+                fes.GetBdrElementVDofs(g, *boundary_v_dof);
 
             if (doftrans) {
               mimi::utils::PrintAndThrowError(
