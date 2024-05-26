@@ -14,6 +14,24 @@
 #define MIMI_FUNC()
 #endif
 
+#ifdef MIMI_USE_OMP
+#define TIC(TITLE)                                                             \
+  double start = omp_get_wtime();                                              \
+  double now{start}, last{};                                                   \
+  std::string title{TITLE};
+#define TOC()                                                                  \
+  last = now;                                                                  \
+  now = omp_get_wtime();
+#define TOC_REPORT(TASK_NAME)                                                  \
+  TOC()                                                                        \
+      std::cout << title << " - " << TASK_NAME << "Elasped: " << now - last    \
+                << " Cummulative: " << now - start;
+#else
+#define TIC(A)
+#define TOC()
+#define TOC_REPORT(A)
+#endif
+
 namespace mimi::utils {
 static std::mutex print_mutex;
 

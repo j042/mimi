@@ -145,11 +145,14 @@ public:
 
     // boundary
     for (auto& boundary_integ : boundary_face_nfi_) {
+      TIC("Boundary Assembly")
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryGrad(current_x);
+      TOC_REPORT("Parallel Assembly")
       boundary_integ->AddToGlobalBoundaryGrad(*Base_::Grad);
+      TOC_REPORT("Global Push")
     }
 
     if (!Base_::Grad->Finalized()) {

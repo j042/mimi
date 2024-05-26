@@ -82,10 +82,12 @@ public:
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfvi_) {
+      TIC("Nonlinear Visco Assembly")
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AssembleDomainResidual(current_x, current_v);
+      TOC_REPORT("Parallel Assembly")
 
       // add to global
       const auto& el_vecs = domain_integ->element_vectors_flat_;
@@ -94,6 +96,7 @@ public:
       for (int i{}; i < el_vecs.size(); ++i) {
         residual.AddElementVector(*el_vdofs[i], el_vecs[i]);
       }
+      TOC_REPORT("Global Push")
     }
 
     // boundary
