@@ -391,6 +391,10 @@ public:
   virtual void SetupNTheads(const int n_threads) {
     MIMI_FUNC()
 
+    // mfem
+    // mfem::Device::SetMemoryTypes(mfem::MemoryType::HOST,
+    // mfem::MemoryType::DEVICE);
+
     if (n_threads < 1) {
       mimi::utils::PrintAndThrowError("nthreads can't be smaller than 1.");
     }

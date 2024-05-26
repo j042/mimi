@@ -235,6 +235,19 @@ public:
     }
   }
 
+  /// @brief Reallocates only if current size is smaller than requested. Useful
+  /// if data is use only for memory holder. Returns true if reallocation isn't
+  /// requred
+  /// @param size
+  /// @return
+  constexpr bool EnsureSize(const IndexType& size) {
+    if (size > size_) {
+      Reallocate(size);
+      return false;
+    }
+    return true;
+  }
+
   template<typename... Ts>
   constexpr void SetShape(const IndexType& shape0, const Ts&... shape) {
     static_assert(sizeof...(Ts) == static_cast<std::size_t>(dim - 1),

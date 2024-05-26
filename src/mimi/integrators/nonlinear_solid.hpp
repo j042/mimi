@@ -126,15 +126,46 @@ public:
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
 
+    // mfem has thread unsafe memory allocator
+    mimi::utils::Data<double> mem;
+
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
-      element_x_.SetSize(n_dof * dim); // will be resized in getsubvector
-      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
-      stress_.SetSize(dim, dim);
+      // order matters
+      const std::array<int, 6> offsets = {n_dof * dim,
+                                          dim * dim,
+                                          n_dof * dim,
+                                          dim * dim,
+                                          dim * dim,
+                                          n_dof * dim};
+      const int total =
+          std::reduce(offsets.begin(), offsets.end()); // default is 0 and plus
+      if (mem.EnsureSize(total)) {
+      }
+      double* mem_ptr = mem.data();
+      const int* o_ptr = offsets.data();
+
+      element_x_.SetDataAndSize(mem_ptr, n_dof * dim);
+      element_x_mat_.UseExternalData(mem_ptr, n_dof, dim);
+
+      mem_ptr += *o_ptr++;
+
+      stress_.UseExternalData(mem_ptr, dim, dim);
+
+      mem_ptr += *o_ptr++;
+
       dN_dx_.SetSize(n_dof, dim);
+
+      mem_ptr += *o_ptr++;
+
       F_.SetSize(dim, dim);
-      F_inv_.SetSize(dim, dim);
-      forward_residual_.SetSize(n_dof, dim);
+      // element_x_.SetSize(n_dof * dim); // will be resized in getsubvector
+      // element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
+      // stress_.SetSize(dim, dim);
+      // dN_dx_.SetSize(n_dof, dim);
+      // F_.SetSize(dim, dim);
+      // F_inv_.SetSize(dim, dim);
+      // forward_residual_.SetSize(n_dof, dim);
     }
 
     mfem::DenseMatrix&
@@ -343,15 +374,18 @@ public:
           const int i_thread = mimi::utils::ThisThreadId(ith_call);
           TemporaryData tmp; // see if allocating this beforehand would increase
                              // any performance
+          mimi::utils::PrintInfo("starting");
           // local alloc
           auto& element_data = element_data_[i_thread];
           for (int g{begin}, i{}; g < end; ++i, ++g) {
             // in
             ElementData& e = element_data[i];
             e.residual_view_ = 0.0;
+            mimi::utils::PrintInfo("setting shape");
 
             // set shape for tmp data
             tmp.SetShape(e.n_dof_, dim_);
+            mimi::utils::PrintInfo("setting shape good");
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =

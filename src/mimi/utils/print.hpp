@@ -19,7 +19,9 @@ template<typename... Args>
 void PrintInfo(Args&&... args) {
   std::cout << "MIMI INFO - ";
   ((std::cout << std::forward<Args>(args) << " "), ...);
-  std::cout << "\n";
+  // std::cout << "\n";
+  std::cout << std::endl;
+  ;
 }
 
 /*
