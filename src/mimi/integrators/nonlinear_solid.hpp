@@ -122,10 +122,9 @@ public:
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
 
-    // mfem has thread unsafe memory allocator
-    mimi::utils::Data<double> mem_;
-    int last_n_dof_ = -1;
-    int last_dim_ = -1;
+    mfem::DenseMatrix dN_dxi_; // don't really need to save this
+    mfem::DenseMatrix dN_dX_;
+    mfem::DenseMatrix dxi_dX_; // J_target_to_reference
 
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
@@ -136,6 +135,9 @@ public:
       F_.SetSize(dim, dim);
       F_inv_.SetSize(dim, dim);
       forward_residual_.SetSize(n_dof, dim);
+      dN_dxi_.SetSize(n_dof, dim);
+      dN_dX_.SetSize(n_dof, dim);
+      dxi_dX_.SetSize(dim, dim);
     }
 
     mfem::DenseMatrix&
@@ -317,10 +319,19 @@ public:
   /// Performs quad loop with element data and temporary data
   void QuadLoop(const mfem::DenseMatrix& x,
                 const int i_thread,
-                Vector<QuadData>& q_data,
+                // Vector_<QuadData>& q_data, // unused for computing version, unless we are looking at plasticity
+                ElementData& e_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) {
     MIMI_FUNC()
+    auto& int_rules = precomputed_->int_rules_[i_thread];
+    const mfem::IntegrationRule& ir = e_data.GetIntRule(*int_rules);
+    for (int q{}; q < e_data.n_quad_; ++q) {
+      const mfem::IntegrationPoint& ip = ir.IntPoint(j);
+      e_data.element_trans_->SetIntPoint(&ip);
+      e_data.element_->CalcDShape(ip, tmp.dN_dxi_);
+      mfem::CalcInverse();
+    }
 
     for (QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
