@@ -409,7 +409,8 @@ public:
 #elif MIMI_USE_BS_POOL
     mimi::utils::PrintInfo("Using BS_THREAD_POOL");
     mimi::utils::thread_pool.reset(n_threads);
-    mimi::utils::PrintInfo("Reset BS thread pool");
+    mimi::utils::PrintInfo("Reset BS thread pool. Now thread count is",
+                           mimi::utils::thread_pool.get_thread_count());
 #else
     mimi::utils::PrintInfo("Using std::threads");
 #endif

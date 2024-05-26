@@ -21,7 +21,7 @@ le.subdivide(4)
 mat = mimi.PyCompressibleOgdenNeoHookean()
 mat = mimi.PyJ2()
 mat.density = 7e4
-mat.viscosity = 10
+mat.viscosity = -10
 mat.set_young_poisson(1e10, 0.3)
 mat.isotropic_hardening = 1e8
 mat.kinematic_hardening = 0
@@ -121,7 +121,8 @@ def show():
 
 coe = 2e11
 # initialize a plotter
-plt = gus.show([s, curv], close=False)
+# plt = gus.show([s, curv], close=False)
+plt = None
 n = le.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
 for i in range(1000):

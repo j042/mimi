@@ -93,6 +93,11 @@ void MakeFlat2(NestedVector& nested2, FlatVector& flat, const int total = -1) {
       flat.emplace_back(elem);
     }
   }
+  if (total > 0 && total != static_cast<int>(flat.size())) {
+    mimi::utils::PrintWarning(
+        "Num mismatch between expected flat count and flattend.");
+  }
+  mimi::utils::PrintDebug("flattend 2 nested. Total:", flat.size());
 }
 
 /// @brief Fully dynamic array that can view another data. Equipped with basic

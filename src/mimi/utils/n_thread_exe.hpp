@@ -19,7 +19,12 @@ namespace mimi::utils {
 /// @return
 inline int ThisThreadId(const int i_thread) {
 #ifdef MIMI_USE_BS_POOL
-  return static_cast<int>(*BS::this_thread::get_index());
+  // return static_cast<int>(*BS::this_thread::get_index());
+  const int num = static_cast<int>(*BS::this_thread::get_index());
+  if (num > 3) {
+    mimi::utils::PrintAndThrowError("bad bad this is", num, "thread");
+  }
+  return num;
 #elif MIMI_USE_OMP
   return static_cast<int>(omp_get_thread_num());
 #else
@@ -29,7 +34,7 @@ inline int ThisThreadId(const int i_thread) {
 }
 
 #ifdef MIMI_USE_BS_POOL
-static BS::thread_pool thread_pool;
+extern BS::thread_pool thread_pool;
 #endif
 
 /// @brief multi thread execution helper based on chunked batches

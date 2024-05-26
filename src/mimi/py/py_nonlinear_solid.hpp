@@ -55,6 +55,8 @@ public:
         // else, dofs does not match
         mfem::Ordering::byVDIM);
 
+    mimi::utils::PrintDebug("copied fe space");
+
     // we need to create precomputed data one for:
     // - bilinear forms
     // - nonlinear solid
@@ -64,6 +66,8 @@ public:
     auto& bilinear_precomputed = disp_fes.precomputed_["bilinear_forms"];
     bilinear_precomputed = std::make_shared<mimi::utils::PrecomputedData>();
     bilinear_precomputed->Setup(*disp_fes.fe_space_, n_threads);
+
+    mimi::utils::PrintDebug("setup precomputed data for bilinear");
 
     // create solution fields for x and set local reference
     mfem::GridFunction& x = disp_fes.grid_functions_["x"];
@@ -86,13 +90,18 @@ public:
     x = x_ref;
     x_dot = 0.0;
 
+    mimi::utils::PrintDebug("setup, initialzied x, x_dof, x_ref");
+
     // let's process boundaries
     Base_::FindBoundaryDofIds();
+    mimi::utils::PrintDebug("processed boundary dof ids");
 
     // creating operators
     auto nl_oper =
         std::make_unique<mimi::operators::NonlinearSolid>(*disp_fes.fe_space_,
                                                           &x_ref);
+
+    mimi::utils::PrintDebug("created nl_oper");
 
     // let's setup the system
     // create dummy sparse matrix - mfem just sets referencee, so no copies are
@@ -121,6 +130,8 @@ public:
     mass->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
     mass_integ->element_matrices_.reset(); // release saved matrices
 
+    mimi::utils::PrintDebug("mass form set");
+
     // 2. damping / viscosity, as mfem calls it
     if (material_->viscosity_ > 0.0) {
       auto visc =
@@ -142,6 +153,7 @@ public:
       visc->Assemble(0);
       visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
       visc_integ->element_matrices_.reset();
+      mimi::utils::PrintDebug("viscosity(damping) form set");
     }
 
     // 3. nonlinear stiffness
@@ -167,6 +179,8 @@ public:
     // add integrator to nl form
     nonlinear_stiffness->AddDomainIntegrator(nonlinear_solid_integ);
     nonlinear_stiffness->SetEssentialTrueDofs(disp_fes.zero_dofs_);
+
+    mimi::utils::PrintDebug("nl material stiffness form set");
 
     // 4. linear form
     auto rhs = std::make_shared<mfem::LinearForm>(disp_fes.fe_space_.get());
@@ -234,6 +248,8 @@ public:
       nl_oper->AddLinearForm("rhs", rhs);
     }
 
+    mimi::utils::PrintDebug("process linear forms");
+
     // check contact
     if (const auto& contact =
             Base_::boundary_conditions_->CurrentConfiguration().contact_;
@@ -262,6 +278,7 @@ public:
         nl_form->AddBdrFaceIntegrator(contact_integ,
                                       &Base_::boundary_markers_[bid]);
       }
+      mimi::utils::PrintDebug("process contact forms");
     }
 
     // setup solvers
@@ -287,6 +304,8 @@ public:
     newton->SetAbsTol(1e-12);
     newton->SetMaxIter(MeshDim() * 10);
 
+    mimi::utils::PrintDebug("set solvers");
+
     // finally, register newton solver to the opeartor
     nl_oper->SetNewtonSolver(newton);
 
@@ -294,12 +313,16 @@ public:
     auto odesolver =
         std::make_unique<mimi::solvers::GeneralizedAlpha2>(*nl_oper);
     odesolver->PrintInfo();
+    mimi::utils::PrintDebug("set ode");
 
     // finalize operator
     nl_oper->Setup();
 
+    mimi::utils::PrintDebug("set nonlinear operator");
+
     // set dynamic system -> transfer ownership of those to base
     Base_::SetDynamicSystem2(nl_oper.release(), odesolver.release());
+    mimi::utils::PrintDebug("finished setup.");
   }
 };
 

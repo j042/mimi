@@ -26,12 +26,12 @@ CreatFiniteElement(int const& para_dim) {
 }
 
 inline std::shared_ptr<mfem::NURBSFiniteElement>
-CreatFiniteFaceElement(int const& para_dim) {
+CreatFiniteFaceElement(int const& dim) {
   MIMI_FUNC()
 
-  assert(para_dim > 1);
+  assert(dim > 1);
 
-  if (para_dim == 2) {
+  if (dim == 2) {
     return std::make_shared<mfem::NURBS1DFiniteElement>(-1);
   } else {
     return std::make_shared<mfem::NURBS2DFiniteElement>(-1);
@@ -218,10 +218,17 @@ public:
     n_b_elem_ = n_b_elem;
     dim_ = dim;
 
+    mimi::utils::PrintDebug("n_elem, n_b_elem, dim, n_threads_:",
+                            n_elem_,
+                            n_b_elem_,
+                            dim_,
+                            n_threads_);
+
     // define per-thread init
     auto process_elems =
         [&](const int begin, const int end, const int ith_call) {
           const int i_thread = mimi::utils::ThisThreadId(ith_call);
+          mimi::utils::PrintSynced("ithread:", i_thread);
           // now, each thread creates its own instances
           int_rules_[i_thread] = std::make_shared<mfem::IntegrationRules>(
               0,
@@ -288,67 +295,79 @@ public:
         };
 
     // define per-thread init
-    auto process_boundary_elems =
-        [&](const int begin, const int end, const int i_thread) {
-          // deref basics
-          auto& mesh = *meshes_[i_thread];
-          auto& fes = *fe_spaces_[i_thread];
+    auto process_boundary_elems = [&](const int begin,
+                                      const int end,
+                                      const int ith_call) {
+      const int i_thread = mimi::utils::ThisThreadId(ith_call);
+      mimi::utils::PrintSynced("ithread:", i_thread);
 
-          // we need to know workload for each thread
-          const int m_b_elem = end - begin;
-          // deref thread locals
-          auto& boundary_v_dofs = boundary_v_dofs_[i_thread];
-          auto& boundary_elements = boundary_elements_[i_thread];
-          auto& dX_dxi = reference_to_target_boundary_trans_[i_thread];
-          // then alloc
-          boundary_v_dofs.resize(m_b_elem);
-          boundary_elements.resize(m_b_elem);
-          dX_dxi.resize(m_b_elem);
-          // keep global indices
-          for (int i{}, g{begin}; i < m_b_elem; ++i, ++g) {
-            // is there a dof trans? I am pretty sure not
-            // if so, we can extend here
-            auto& boundary_v_dof = boundary_v_dofs[i];
-            boundary_v_dof = std::make_shared<mfem::Array<int>>();
-            mfem::DofTransformation* doftrans =
-                fes.GetBdrElementVDofs(g, *boundary_v_dof);
+      // deref basics
+      auto& mesh = *meshes_[i_thread];
+      auto& fes = *fe_spaces_[i_thread];
 
-            if (doftrans) {
-              mimi::utils::PrintAndThrowError(
-                  "There's doftrans. There shouldn't be one according to the "
-                  "documentations.");
-            }
+      // we need to know workload for each thread
+      const int m_b_elem = end - begin;
+      // deref thread locals
+      auto& boundary_v_dofs = boundary_v_dofs_[i_thread];
+      auto& boundary_elements = boundary_elements_[i_thread];
+      auto& dX_dxi = reference_to_target_boundary_trans_[i_thread];
+      // then alloc
+      boundary_v_dofs.resize(m_b_elem);
+      boundary_elements.resize(m_b_elem);
+      dX_dxi.resize(m_b_elem);
+      // keep global indices
+      for (int i{}, g{begin}; g < end; ++i, ++g) {
+        // is there a dof trans? I am pretty sure not
+        // if so, we can extend here
+        auto& boundary_v_dof = boundary_v_dofs[i];
+        boundary_v_dof = std::make_shared<mfem::Array<int>>();
+        mfem::DofTransformation* doftrans =
+            fes.GetBdrElementVDofs(g, *boundary_v_dof);
 
-            // create element,
-            auto& b_el = boundary_elements[i];
-            b_el = CreatFiniteFaceElement(dim);
-            // get bdr element
-            fes.GetNURBSext()->LoadBE(g, b_el.get());
+        if (doftrans) {
+          mimi::utils::PrintAndThrowError(
+              "There's doftrans. There shouldn't be one according to the "
+              "documentations.");
+        }
 
-            auto& b_tr = dX_dxi[i];
-            b_tr = CreateFaceTransformation();
+        // create element,
+        auto& b_el = boundary_elements[i];
+        b_el = CreatFiniteFaceElement(dim);
+        // get bdr element
+        fes.GetNURBSext()->LoadBE(g, b_el.get());
+        mimi::utils::PrintDebug("got Bdr Elem");
 
-            // this is extended function mainly to
-            mesh.GetBdrFaceTransformations(g, b_tr.get());
+        // auto& b_tr = dX_dxi[i];
+        auto& b_tr = dX_dxi.at(i);
+        b_tr = CreateFaceTransformation();
 
-            // we overwrite some pointers to our own copies
-            // this is mask 1 - related elem
-            // set
-            b_tr->Elem1 =
-                reference_to_target_element_trans_flat_[b_tr->Elem1No].get();
+        // this is extended function mainly to
+        mesh.GetBdrFaceTransformations(g, b_tr.get());
 
-            // this is mask 16 - related face elem
-            // we need to create b_elem of our own
-            fes.GetNURBSext()->LoadBE(g, b_el.get());
-            b_tr->SetFE(b_el.get());
-          }
-        };
+        mimi::utils::PrintDebug("got Bdr Trans",
+                                reference_to_target_element_trans_flat_.size(),
+                                b_tr->Elem1No);
+
+        // we overwrite some pointers to our own copies
+        // this is mask 1 - related elem
+        // set
+        b_tr->Elem1 =
+            reference_to_target_element_trans_flat_[b_tr->Elem1No].get();
+
+        // this is mask 16 - related face elem
+        // we need to create b_elem of our own
+        // fes.GetNURBSext()->LoadBE(g, b_el.get());
+        b_tr->SetFE(b_el.get());
+      }
+    };
 
     // allocate vectors for each thread
     v_dofs_.resize(n_threads_);
     elements_.resize(n_threads_);
     reference_to_target_element_trans_.resize(n_threads_);
     mimi::utils::NThreadExe(process_elems, n_elem, nthreads);
+    mimi::utils::PrintDebug("prepared basic element properties");
+
     // make flat
     // this is not most efficient, but much less code
     MakeFlat2(v_dofs_, v_dofs_flat_, n_elem);
@@ -361,7 +380,9 @@ public:
     boundary_v_dofs_.resize(n_threads_);
     boundary_elements_.resize(n_threads_);
     reference_to_target_boundary_trans_.resize(n_threads_);
+    mimi::utils::PrintDebug("preparing basic boundary element properties");
     mimi::utils::NThreadExe(process_boundary_elems, n_b_elem, nthreads);
+    mimi::utils::PrintDebug("prepared basic boundary element properties");
     MakeFlat2(boundary_v_dofs_, boundary_v_dofs_flat_, n_b_elem);
     MakeFlat2(boundary_elements_, boundary_elements_flat_, n_b_elem);
     MakeFlat2(reference_to_target_boundary_trans_,
