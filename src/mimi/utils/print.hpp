@@ -14,7 +14,7 @@
 #define MIMI_FUNC()
 #endif
 
-#ifdef MIMI_USE_OMP
+#if defined(MIMI_USE_OMP) && defined(MIMI_TIMER)
 #define TIC(TITLE)                                                             \
   double start = omp_get_wtime();                                              \
   double now{start}, last{};                                                   \
