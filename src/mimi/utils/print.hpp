@@ -26,8 +26,8 @@
   TOC()                                                                        \
   std::cout << title << " - " << TASK_NAME << "Elasped: " << now - last        \
             << " Cummulative: " << now - start << std::endl;
-#define TOC_REPORT_MASTER(TASK_NAME, TID)                                      \
-  if (TID == 0) {                                                              \
+#define TOC_REPORT_MASTER(TASK_NAME)                                           \
+  if (omp_get_thread_num() == 0) {                                             \
     TOC_REPORT(TASK_NAME) std::cout << " master reporting." << std::endl;      \
   }
 #else
