@@ -87,10 +87,12 @@ public:
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfi_) {
+      TIC("Nonlinear Assembly")
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AssembleDomainResidual(current_x);
+      TOC_REPORT("Parallel Assembly")
 
       // add to global
       const auto& el_vecs = domain_integ->element_vectors_flat_;
@@ -99,15 +101,19 @@ public:
       for (int i{}; i < el_vecs.size(); ++i) {
         residual.AddElementVector(*el_vdofs[i], el_vecs[i]);
       }
+      TOC_REPORT("Global Push")
     }
 
     // boundary
     for (auto& boundary_integ : boundary_face_nfi_) {
+      TIC("Boundary Assembly")
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryResidual(current_x);
+      TOC_REPORT("Parallel Assembly")
       boundary_integ->AddToGlobalBoundaryResidual(residual);
+      TOC_REPORT("Global Push")
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -128,12 +134,10 @@ public:
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfi_) {
-      TIC("Nonlinear Assembly")
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AssembleDomainGrad(current_x);
-      TOC_REPORT("Parallel Assembly")
 
       // add to global
       const auto& el_mats = domain_integ->element_matrices_flat_;
@@ -143,19 +147,15 @@ public:
         const auto& vdofs = *el_vdofs[i];
         Base_::Grad->AddSubMatrix(vdofs, vdofs, el_mats[i], 0 /* skip_zeros */);
       }
-      TOC_REPORT("Global Push")
     }
 
     // boundary
     for (auto& boundary_integ : boundary_face_nfi_) {
-      TIC("Boundary Assembly")
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryGrad(current_x);
-      TOC_REPORT("Parallel Assembly")
       boundary_integ->AddToGlobalBoundaryGrad(*Base_::Grad);
-      TOC_REPORT("Global Push")
     }
 
     if (!Base_::Grad->Finalized()) {

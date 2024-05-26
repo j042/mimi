@@ -18,7 +18,7 @@
 #define TIC(TITLE)                                                             \
   double start = omp_get_wtime();                                              \
   double now{start}, last{};                                                   \
-  std::string title{TITLE};
+  const std::string title{TITLE};
 #define TOC()                                                                  \
   last = now;                                                                  \
   now = omp_get_wtime();
