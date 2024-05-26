@@ -24,8 +24,8 @@
   now = omp_get_wtime();
 #define TOC_REPORT(TASK_NAME)                                                  \
   TOC()                                                                        \
-      std::cout << title << " - " << TASK_NAME << "Elasped: " << now - last    \
-                << " Cummulative: " << now - start;
+  std::cout << title << " - " << TASK_NAME << "Elasped: " << now - last        \
+            << " Cummulative: " << now - start << std::endl;
 #else
 #define TIC(A)
 #define TOC()
