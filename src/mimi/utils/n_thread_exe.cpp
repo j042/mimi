@@ -5,4 +5,4 @@ namespace mimi::utils {
 #ifdef MIMI_USE_BS_POOL
 BS::thread_pool thread_pool;
 #endif
-}
+} // namespace mimi::utils

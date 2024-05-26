@@ -299,7 +299,6 @@ public:
                                       const int end,
                                       const int ith_call) {
       const int i_thread = mimi::utils::ThisThreadId(ith_call);
-      mimi::utils::PrintSynced("ithread:", i_thread);
 
       // deref basics
       auto& mesh = *meshes_[i_thread];
