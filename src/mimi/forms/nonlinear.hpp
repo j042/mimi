@@ -128,10 +128,12 @@ public:
     // we assemble all first - these will call nthreadexe
     // domain
     for (auto& domain_integ : domain_nfi_) {
+      TIC("Nonlinear Assembly")
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AssembleDomainGrad(current_x);
+      TOC_REPORT("Parallel Assembly")
 
       // add to global
       const auto& el_mats = domain_integ->element_matrices_flat_;
@@ -141,6 +143,7 @@ public:
         const auto& vdofs = *el_vdofs[i];
         Base_::Grad->AddSubMatrix(vdofs, vdofs, el_mats[i], 0 /* skip_zeros */);
       }
+      TOC_REPORT("Global Push")
     }
 
     // boundary
