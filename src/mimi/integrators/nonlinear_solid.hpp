@@ -51,6 +51,8 @@ public:
         scalar_post_process_view_; // this is (residual view / dim) sized vector
                                    // used for post processing
 
+    Vector<std::shared_ptr<MaterialState>> material_states_;
+
     Vector<QuadData> quad_data_;
 
     /// pointer to element and eltrans. don't need it,
@@ -273,7 +275,7 @@ public:
         // prepare quad loop
         i_el_data.n_quad_ = ir.GetNPoints();
         i_el_data.quad_data_.resize(i_el_data.n_quad_);
-
+        i_el_data.material_states_.resize(i_el_data.n_quad_);
         for (int j{}; j < i_el_data.n_quad_; ++j) {
           // get int point - this is just look up within ir
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
@@ -286,6 +288,7 @@ public:
           q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
           q_data.dxi_dX_.SetSize(dim_, dim_);
           q_data.material_state_ = material_->CreateState();
+          i_el_data.material_states_[j] = material_->CreateState();
           q_data.N_.SetSize(i_el_data.n_dof_);
 
           i_el_data.element_->CalcShape(ip, q_data.N_);
@@ -319,7 +322,8 @@ public:
   /// Performs quad loop with element data and temporary data
   void QuadLoop(const mfem::DenseMatrix& x,
                 const int i_thread,
-                // Vector_<QuadData>& q_data, // unused for computing version, unless we are looking at plasticity
+                // Vector_<QuadData>& q_data, // unused for computing version,
+                // unless we are looking at plasticity
                 ElementData& e_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) {
@@ -327,23 +331,33 @@ public:
     auto& int_rules = precomputed_->int_rules_[i_thread];
     const mfem::IntegrationRule& ir = e_data.GetIntRule(*int_rules);
     for (int q{}; q < e_data.n_quad_; ++q) {
-      const mfem::IntegrationPoint& ip = ir.IntPoint(j);
+      const mfem::IntegrationPoint& ip = ir.IntPoint(q);
       e_data.element_trans_->SetIntPoint(&ip);
       e_data.element_->CalcDShape(ip, tmp.dN_dxi_);
-      mfem::CalcInverse();
-    }
-
-    for (QuadData& q : q_data) {
-      // get dx_dX = x * dN_dX
-      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
-
-      // currently we will just use PK1
-      material_->EvaluatePK1(tmp.F_, i_thread, q.material_state_, tmp.stress_);
-      mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
-                          q.dN_dX_,
+      mfem::CalcInverse(e_data.element_trans_->Jacobian(), tmp.dxi_dX_);
+      mfem::Mult(tmp.dN_dxi_, tmp.dxi_dX_, tmp.dN_dX_);
+      mfem::MultAtB(x, tmp.dN_dX_, tmp.F_);
+      material_->EvaluatePK1(tmp.F_,
+                             i_thread,
+                             e_data.material_states_[q],
+                             tmp.stress_);
+      mfem::AddMult_a_ABt(ip.weight * e_data.element_trans_->Weight(),
+                          tmp.dN_dX_,
                           tmp.stress_,
                           residual_matrix);
     }
+
+    // for (QuadData& q : q_data) {
+    //   // get dx_dX = x * dN_dX
+    //   mfem::MultAtB(x, q.dN_dX_, tmp.F_);
+
+    //   // currently we will just use PK1
+    //   material_->EvaluatePK1(tmp.F_, i_thread, q.material_state_, tmp.stress_);
+    //   mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
+    //                       q.dN_dX_,
+    //                       tmp.stress_,
+    //                       residual_matrix);
+    // }
   }
 
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
@@ -377,7 +391,8 @@ public:
             // assemble residual
             QuadLoop(current_element_x,
                      i_thread,
-                     e.quad_data_,
+                     //e.quad_data_,
+                     e,
                      tmp,
                      e.residual_view_);
 
@@ -400,7 +415,7 @@ public:
                 with_respect_to = orig_wrt + diff_step;
                 QuadLoop(current_element_x,
                          i_thread,
-                         e.quad_data_,
+                         e,//e.quad_data_,
                          tmp,
                          tmp.forward_residual_);
 
