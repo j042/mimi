@@ -25,11 +25,11 @@ public:
   /// precomputed data at quad points
   struct QuadData {
     double integration_weight_;
-    mfem::Vector N_;           // basis - used for post processing
-    mfem::DenseMatrix dN_dxi_; // don't really need to save this
+    mfem::Vector N_; // basis - used for post processing
+    // mfem::DenseMatrix dN_dxi_; // don't really need to save this
     mfem::DenseMatrix dN_dX_;
     double det_dX_dxi_;
-    mfem::DenseMatrix dxi_dX_; // J_target_to_reference
+    // mfem::DenseMatrix dxi_dX_; // J_target_to_reference
     std::shared_ptr<MaterialState> material_state_;
   };
 
@@ -218,6 +218,9 @@ public:
       element_matrices.resize(m_elem);
       element_vectors.resize(m_elem);
       element_data.resize(m_elem);
+
+      // tmp
+      mfem::DenseMatrix dN_dxi, dxi_dX;
       // element loop
       for (int g{el_begin}, i{}; g < el_end; ++g, ++i) {
         // prepare element level data
@@ -271,26 +274,23 @@ public:
         // prepare quad loop
         i_el_data.n_quad_ = ir.GetNPoints();
         i_el_data.quad_data_.resize(i_el_data.n_quad_);
-
+        dN_dxi.SetSize(i_el_data.n_dof_, dim_);
+        dxi_dX.SetSize(dim_, dim_);
         for (int j{}; j < i_el_data.n_quad_; ++j) {
           // get int point - this is just look up within ir
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
           i_el_data.element_trans_->SetIntPoint(&ip);
 
           auto& q_data = i_el_data.quad_data_[j];
-          q_data.integration_weight_ = ip.weight;
-
-          q_data.dN_dxi_.SetSize(i_el_data.n_dof_, dim_);
-          q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
-          q_data.dxi_dX_.SetSize(dim_, dim_);
-          q_data.material_state_ = material_->CreateState();
           q_data.N_.SetSize(i_el_data.n_dof_);
+          q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
+          q_data.material_state_ = material_->CreateState();
 
+          q_data.integration_weight_ = ip.weight;
           i_el_data.element_->CalcShape(ip, q_data.N_);
-          i_el_data.element_->CalcDShape(ip, q_data.dN_dxi_);
-          mfem::CalcInverse(i_el_data.element_trans_->Jacobian(),
-                            q_data.dxi_dX_);
-          mfem::Mult(q_data.dN_dxi_, q_data.dxi_dX_, q_data.dN_dX_);
+          i_el_data.element_->CalcDShape(ip, dN_dxi);
+          mfem::CalcInverse(i_el_data.element_trans_->Jacobian(), dxi_dX);
+          mfem::Mult(dN_dxi, dxi_dX, q_data.dN_dX_);
           q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
         }
 

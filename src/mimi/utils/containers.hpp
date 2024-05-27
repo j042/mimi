@@ -100,6 +100,59 @@ void MakeFlat2(NestedVector& nested2, FlatVector& flat, const int total = -1) {
   mimi::utils::PrintDebug("flattend 2 nested. Total:", flat.size());
 }
 
+template<typename MfemDenseMat>
+bool MatrixAllClose(const MfemDenseMat& a,
+                    const MfemDenseMat& b,
+                    const double tol = std::numeric_limits<double>::epsilon()) {
+  const int aw = a.Width();
+  const int bw = b.Width();
+  if (aw != bw) {
+    return false;
+  }
+
+  const int ah = a.Height();
+  const int bh = b.Height();
+  if (ah != bh) {
+    return false;
+  }
+  const double* ad = a.GetData();
+  const double* ad_end = ad + (aw * ah);
+  const double* bd = b.GetData();
+
+  // for (int i{}; i < aw * ah; ++i) {
+  while (ad != ad_end) {
+    if (std::abs(*ad++ - *bd++) > tol) {
+      return false;
+    }
+  }
+  return true;
+}
+
+template<typename MfemVec>
+bool VectorAllClose(const MfemVec& a,
+                    const MfemVec& b,
+                    const double tol = std::numeric_limits<double>::epsilon()) {
+  const int as = a.Size();
+  const int bs = b.Size();
+  if (as != bs) {
+    return false;
+  }
+
+  const double* ad = a.GetData();
+  const double* ad_end = ad + as;
+  const double* bd = b.GetData();
+
+  while (ad != ad_end) {
+    // if (std::abs(*ad++ - *bd++) > tol) {
+    const auto diff = std::abs(*ad++ - *bd++);
+    if (diff > tol) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /// @brief Fully dynamic array that can view another data. Equipped with basic
 /// math operations.
 /// @tparam DataType
