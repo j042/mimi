@@ -76,7 +76,7 @@ class CMakeBuild(build_ext):
             "-DMFEM_USE_SUITESPARSE=ON",
             # "-DMFEM_USE_OPENMP=ON",
             # "-DMFEM_THREAD_SAFE=ON",
-            "-DMFEM_USE_LAPACK=ON",
+            # "-DMFEM_USE_LAPACK=ON",
             "-DMIMI_COMPILE_SPLINEPY=OFF",
             f"-DCMAKE_PREFIX_PATH={site.getsitepackages()[0]}",
         ]

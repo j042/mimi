@@ -11,8 +11,6 @@ namespace mimi::integrators {
 /// given current x coordinate (NOT displacement)
 /// Computes F and passes it to material
 class NonlinearSolid : public NonlinearBase {
-  constexpr static const int kDimDim = 9;
-
 public:
   /// used to project
   std::unique_ptr<mfem::BilinearForm> mass_;
@@ -23,8 +21,6 @@ public:
   mfem::Vector integrated_;
 
   using Base_ = NonlinearBase;
-  template<typename T>
-  using Vector_ = mimi::utils::Vector<T>;
 
   /// precomputed data at quad points
   struct QuadData {
@@ -55,7 +51,7 @@ public:
         scalar_post_process_view_; // this is (residual view / dim) sized vector
                                    // used for post processing
 
-    Vector_<QuadData> quad_data_;
+    Vector<QuadData> quad_data_;
 
     /// pointer to element and eltrans. don't need it,
     /// but maybe for further processing or something
@@ -321,7 +317,7 @@ public:
   /// Performs quad loop with element data and temporary data
   void QuadLoop(const mfem::DenseMatrix& x,
                 const int i_thread,
-                Vector_<QuadData>& q_data,
+                Vector<QuadData>& q_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) {
     MIMI_FUNC()
