@@ -413,6 +413,12 @@ public:
                            mimi::utils::thread_pool.get_thread_count());
 #else
     mimi::utils::PrintInfo("Using std::threads");
+    // mimi::utils::workers.resize(n_threads);
+    for (int i{}; i < n_threads; ++i) {
+      // mimi::utils::workers.push_back(std::move(mimi::utils::Worker()));
+      auto& this_worker = mimi::utils::workers[i];
+      this_worker.StartThread(i);
+    }
 #endif
   }
 
