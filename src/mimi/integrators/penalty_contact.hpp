@@ -405,13 +405,14 @@ public:
 
       assert(operator_frozen_state_);
 
-      if (!(*operator_frozen_state_)) {
-        q.active_ = true;
-        q.new_lagrange_ = p;
-        q.det_F_ = det_F;
-        q.old_g_ = q.g_;
-        q.g_ = g;
-      }
+      // this used to be only for frozen state, but it doesn't make difference.
+      // if ((*operator_frozen_state_)) {
+      q.active_ = true;
+      q.new_lagrange_ = p;
+      q.det_F_ = det_F;
+      q.old_g_ = q.g_;
+      q.g_ = g;
+      //}
 
       if (p == 0.0) {
         continue;
