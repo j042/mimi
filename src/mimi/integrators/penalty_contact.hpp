@@ -437,7 +437,9 @@ public:
 
       const double det_F = tmp.F_.Weight();
 
-      if (!frozen_state_) {
+      assert(operator_frozen_state_);
+
+      if (!(*operator_frozen_state_)) {
         q.active_ = true;
         q.new_lagrange_ = p;
         q.det_F_ = det_F;
@@ -528,7 +530,7 @@ public:
                      bed.residual_view_);
 
             if (assemble_grad_) {
-              assert(frozen_state_);
+              assert(*operator_frozen_state_);
               double* grad_data = bed.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
               double* residual_data = bed.residual_view_.GetData();

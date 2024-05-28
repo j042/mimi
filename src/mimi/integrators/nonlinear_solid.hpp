@@ -69,38 +69,6 @@ public:
 
       return thread_int_rules.Get(geometry_type_, quadrature_order_);
     }
-
-    void FreezeStates() {
-      MIMI_FUNC()
-
-      if (!has_states_)
-        return;
-
-      if (frozen_)
-        return;
-
-      for (auto& q : quad_data_) {
-        q.material_state_->freeze_ = true;
-      }
-
-      frozen_ = true;
-    }
-
-    void MeltStates() {
-      MIMI_FUNC()
-
-      if (!has_states_)
-        return;
-
-      if (!frozen_)
-        return;
-
-      for (auto& q : quad_data_) {
-        q.material_state_->freeze_ = false;
-      }
-
-      frozen_ = false;
-    }
   };
 
   /// temporary containers required in element assembly
@@ -300,7 +268,11 @@ public:
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
 
       // currently we will just use PK1
-      material_->EvaluatePK1(tmp.F_, i_thread, q.material_state_, tmp.stress_);
+      material_->EvaluatePK1(tmp.F_,
+                             i_thread,
+                             q.material_state_,
+                             tmp.stress_,
+                             *operator_frozen_state_);
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,
                           tmp.stress_,
@@ -327,12 +299,6 @@ public:
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
-            if (frozen_state_) {
-              e.FreezeStates();
-            } else {
-              e.MeltStates();
-            }
-
             // assemble residual
             QuadLoop(current_element_x,
                      i_thread,
@@ -342,7 +308,7 @@ public:
 
             // assembly grad
             if (assemble_grad_) {
-              assert(frozen_state_);
+              assert(*operator_frozen_state_);
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();

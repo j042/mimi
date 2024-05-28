@@ -23,8 +23,8 @@ struct MaterialState {
   Vector_<double> scalars_;
 
   /// flag to notify non-accumulation
-  /// use during in FD and line search
-  bool freeze_{false};
+  /// use during in FD and line search will be a variable passed to Evaluate
+  /// Stress
 };
 
 /// Material base.
@@ -145,7 +145,8 @@ public:
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
                               MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     // setup aux
@@ -153,7 +154,7 @@ public:
     mfem::DenseMatrix& P = i_conv[k_P];
 
     // get P
-    EvaluatePK1(F, i_thread, state, P);
+    EvaluatePK1(F, i_thread, state, P, freeze);
 
     // 1 / det(F) * P * F^T
     // they don't have mfem::Mult_a_ABt();
@@ -165,14 +166,15 @@ public:
                               const mfem::DenseMatrix& F_dot,
                               const int& i_thread,
                               MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     // setup aux
     auto& i_conv = stress_conversions_[i_thread];
     mfem::DenseMatrix& P = i_conv[k_P];
 
-    EvaluatePK1(F, F_dot, i_thread, state, sigma);
+    EvaluatePK1(F, F_dot, i_thread, state, sigma, freeze);
 
     // 1 / det(F) * P * F^T
     // they don't have mfem::Mult_a_ABt();
@@ -186,7 +188,8 @@ public:
   virtual void EvaluatePK1(const mfem::DenseMatrix& F,
                            const int& i_thread,
                            MaterialStatePtr_& state,
-                           mfem::DenseMatrix& P) {
+                           mfem::DenseMatrix& P,
+                           const bool freeze) {
     MIMI_FUNC()
 
     // setup aux
@@ -195,7 +198,7 @@ public:
     mfem::DenseMatrix& sigma = i_conv[k_sigma];
 
     // get sigma
-    EvaluateCauchy(F, i_thread, state, sigma);
+    EvaluateCauchy(F, i_thread, state, sigma, freeze);
 
     // P = det(F) * sigma * F^-T
     mfem::CalcInverse(F, F_inv);
@@ -207,7 +210,8 @@ public:
                            const mfem::DenseMatrix& F_dot,
                            const int& i_thread,
                            MaterialStatePtr_& state,
-                           mfem::DenseMatrix& P) {
+                           mfem::DenseMatrix& P,
+                           const bool freeze) {
     MIMI_FUNC()
 
     // setup aux
@@ -216,7 +220,7 @@ public:
     mfem::DenseMatrix& sigma = i_conv[k_sigma];
 
     // get sigma
-    EvaluateCauchy(F, F_dot, i_thread, state, sigma);
+    EvaluateCauchy(F, F_dot, i_thread, state, sigma, freeze);
 
     // P = det(F) * sigma * F^-T
     mfem::CalcInverse(F, F_inv);
@@ -263,7 +267,8 @@ public:
   virtual void EvaluatePK1(const mfem::DenseMatrix& F,
                            const int& i_thread,
                            MaterialStatePtr_&,
-                           mfem::DenseMatrix& P) {
+                           mfem::DenseMatrix& P,
+                           const bool freeze) {
     MIMI_FUNC()
 
     // get aux
@@ -323,7 +328,8 @@ public:
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
                               MaterialStatePtr_&,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     // get aux
@@ -425,7 +431,8 @@ public:
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
                               MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     // get aux
@@ -464,7 +471,7 @@ public:
       s.Add(-sqrt_6_ * G_ * plastic_strain_inc, eta);
 
       // this part should only be done at stepping.
-      if (!state->freeze_) {
+      if (!freeze) {
         accumulated_plastic_strain += plastic_strain_inc;
         plastic_strain.Add(sqrt_3_2_ * plastic_strain_inc, eta);
         beta.Add(sqrt_2_3_ * kinematic_hardening_ * plastic_strain_inc, eta);
@@ -663,7 +670,8 @@ public:
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
                               MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     // get aux
@@ -718,7 +726,7 @@ public:
       N_p.Set(1.5 / q, s);
 
       s.Add(-2.0 * G_ * delta_eqps, N_p);
-      if (!state->freeze_) {
+      if (!freeze) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
       }
@@ -960,7 +968,8 @@ public:
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
                               MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("Invalid call for ", Name());
@@ -970,7 +979,8 @@ public:
                               const mfem::DenseMatrix& F_dot,
                               const int& i_thread,
                               MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     // get aux
@@ -1029,7 +1039,7 @@ public:
       N_p.Set(1.5 / q, s);
 
       s.Add(-2.0 * G_ * delta_eqps, N_p);
-      if (!state->freeze_) {
+      if (!freeze) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
       }
@@ -1241,7 +1251,8 @@ public:
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const int& i_thread,
                               MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("Invalid call for ", Name());
@@ -1353,7 +1364,8 @@ public:
                               const mfem::DenseMatrix& F_dot,
                               const int& i_thread,
                               MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+                              mfem::DenseMatrix& sigma,
+                              const bool freeze) {
     MIMI_FUNC()
 
     // get aux
@@ -1422,7 +1434,7 @@ public:
       N_p.Set(1.5 / q, s);
 
       s.Add(-2.0 * G_ * delta_eqps, N_p);
-      if (!state->freeze_) {
+      if (!freeze) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
 

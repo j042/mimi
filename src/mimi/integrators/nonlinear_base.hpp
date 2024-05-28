@@ -22,10 +22,10 @@ public:
 
   std::string name_;
 
-  /// flag to know when to assembly grad.
+  /// flag to know when to assemble grad.
   bool assemble_grad_{false};
-  /// flag to know when not to accumulate
-  bool frozen_state_{false};
+
+  std::shared_ptr<const bool> operator_frozen_state_;
 
   /// time step size, in case you need them
   /// nonlinear forms will set them
@@ -75,10 +75,14 @@ public:
   };
 
   virtual void AddDomainResidual(const mfem::Vector& current_x,
-                                 mfem::Vector& residual) const;
+                                 mfem::Vector& residual) const {
+    mimi::utils::PrintAndThrowError("AddDomainResidual not implemented");
+  };
   virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
                                         mfem::Vector& residual,
-                                        mfem::SparseMatrix& grad) const;
+                                        mfem::SparseMatrix& grad) const {
+    mimi::utils::PrintAndThrowError("AddDomainResidualAndGrad not implemented");
+  };
 
   /// NThread domain assemble
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {

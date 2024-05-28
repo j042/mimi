@@ -20,6 +20,8 @@ protected:
   // unlike base classes, we will keep one sparse matrix and initialize
   std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
 
+  std::shared_ptr<bool> frozen_state_;
+
   /// data to mass sparse matrix - A is mfem's notation of data array
   const double* mass_A_ = nullptr;
   int mass_n_nonzeros_ = -1;
@@ -29,6 +31,8 @@ public:
   NonlinearSolid(mfem::FiniteElementSpace& fe_space, mfem::GridFunction* x_ref)
       : Base_(fe_space, x_ref) {
     MIMI_FUNC()
+
+    frozen_state_ = std::make_shared<bool>(false);
   }
 
   virtual std::string Name() const { return "NonlinearSolid"; }
@@ -48,13 +52,18 @@ public:
   /// freeze material states - no accumulation
   virtual void FreezeStates() {
     MIMI_FUNC()
-    nonlinear_stiffness_->FreezeStates();
+    *frozen_state_ = true;
   }
 
   /// track material states - accumulation
   virtual void MeltStates() {
     MIMI_FUNC()
-    nonlinear_stiffness_->MeltStates();
+    *frozen_state_ = false;
+  }
+
+  virtual std::shared_ptr<const bool> FrozenStatePointer() const {
+    MIMI_FUNC()
+    return frozen_state_;
   }
 
   virtual void SetParameters(double const& fac0,
@@ -104,6 +113,11 @@ public:
 
     nonlinear_stiffness_ =
         MimiBase_::nonlinear_forms_.at("nonlinear_stiffness");
+    // pass frozen pointer here
+    nonlinear_stiffness_->SetAndPassOperatorFrozenState(FrozenStatePointer());
+    if (contact_) {
+      contact_->SetAndPassOperatorFrozenState(FrozenStatePointer());
+    }
 
     SetupDirichletDofsFromNonlinearStiffness();
 

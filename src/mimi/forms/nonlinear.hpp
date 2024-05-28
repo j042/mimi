@@ -16,6 +16,19 @@ public:
   mimi::utils::Vector<NFIPointer_> domain_nfi_{};
   mimi::utils::Vector<NFIPointer_> boundary_face_nfi_{};
   mimi::utils::Vector<const mfem::Array<int>*> boundary_markers_{};
+  std::shared_ptr<const bool> operator_frozen_state_;
+
+  virtual void SetAndPassOperatorFrozenState(
+      std::shared_ptr<const bool> operator_frozen_state) {
+    MIMI_FUNC()
+    operator_frozen_state_ = operator_frozen_state;
+    for (auto& dnfi : domain_nfi_) {
+      dnfi->operator_frozen_state_ = operator_frozen_state_;
+    }
+    for (auto& bfnfi : boundary_face_nfi_) {
+      bfnfi->operator_frozen_state_ = operator_frozen_state_;
+    }
+  }
 
   using Base_::Base_;
 
@@ -42,28 +55,6 @@ public:
     }
     for (auto& bnfi : boundary_face_nfi_) {
       bnfi->assemble_grad_ = false;
-    }
-  }
-
-  virtual void FreezeStates() {
-    MIMI_FUNC()
-
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->frozen_state_ = true;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->frozen_state_ = true;
-    }
-  }
-
-  virtual void MeltStates() {
-    MIMI_FUNC()
-
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->frozen_state_ = false;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->frozen_state_ = false;
     }
   }
 

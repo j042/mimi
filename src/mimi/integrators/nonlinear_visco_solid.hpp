@@ -94,7 +94,8 @@ public:
                              tmp.F_dot_,
                              i_thread,
                              q.material_state_,
-                             tmp.stress_);
+                             tmp.stress_,
+                             *Base_::operator_frozen_state_);
 
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,
@@ -129,12 +130,6 @@ public:
             mfem::DenseMatrix& current_element_x = tmp.element_x_mat_;
             mfem::DenseMatrix& current_element_v = tmp.element_v_mat_;
 
-            if (frozen_state_) {
-              e.FreezeStates();
-            } else {
-              e.MeltStates();
-            }
-
             // assemble residual
             QuadLoop(current_element_x,
                      current_element_v,
@@ -145,7 +140,7 @@ public:
 
             // assembly grad with FD - currently we only change x value.
             if (assemble_grad_) {
-              assert(frozen_state_);
+              assert(*operator_frozen_state_);
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
