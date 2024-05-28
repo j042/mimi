@@ -33,46 +33,14 @@ public:
     mfem::DenseMatrix element_v_mat_; // v as matrix
     mfem::DenseMatrix F_dot_;
 
-    /// @brief
-    /// @param element_x_data
-    /// @param stress_data
-    /// @param dN_dx_data
-    /// @param F_data
-    /// @param F_inv_data
-    /// @param F_dot_data
-    /// @param dim
-    void SetData(double* element_x_data,
-                 double* element_v_data,
-                 double* stress_data,
-                 double* dN_dx_data,
-                 double* F_data,
-                 double* F_inv_data,
-                 double* F_dot_data,
-                 double* forward_residual_data,
-                 const int dim) {
-      MIMI_FUNC()
-
-      // use base' for overlapping variables
-      BaseTD_::SetData(element_x_data,
-                       stress_data,
-                       dN_dx_data,
-                       F_data,
-                       F_inv_data,
-                       forward_residual_data,
-                       dim);
-
-      element_v_.SetDataAndSize(element_v_data, kMaxTrueDof);
-      element_v_mat_.UseExternalData(element_v_data, kMaxTrueDof, 1);
-      F_dot_.UseExternalData(F_dot_data, dim, dim);
-    }
-
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
 
-      element_x_mat_.SetSize(n_dof, dim);
-      element_v_mat_.SetSize(n_dof, dim);
-      dN_dx_.SetSize(n_dof, dim);
-      forward_residual_.SetSize(n_dof, dim);
+      BaseTD_::SetShape(n_dof, dim);
+
+      element_v_.SetSize(n_dof * dim);
+      element_v_mat_.UseExternalData(element_v_.GetData(), n_dof, dim);
+      F_dot_.SetSize(n_dof, dim);
     }
 
     void CurrentElementSolutionCopy(const mfem::Vector& all_x,
@@ -146,25 +114,6 @@ public:
     auto assemble_element_residual_and_maybe_grad =
         [&](const int begin, const int end, const int i_thread) {
           TemporaryData tmp;
-          // create some space in stack
-          double element_x_data[kMaxTrueDof];
-          double element_v_data[kMaxTrueDof];
-          double stress_data[kDimDim];
-          double dN_dx_data[kMaxTrueDof];
-          double F_data[kDimDim];
-          double F_inv_data[kDimDim];
-          double F_dot_data[kDimDim];
-          double fd_forward_data[kMaxTrueDof];
-          tmp.SetData(element_x_data,
-                      element_v_data,
-                      stress_data,
-                      dN_dx_data,
-                      F_data,
-                      F_inv_data,
-                      F_dot_data,
-                      fd_forward_data,
-                      dim_);
-
           for (int i{begin}; i < end; ++i) {
             // in
             ElementData& e = element_data_[i];
@@ -200,7 +149,8 @@ public:
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
-              double* residual_data = e.residual_view_.GetData();
+              const double* residual_data = e.residual_view_.GetData();
+              const double* fd_forward_data = tmp.forward_residual_.GetData();
               for (int j{}; j < e.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
 

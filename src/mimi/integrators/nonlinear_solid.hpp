@@ -11,9 +11,6 @@ namespace mimi::integrators {
 /// given current x coordinate (NOT displacement)
 /// Computes F and passes it to material
 class NonlinearSolid : public NonlinearBase {
-  constexpr static const int kMaxTrueDof = 100;
-  constexpr static const int kDimDim = 9;
-
 public:
   /// used to project
   std::unique_ptr<mfem::BilinearForm> mass_;
@@ -30,11 +27,9 @@ public:
   /// precomputed data at quad points
   struct QuadData {
     double integration_weight_;
-    mfem::Vector N_;           // basis - used for post processing
-    mfem::DenseMatrix dN_dxi_; // don't really need to save this
+    mfem::Vector N_; // basis - used for post processing
     mfem::DenseMatrix dN_dX_;
     double det_dX_dxi_;
-    mfem::DenseMatrix dxi_dX_; // J_target_to_reference
     std::shared_ptr<MaterialState> material_state_;
   };
 
@@ -112,51 +107,22 @@ public:
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
   struct TemporaryData {
-    /// wraps element_state_data_
     mfem::Vector element_x_;
-    /// wraps element_x_
     mfem::DenseMatrix element_x_mat_;
-    /// wraps stress_data
     mfem::DenseMatrix stress_;
-    /// wraps dN_dx_data
     mfem::DenseMatrix dN_dx_;
-    /// wraps F_data
     mfem::DenseMatrix F_;
-    /// wraps F_inv_data
     mfem::DenseMatrix F_inv_;
-    /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
-
-    /// @brief
-    /// @param element_x_data
-    /// @param stress_data
-    /// @param dN_dx_data
-    /// @param F_data
-    /// @param F_inv_data
-    /// @param dim
-    void SetData(double* element_x_data,
-                 double* stress_data,
-                 double* dN_dx_data,
-                 double* F_data,
-                 double* F_inv_data,
-                 double* forward_residual_data,
-                 const int dim) {
-      MIMI_FUNC()
-
-      element_x_.SetDataAndSize(element_x_data, kMaxTrueDof);
-      element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
-      stress_.UseExternalData(stress_data, dim, dim);
-      dN_dx_.UseExternalData(dN_dx_data, kMaxTrueDof, 1);
-      F_.UseExternalData(F_data, dim, dim);
-      F_inv_.UseExternalData(F_inv_data, dim, dim);
-      forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
-    }
 
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
-
-      element_x_mat_.SetSize(n_dof, dim);
+      element_x_.SetSize(n_dof * dim); // will be resized in getsubvector
+      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
+      stress_.SetSize(dim, dim);
       dN_dx_.SetSize(n_dof, dim);
+      F_.SetSize(dim, dim);
+      F_inv_.SetSize(dim, dim);
       forward_residual_.SetSize(n_dof, dim);
     }
 
@@ -231,6 +197,8 @@ public:
       // thread's obj
       auto& int_rules = precomputed_->int_rules_[i_thread];
 
+      mfem::DenseMatrix dN_dxi, dxi_dX;
+
       // element loop
       for (int i{el_begin}; i < el_end; ++i) {
         // prepare element level data
@@ -256,11 +224,6 @@ public:
         // for structure simulations, tdof and vdof are the same
         const int n_tdof = i_el_data.n_dof_ * dim_;
         i_el_data.n_tdof_ = n_tdof;
-        if (kMaxTrueDof < n_tdof) {
-          mimi::utils::PrintAndThrowError(
-              "kMaxTrueDof smaller than required space.",
-              "Please recompile after setting a bigger number");
-        }
 
         // also allocate element based vectors and matrix (assembly output)
         i_el_data.element_residual_ = &(*element_vectors_)[i];
@@ -298,17 +261,16 @@ public:
           auto& q_data = i_el_data.quad_data_[j];
           q_data.integration_weight_ = ip.weight;
 
-          q_data.dN_dxi_.SetSize(i_el_data.n_dof_, dim_);
+          dN_dxi.SetSize(i_el_data.n_dof_, dim_);
           q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
-          q_data.dxi_dX_.SetSize(dim_, dim_);
+          dxi_dX.SetSize(dim_, dim_);
           q_data.material_state_ = material_->CreateState();
           q_data.N_.SetSize(i_el_data.n_dof_);
 
           i_el_data.element_->CalcShape(ip, q_data.N_);
-          i_el_data.element_->CalcDShape(ip, q_data.dN_dxi_);
-          mfem::CalcInverse(i_el_data.element_trans_->Jacobian(),
-                            q_data.dxi_dX_);
-          mfem::Mult(q_data.dN_dxi_, q_data.dxi_dX_, q_data.dN_dX_);
+          i_el_data.element_->CalcDShape(ip, dN_dxi);
+          mfem::CalcInverse(i_el_data.element_trans_->Jacobian(), dxi_dX);
+          mfem::Mult(dN_dxi, dxi_dX, q_data.dN_dX_);
           q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
         }
 
@@ -353,27 +315,12 @@ public:
     auto assemble_element_residual_and_maybe_grad =
         [&](const int begin, const int end, const int i_thread) {
           TemporaryData tmp;
-          // create some space in stack
-          double element_x_data[kMaxTrueDof];
-          double stress_data[kDimDim];
-          double dN_dx_data[kMaxTrueDof];
-          double F_data[kDimDim];
-          double F_inv_data[kDimDim];
-          double fd_forward_data[kMaxTrueDof];
-          tmp.SetData(element_x_data,
-                      stress_data,
-                      dN_dx_data,
-                      F_data,
-                      F_inv_data,
-                      fd_forward_data,
-                      dim_);
-
           for (int i{begin}; i < end; ++i) {
             // in
             ElementData& e = element_data_[i];
             e.residual_view_ = 0.0;
 
-            // set shape for tmp data
+            // set shape for tmp data - first call will allocate
             tmp.SetShape(e.n_dof_, dim_);
 
             // get current element solution as matrix
@@ -399,7 +346,8 @@ public:
 
               double* grad_data = e.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
-              double* residual_data = e.residual_view_.GetData();
+              const double* residual_data = e.residual_view_.GetData();
+              const double* fd_forward_data = tmp.forward_residual_.GetData();
               for (int j{}; j < e.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
 
