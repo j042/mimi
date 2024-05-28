@@ -119,7 +119,7 @@ def show():
     )
 
 
-coe = 2e11
+coe = 1e11
 # initialize a plotter
 plt = gus.show([s, curv], close=False)
 n = le.nonlinear_from2("contact")
@@ -134,12 +134,12 @@ for i in range(1000):
         le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
         bdr_norm = np.linalg.norm(n.boundary_residual())
-        print("augumenting")
+        print("augumenting", n.boundary_residual().sum())
         print()
         if ni.gap_norm() < 1e-4:
             print(ni.gap_norm(), "exit!")
             break
-    print("final solve!")
+    print("final solve!", n.boundary_residual().sum())
     le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True, False)
     le.update_contact_lagrange()
     scene.coefficient = 0.0

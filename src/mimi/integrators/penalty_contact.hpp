@@ -33,9 +33,6 @@ void AddMult_a_VWt(const DataType a,
 /// implements methods presented in "Sauer and De Lorenzis. An unbiased
 /// computational contact formulation for 3D friction (DOI: 10.1002/nme.4794)
 class PenaltyContact : public NonlinearBase {
-  constexpr static const int kMaxTrueDof = 50;
-  constexpr static const int kDimDim = 9;
-
 public:
   using Base_ = NonlinearBase;
   template<typename T>
@@ -57,9 +54,7 @@ public:
     mfem::Vector N_; // shape
     /// thanks to Jac's hint, it turns out we can just work with this for
     /// boundary
-    mfem::DenseMatrix dN_dxi_; // don't really need to save this
-    // mfem::DenseMatrix dN_dX_;  // used to compute F
-    // mfem::DenseMatrix dxi_dX_; // J_target_to_reference
+    mfem::DenseMatrix dN_dxi_; // shape grad
 
     mimi::coefficients::NearestDistanceBase::Query distance_query_;
     mimi::coefficients::NearestDistanceBase::Results distance_results_;
@@ -115,38 +110,14 @@ public:
     mfem::DenseMatrix element_x_mat_;
     /// wraps F_data
     mfem::DenseMatrix F_;
-    /// wraps F_inv_data
-    mfem::DenseMatrix F_inv_;
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
 
-    /// @brief
-    /// @param element_x_data
-    /// @param stress_data
-    /// @param dN_dx_data
-    /// @param F_data
-    /// @param F_inv_data
-    /// @param dim
-    void SetData(double* element_x_data,
-                 double* F_data,
-                 double* F_inv_data,
-                 double* forward_residual_data,
-                 const int para_dim,
-                 const int dim) {
-      MIMI_FUNC()
-
-      element_x_.SetDataAndSize(element_x_data, kMaxTrueDof);
-      element_x_mat_.UseExternalData(element_x_data, kMaxTrueDof, 1);
-      // F_.UseExternalData(F_data, dim, para_dim);
-      // F_inv_.UseExternalData(F_inv_data, dim, para_dim);
-      F_.UseExternalData(F_data, dim, para_dim);
-      F_inv_.UseExternalData(F_inv_data, para_dim, dim);
-      forward_residual_.UseExternalData(forward_residual_data, kMaxTrueDof, 1);
-    }
-
     void SetShape(const int n_dof, const int dim) {
       MIMI_FUNC()
-      element_x_mat_.SetSize(n_dof, dim);
+      element_x_.SetSize(n_dof * dim);
+      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
+      F_.SetSize(dim, dim - 1);
       forward_residual_.SetSize(n_dof, dim);
     }
 
@@ -274,11 +245,6 @@ public:
 
         // quick size check
         const int n_tdof = i_bed.n_tdof_;
-        if (kMaxTrueDof < n_tdof) {
-          mimi::utils::PrintAndThrowError(
-              "kMaxTrueDof smaller than required space.",
-              "Please recompile after setting a bigger number");
-        }
 
         // now, setup some more from local properties
         i_bed.element_residual_ = &(*boundary_element_vectors_)[i];
@@ -497,18 +463,6 @@ public:
     auto assemble_face_residual_and_maybe_grad =
         [&](const int begin, const int end, const int i_thread) {
           TemporaryData tmp;
-          // create some space in stack
-          double element_x_data[kMaxTrueDof];
-          double F_data[kDimDim];
-          double F_inv_data[kDimDim];
-          double fd_forward_data[kMaxTrueDof];
-          tmp.SetData(element_x_data,
-                      F_data,
-                      F_inv_data,
-                      fd_forward_data,
-                      boundary_para_dim_,
-                      dim_);
-
           // this loops marked boundary elements
           for (int i{begin}; i < end; ++i) {
             // get bed
@@ -533,7 +487,8 @@ public:
               assert(*operator_frozen_state_);
               double* grad_data = bed.grad_view_.GetData();
               double* solution_data = current_element_x.GetData();
-              double* residual_data = bed.residual_view_.GetData();
+              const double* residual_data = bed.residual_view_.GetData();
+              const double* fd_forward_data = tmp.forward_residual_.GetData();
               for (int j{}; j < bed.n_tdof_; ++j) {
                 tmp.forward_residual_ = 0.0;
 
