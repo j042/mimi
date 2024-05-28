@@ -39,7 +39,7 @@ public:
     return has_task_;
   }
 
-  bool Wait() {
+  void Wait() {
     MIMI_FUNC()
 
     while (HasTask()) {
@@ -62,6 +62,7 @@ public:
         TaskFinished();
       }
     });
+    mimi::utils::PrintSynced("thread", id, "started!");
   }
 
   // void EndThread() {
