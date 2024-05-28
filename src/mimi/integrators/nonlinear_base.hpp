@@ -74,6 +74,12 @@ public:
     mimi::utils::PrintAndThrowError("Prepare not implemented");
   };
 
+  virtual void AddDomainResidual(const mfem::Vector& current_x,
+                                 mfem::Vector& residual) const;
+  virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
+                                        mfem::Vector& residual,
+                                        mfem::SparseMatrix& grad) const;
+
   /// NThread domain assemble
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
