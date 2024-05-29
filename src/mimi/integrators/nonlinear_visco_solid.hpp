@@ -83,6 +83,7 @@ public:
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) {
     MIMI_FUNC()
+    const bool frozen = *Base_::operator_frozen_state_;
 
     for (QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
@@ -95,7 +96,7 @@ public:
                              i_thread,
                              q.material_state_,
                              tmp.stress_,
-                             *Base_::operator_frozen_state_);
+                             frozen);
 
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,

@@ -262,7 +262,7 @@ public:
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) {
     MIMI_FUNC()
-
+    const bool frozen = *operator_frozen_state_;
     for (QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
