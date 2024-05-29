@@ -76,7 +76,7 @@ public:
 
   virtual void AddDomainResidual(const mfem::Vector& current_x,
                                  const int nthreads,
-                                 mfem::Vector& residual) {
+                                 mfem::Vector& residual) const {
     mimi::utils::PrintAndThrowError("AddDomainResidual not implemented");
   };
 
