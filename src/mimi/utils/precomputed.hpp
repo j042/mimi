@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <memory>
 #include <unordered_map>
 
@@ -106,6 +107,10 @@ public:
   Vector_<std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>
       reference_to_target_boundary_trans_;
 
+  // compute direct access of sorted A
+  Vector_<std::shared_ptr<Vector_<int>>> domain_A_ids_;
+  Vector_<std::shared_ptr<Vector_<int>>> boundary_A_ids_;
+
   /// @brief
   std::unordered_map<std::string, Vector_<Vector_<double>>> scalars_;
 
@@ -163,6 +168,8 @@ public:
         reference_to_target_element_trans_;
     other->reference_to_target_boundary_trans_ =
         reference_to_target_boundary_trans_;
+    other->domain_A_ids_ = domain_A_ids_;
+    other->boundary_A_ids_ = boundary_A_ids_;
   }
 
   virtual void Setup(const mfem::FiniteElementSpace& fe_space,
@@ -211,12 +218,40 @@ public:
     boundary_elements_.resize(n_b_elem);
     reference_to_target_element_trans_.resize(n_elem);
     reference_to_target_boundary_trans_.resize(n_b_elem);
+    domain_A_ids_.resize(n_elem);
+    boundary_A_ids_.resize(n_b_elem);
+
+    // create sparcity pattern
+    // we need non const fespace
+    mfem::BilinearForm bilin(fe_spaces_[0].get());
+    bilin.UsePrecomputedSparsity(1);
+    bilin.AllocateMatrix();
+    mfem::SparseMatrix& spmat = bilin.SpMat();
+    spmat.Finalize();
+    spmat.SortColumnIndices();
+    double* A = spmat.GetData();
+    const int A_size = spmat.NumNonZeroElems();
+    // fill out as range
+    for (int i{}; i < A_size; ++i) {
+      A[i] = static_cast<double>(i);
+    }
 
     auto process_elems =
         [&](const int begin, const int end, const int i_thread) {
           auto& mesh = *meshes_[i_thread];
           auto& fes = *fe_spaces_[i_thread];
 
+          // make a view of sparsemat - sparsemat has internal variables, thus,
+          // not thread safe
+          mfem::SparseMatrix sparse(spmat.GetI(),
+                                    spmat.GetJ(),
+                                    spmat.GetData(),
+                                    spmat.Height(),
+                                    spmat.Height(),
+                                    false,
+                                    false,
+                                    spmat.ColumnsAreSorted());
+          mfem::DenseMatrix sub_mat;
           for (int i{begin}; i < end; ++i) {
             // we will create elements and v dof trans (dof trans is used in
             // case of prolongation, but not used here.)
@@ -248,6 +283,21 @@ public:
                   "There's doftrans. There shouldn't be one according to the "
                   "documentations.");
             }
+
+            const int vd_size = v_dof->Size();
+            const int mat_size = vd_size * vd_size;
+            auto& Aij_ptr = domain_A_ids_[i];
+            Aij_ptr = std::make_shared<mimi::utils::Vector<int>>();
+            Aij_ptr->resize(mat_size);
+            auto& Aij = *Aij_ptr;
+            sub_mat.SetSize(vd_size, vd_size);
+            sparse.GetSubMatrix(*v_dof, *v_dof, sub_mat);
+            const double* sm_data = sub_mat.GetData();
+            for (int i{}; i < mat_size; ++i) {
+              // WARNING mfem uses int, we use int, if this is a problem, we
+              // have a problem
+              Aij[i] = static_cast<int>(std::lround(sm_data[i]));
+            }
           }
         };
 
@@ -256,7 +306,15 @@ public:
                                       const int i_thread) {
       auto& mesh = *meshes_[i_thread];
       auto& fes = *fe_spaces_[i_thread];
-
+      mfem::SparseMatrix sparse(spmat.GetI(),
+                                spmat.GetJ(),
+                                spmat.GetData(),
+                                spmat.Height(),
+                                spmat.Height(),
+                                false,
+                                false,
+                                spmat.ColumnsAreSorted());
+      mfem::DenseMatrix sub_mat;
       for (int i{begin}; i < end; ++i) {
         // create element,
         auto& b_el = boundary_elements_[i];
@@ -292,11 +350,25 @@ public:
               "There's doftrans. There shouldn't be one according to the "
               "documentations.");
         }
+
+        const int vd_size = boundary_v_dof->Size();
+        const int mat_size = vd_size * vd_size;
+        auto& Aij_ptr = boundary_A_ids_[i];
+        Aij_ptr = std::make_shared<mimi::utils::Vector<int>>();
+        Aij_ptr->resize(mat_size);
+        auto& Aij = *Aij_ptr;
+        sub_mat.SetSize(vd_size, vd_size);
+        sparse.GetSubMatrix(*boundary_v_dof, *boundary_v_dof, sub_mat);
+        const double* sm_data = sub_mat.GetData();
+        for (int i{}; i < mat_size; ++i) {
+          // WARNING mfem uses int, we use int, if this is a problem, we
+          // have a problem
+          Aij[i] = static_cast<int>(std::lround(sm_data[i]));
+        }
       }
     };
 
     mimi::utils::NThreadExe(process_elems, n_elem, nthreads);
-
     mimi::utils::NThreadExe(process_boundary_elems, n_b_elem, nthreads);
   }
 };

@@ -1,8 +1,11 @@
 #pragma once
 
+#include <memory>
+
 #include <mfem.hpp>
 
 #include "mimi/operators/linear_elasticity.hpp"
+#include "mimi/utils/containers.hpp"
 
 namespace mimi::operators {
 
@@ -92,7 +95,7 @@ public:
   virtual void Setup() {
     MIMI_FUNC()
 
-    // setup basics -> these fianlizes sparse matrices for bilinear forms
+    // setup basics -> these finalizes sparse matrices for bilinear forms
     Base_::SetupBilinearMassForm();
     Base_::SetupNonlinearContactForm();
     Base_::SetupBilinearViscosityForm();
