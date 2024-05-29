@@ -30,7 +30,7 @@ public:
     mfem::Vector N_; // basis - used for post processing
     mfem::DenseMatrix dN_dX_;
     double det_dX_dxi_;
-    std::shared_ptr<MaterialState> material_state_;
+    mutable std::shared_ptr<MaterialState> material_state_;
   };
 
   struct ElementData {
@@ -258,12 +258,12 @@ public:
   /// Performs quad loop with element data and temporary data
   void QuadLoop(const mfem::DenseMatrix& x,
                 const int i_thread,
-                Vector_<QuadData>& q_data,
+                const Vector_<QuadData>& q_data,
                 TemporaryData& tmp,
-                mfem::DenseMatrix& residual_matrix) {
+                mfem::DenseMatrix& residual_matrix) const {
     MIMI_FUNC()
     const bool frozen = *operator_frozen_state_;
-    for (QuadData& q : q_data) {
+    for (const QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
 
@@ -343,6 +343,114 @@ public:
                             n_elements_,
                             n_threads_);
   }
+
+  virtual void AddDomainResidual(const mfem::Vector& current_x,
+                                 const int n_threads,
+                                 mfem::Vector& residual) const {
+    std::mutex residual_mutex;
+    // lambda for nthread assemble
+    auto assemble_element_residual_and_contribute =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          mfem::Vector local_residual;
+          mfem::DenseMatrix res_view;
+          for (int i{begin}; i < end; ++i) {
+            // in
+            const ElementData& e = element_data_[i];
+            // e.residual_view_ = 0.0;
+            local_residual.SetSize(e.n_tdof_);
+            local_residual = 0.0;
+            res_view.UseExternalData(local_residual.GetData(), e.n_tdof_, dim_);
+
+            // set shape for tmp data - first call will allocate
+            tmp.SetShape(e.n_dof_, dim_);
+
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, e);
+
+            // assemble residual
+            QuadLoop(current_element_x, i_thread, e.quad_data_, tmp, res_view);
+
+            // push right away
+            std::lock_guard<std::mutex> lock(residual_mutex);
+            residual.AddElementVector(*e.v_dofs_, local_residual);
+          }
+        };
+
+    mimi::utils::NThreadExe(assemble_element_residual_and_contribute,
+                            n_elements_,
+                            n_threads_);
+  };
+  virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
+                                        mfem::Vector& residual,
+                                        mfem::SparseMatrix& grad) const {
+
+    std::mutex residual_mutex;
+    // lambda for nthread assemble
+    auto assemble_element_residual_and_grad_then_contribute =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          mfem::Vector local_residual;
+          mfem::DenseMatrix res_view;
+          mfem::DenseMatrix local_grad;
+          for (int i{begin}; i < end; ++i) {
+            // in
+            const ElementData& e = element_data_[i];
+            // e.residual_view_ = 0.0;
+            local_residual.SetSize(e.n_tdof_);
+            local_residual = 0.0;
+            res_view.UseExternalData(local_residual.GetData(), e.n_dof_, dim_);
+            local_grad.SetSize(e.n_tdof_, e.n_tdof_);
+
+            // set shape for tmp data - first call will allocate
+            tmp.SetShape(e.n_dof_, dim_);
+
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, e);
+
+            // assemble residual
+            QuadLoop(current_element_x, i_thread, e.quad_data_, tmp, res_view);
+
+            double* grad_data = local_grad.GetData();
+            double* solution_data = current_element_x.GetData();
+            const double* residual_data = local_residual.GetData();
+            const double* fd_forward_data = tmp.forward_residual_.GetData();
+            for (int j{}; j < e.n_tdof_; ++j) {
+              tmp.forward_residual_ = 0.0;
+
+              double& with_respect_to = *solution_data++;
+              const double orig_wrt = with_respect_to;
+              const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+              const double diff_step_inv = 1. / diff_step;
+
+              with_respect_to = orig_wrt + diff_step;
+              QuadLoop(current_element_x,
+                       i_thread,
+                       e.quad_data_,
+                       tmp,
+                       tmp.forward_residual_);
+
+              for (int k{}; k < e.n_tdof_; ++k) {
+                *grad_data++ =
+                    (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
+              }
+              with_respect_to = orig_wrt;
+            }
+
+            // push right away
+            std::lock_guard<std::mutex> lock(residual_mutex);
+            const auto& vdofs = *e.v_dofs_;
+            residual.AddElementVector(vdofs, local_residual);
+            grad.AddSubMatrix(vdofs, vdofs, local_grad, 0);
+          }
+        };
+
+    mimi::utils::NThreadExe(assemble_element_residual_and_grad_then_contribute,
+                            n_elements_,
+                            n_threads_);
+  };
 
   /// @brief assembles grad. In fact, it is already done in domain residual and
   /// this doesn't do anything.
