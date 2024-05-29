@@ -81,15 +81,17 @@ public:
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
-      domain_integ->AssembleDomainResidual(current_x);
 
-      // add to global
-      const auto& el_vecs = *domain_integ->element_vectors_;
-      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
+      domain_integ->AddDomainResidual(current_x, -1, residual);
+      // domain_integ->AssembleDomainResidual(current_x);
 
-      for (int i{}; i < el_vecs.size(); ++i) {
-        residual.AddElementVector(*el_vdofs[i], el_vecs[i]);
-      }
+      // // add to global
+      // const auto& el_vecs = *domain_integ->element_vectors_;
+      // const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
+
+      // for (int i{}; i < el_vecs.size(); ++i) {
+      //   residual.AddElementVector(*el_vdofs[i], el_vecs[i]);
+      // }
     }
 
     // boundary
@@ -111,7 +113,22 @@ public:
     MIMI_FUNC();
 
     if (Grad == NULL) {
-      Base_::Grad = new mfem::SparseMatrix(Base_::fes->GetVSize());
+      // this is an adhoc solution to get sparsity pattern
+      // we know one of nl integrator should have precomputed, so access matrix
+      // from that
+      mfem::SparseMatrix* sparsity_pattern;
+      if (domain_nfi_.size() > 0) {
+        sparsity_pattern =
+            domain_nfi_[0]->precomputed_->sparsity_pattern_.get();
+      } else if (boundary_face_nfi_.size() > 0) {
+        sparsity_pattern =
+            boundary_face_nfi_[0]->precomputed_->sparsity_pattern_.get();
+      } else {
+        mimi::utils::PrintAndThrowError(
+            "No sparsity pattern from precomputed.");
+      }
+      Base_::Grad = new mfem::SparseMatrix(*sparsity_pattern); // deep copy
+      *Base_::Grad = 0.0;
     } else {
       *Base_::Grad = 0.0;
     }

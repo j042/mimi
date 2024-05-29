@@ -345,7 +345,7 @@ public:
   }
 
   virtual void AddDomainResidual(const mfem::Vector& current_x,
-                                 const int n_threads,
+                                 const int nthreads,
                                  mfem::Vector& residual) const {
     std::mutex residual_mutex;
     // lambda for nthread assemble
@@ -360,7 +360,7 @@ public:
             // e.residual_view_ = 0.0;
             local_residual.SetSize(e.n_tdof_);
             local_residual = 0.0;
-            res_view.UseExternalData(local_residual.GetData(), e.n_tdof_, dim_);
+            res_view.UseExternalData(local_residual.GetData(), e.n_dof_, dim_);
 
             // set shape for tmp data - first call will allocate
             tmp.SetShape(e.n_dof_, dim_);
@@ -380,9 +380,10 @@ public:
 
     mimi::utils::NThreadExe(assemble_element_residual_and_contribute,
                             n_elements_,
-                            n_threads_);
+                            (nthreads < 1) ? n_threads_ : nthreads);
   };
   virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
+                                        const int nthreads,
                                         mfem::Vector& residual,
                                         mfem::SparseMatrix& grad) const {
 
@@ -443,13 +444,18 @@ public:
             std::lock_guard<std::mutex> lock(residual_mutex);
             const auto& vdofs = *e.v_dofs_;
             residual.AddElementVector(vdofs, local_residual);
-            grad.AddSubMatrix(vdofs, vdofs, local_grad, 0);
+            double* A = grad.GetData();
+            const double* local_A = local_grad.GetData();
+            const auto& A_ids = *precomputed_->domain_A_ids_[i];
+            for (int k{}; k < A_ids.size(); ++k) {
+              A[A_ids[k]] += *local_A++;
+            }
           }
         };
 
     mimi::utils::NThreadExe(assemble_element_residual_and_grad_then_contribute,
                             n_elements_,
-                            n_threads_);
+                            (nthreads < 0) ? n_threads_ : nthreads);
   };
 
   /// @brief assembles grad. In fact, it is already done in domain residual and

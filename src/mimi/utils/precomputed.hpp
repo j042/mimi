@@ -347,10 +347,10 @@ public:
       sparse.GetSubMatrix(vd, vd, sub_mat);
 
       const double* sm_data = sub_mat.GetData();
-      for (int i{}; i < mat_size; ++i) {
+      for (int j{}; j < mat_size; ++j) {
         // WARNING mfem uses int, we use int, if this is a problem, we
         // have a problem
-        Aij[i] = static_cast<int>(std::lround(sm_data[i]));
+        Aij[j] = static_cast<int>(std::lround(sm_data[j]));
       }
     }
 
@@ -368,10 +368,10 @@ public:
       sparse.GetSubMatrix(vd, vd, sub_mat);
 
       const double* sm_data = sub_mat.GetData();
-      for (int i{}; i < mat_size; ++i) {
+      for (int j{}; j < mat_size; ++j) {
         // WARNING mfem uses int, we use int, if this is a problem, we
         // have a problem
-        Aij[i] = static_cast<int>(std::lround(sm_data[i]));
+        Aij[j] = static_cast<int>(std::lround(sm_data[j]));
       }
     }
   }
