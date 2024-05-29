@@ -346,21 +346,16 @@ public:
 
   virtual void AddDomainResidual(const mfem::Vector& current_x,
                                  const int nthreads,
-                                 mfem::Vector& residual) const {
+                                 mfem::Vector& residual) {
     std::mutex residual_mutex;
     // lambda for nthread assemble
     auto assemble_element_residual_and_contribute =
         [&](const int begin, const int end, const int i_thread) {
           TemporaryData tmp;
-          mfem::Vector local_residual;
-          mfem::DenseMatrix res_view;
           for (int i{begin}; i < end; ++i) {
             // in
-            const ElementData& e = element_data_[i];
-            // e.residual_view_ = 0.0;
-            local_residual.SetSize(e.n_dof_ * dim_);
-            local_residual = 0.0;
-            res_view.UseExternalData(local_residual.GetData(), e.n_dof_, dim_);
+            ElementData& e = element_data_[i];
+            e.residual_view_ = 0.0;
 
             // set shape for tmp data - first call will allocate
             tmp.SetShape(e.n_dof_, dim_);
@@ -370,12 +365,19 @@ public:
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
             // assemble residual
-            QuadLoop(current_element_x, i_thread, e.quad_data_, tmp, res_view);
+            QuadLoop(current_element_x,
+                     i_thread,
+                     e.quad_data_,
+                     tmp,
+                     e.residual_view_);
+          }
 
-            // push right away
-            {
-              const std::lock_guard<std::mutex> lock(residual_mutex);
-              residual.AddElementVector(*e.v_dofs_, local_residual);
+          {
+            // critical push
+            const std::lock_guard<std::mutex> lock(residual_mutex);
+            for (int i{begin}; i < end; ++i) {
+              const ElementData& e = element_data_[i];
+              residual.AddElementVector(*e.v_dofs_, *e.element_residual_);
             }
           }
         };
