@@ -83,15 +83,6 @@ public:
       domain_integ->second_effective_dt_ = second_effective_dt_;
 
       domain_integ->AddDomainResidual(current_x, -1, residual);
-      // domain_integ->AssembleDomainResidual(current_x);
-
-      // // add to global
-      // const auto& el_vecs = *domain_integ->element_vectors_;
-      // const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
-
-      // for (int i{}; i < el_vecs.size(); ++i) {
-      //   residual.AddElementVector(*el_vdofs[i], el_vecs[i]);
-      // }
     }
 
     // boundary
@@ -106,6 +97,30 @@ public:
     // set true dofs - if we have time, we could use nthread this.
     for (const auto& tdof : Base_::ess_tdof_list) {
       residual[tdof] = 0.0;
+    }
+  }
+
+  virtual void AddMultGrad(const mfem::Vector& current_x,
+                           const int nthread,
+                           mfem::Vector& residual,
+                           mfem::SparseMatrix& grad) const {
+    for (auto& domain_integ : domain_nfi_) {
+      domain_integ->dt_ = dt_;
+      domain_integ->first_effective_dt_ = first_effective_dt_;
+      domain_integ->second_effective_dt_ = second_effective_dt_;
+      domain_integ->AddDomainResidualAndGrad(current_x,
+                                             nthread,
+                                             residual,
+                                             grad);
+    }
+
+    // boundary
+    for (auto& boundary_integ : boundary_face_nfi_) {
+      boundary_integ->dt_ = dt_;
+      boundary_integ->first_effective_dt_ = first_effective_dt_;
+      boundary_integ->second_effective_dt_ = second_effective_dt_;
+      boundary_integ->AssembleBoundaryResidual(current_x);
+      boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
   }
 

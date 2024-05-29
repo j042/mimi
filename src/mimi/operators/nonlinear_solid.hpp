@@ -232,14 +232,25 @@ public:
     // NOTE, if all the values are sorted, we can do nthread local to global
     // update
 
-    // initalize
-    // 1. mass - just copy A
-    std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
+    double* J_data = jacobian_->GetData();
+    const int nnz = jacobian_->NumNonZeroElems();
+    const double* K_data = dynamic_cast<mfem::SparseMatrix*>(
+                               &nonlinear_stiffness_->GetGradient(temp_x))
+                               ->GetData();
 
-    // 2. nonlinear stiffness
-    jacobian_->Add(fac0_,
-                   *dynamic_cast<mfem::SparseMatrix*>(
-                       &nonlinear_stiffness_->GetGradient(temp_x)));
+    // get mass and nonlin stiff at the same time
+    for (int i{}; i < mass_n_nonzeros_; ++i) {
+      J_data[i] = mass_A_[i] + (fac0_ * K_data[i]);
+    }
+
+    // // initalize
+    // // 1. mass - just copy A
+    // std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
+
+    // // 2. nonlinear stiffness
+    // jacobian_->Add(fac0_,
+    //                *dynamic_cast<mfem::SparseMatrix*>(
+    //                    &nonlinear_stiffness_->GetGradient(temp_x)));
 
     // 3. viscosity
     if (viscosity_) {
