@@ -127,7 +127,13 @@ public:
         mimi::utils::PrintAndThrowError(
             "No sparsity pattern from precomputed.");
       }
+      if (!sparsity_pattern) {
+        mimi::utils::PrintAndThrowError("Invalid sparsity pattern saved");
+      }
+
+      mimi::utils::PrintInfo("sparsemat");
       Base_::Grad = new mfem::SparseMatrix(*sparsity_pattern); // deep copy
+      mimi::utils::PrintInfo("sparsemat copied");
       *Base_::Grad = 0.0;
     } else {
       *Base_::Grad = 0.0;
@@ -139,16 +145,18 @@ public:
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
-      domain_integ->AssembleDomainGrad(current_x);
+      domain_integ->AddDomainGrad(current_x, -1, *Base_::Grad);
+      // domain_integ->AssembleDomainGrad(current_x);
 
-      // add to global
-      const auto& el_mats = *domain_integ->element_matrices_;
-      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
+      // // add to global
+      // const auto& el_mats = *domain_integ->element_matrices_;
+      // const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
 
-      for (int i{}; i < el_mats.size(); ++i) {
-        const auto& vdofs = *el_vdofs[i];
-        Base_::Grad->AddSubMatrix(vdofs, vdofs, el_mats[i], 0 /* skip_zeros */);
-      }
+      // for (int i{}; i < el_mats.size(); ++i) {
+      //   const auto& vdofs = *el_vdofs[i];
+      //   Base_::Grad->AddSubMatrix(vdofs, vdofs, el_mats[i], 0 /* skip_zeros
+      //   */);
+      // }
     }
 
     // boundary

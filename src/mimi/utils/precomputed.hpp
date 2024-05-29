@@ -171,6 +171,7 @@ public:
         reference_to_target_boundary_trans_;
     other->domain_A_ids_ = domain_A_ids_;
     other->boundary_A_ids_ = boundary_A_ids_;
+    other->sparsity_pattern_ = sparsity_pattern_;
   }
 
   virtual void Setup(const mfem::FiniteElementSpace& fe_space,

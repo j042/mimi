@@ -127,14 +127,14 @@ for i in range(1000):
     old = 1
     b_old = 1
     scene.coefficient = coe
-    for j in range(100):
+    for j in range(10):
         sol()
         le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
         bdr_norm = np.linalg.norm(n.boundary_residual())
         print("augumenting", bdr_norm)
         print()
-        if ni.gap_norm() < 1e-7:
+        if ni.gap_norm() < 1e-5:
             print(ni.gap_norm(), "exit!")
             break
     print("final solve!")

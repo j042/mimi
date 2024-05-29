@@ -272,7 +272,7 @@ public:
                              i_thread,
                              q.material_state_,
                              tmp.stress_,
-                             *operator_frozen_state_);
+                             frozen);
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,
                           tmp.stress_,
@@ -358,7 +358,7 @@ public:
             // in
             const ElementData& e = element_data_[i];
             // e.residual_view_ = 0.0;
-            local_residual.SetSize(e.n_tdof_);
+            local_residual.SetSize(e.n_dof_ * dim_);
             local_residual = 0.0;
             res_view.UseExternalData(local_residual.GetData(), e.n_dof_, dim_);
 
@@ -373,8 +373,10 @@ public:
             QuadLoop(current_element_x, i_thread, e.quad_data_, tmp, res_view);
 
             // push right away
-            std::lock_guard<std::mutex> lock(residual_mutex);
-            residual.AddElementVector(*e.v_dofs_, local_residual);
+            {
+              const std::lock_guard<std::mutex> lock(residual_mutex);
+              residual.AddElementVector(*e.v_dofs_, local_residual);
+            }
           }
         };
 
@@ -382,6 +384,81 @@ public:
                             n_elements_,
                             (nthreads < 1) ? n_threads_ : nthreads);
   };
+
+  virtual void AddDomainGrad(const mfem::Vector& current_x,
+                             const int nthreads,
+                             mfem::SparseMatrix& grad) const {
+
+    std::mutex residual_mutex;
+    // lambda for nthread assemble
+    auto assemble_element_residual_and_grad_then_contribute =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          mfem::Vector local_residual;
+          mfem::DenseMatrix res_view;
+          mfem::DenseMatrix local_grad;
+          for (int i{begin}; i < end; ++i) {
+            // in
+            const ElementData& e = element_data_[i];
+            // e.residual_view_ = 0.0;
+            local_residual.SetSize(e.n_tdof_);
+            local_residual = 0.0;
+            res_view.UseExternalData(local_residual.GetData(), e.n_dof_, dim_);
+            local_grad.SetSize(e.n_tdof_, e.n_tdof_);
+
+            // set shape for tmp data - first call will allocate
+            tmp.SetShape(e.n_dof_, dim_);
+
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, e);
+
+            // assemble residual
+            QuadLoop(current_element_x, i_thread, e.quad_data_, tmp, res_view);
+
+            double* grad_data = local_grad.GetData();
+            double* solution_data = current_element_x.GetData();
+            const double* residual_data = local_residual.GetData();
+            const double* fd_forward_data = tmp.forward_residual_.GetData();
+            for (int j{}; j < e.n_tdof_; ++j) {
+              tmp.forward_residual_ = 0.0;
+
+              double& with_respect_to = *solution_data++;
+              const double orig_wrt = with_respect_to;
+              const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+              const double diff_step_inv = 1. / diff_step;
+
+              with_respect_to = orig_wrt + diff_step;
+              QuadLoop(current_element_x,
+                       i_thread,
+                       e.quad_data_,
+                       tmp,
+                       tmp.forward_residual_);
+
+              for (int k{}; k < e.n_tdof_; ++k) {
+                *grad_data++ =
+                    (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
+              }
+              with_respect_to = orig_wrt;
+            }
+
+            // push right away
+            std::lock_guard<std::mutex> lock(residual_mutex);
+            const auto& vdofs = *e.v_dofs_;
+            double* A = grad.GetData();
+            const double* local_A = local_grad.GetData();
+            const auto& A_ids = *precomputed_->domain_A_ids_[i];
+            for (int k{}; k < A_ids.size(); ++k) {
+              A[A_ids[k]] += *local_A++;
+            }
+          }
+        };
+
+    mimi::utils::NThreadExe(assemble_element_residual_and_grad_then_contribute,
+                            n_elements_,
+                            (nthreads < 0) ? n_threads_ : nthreads);
+  };
+
   virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
                                         const int nthreads,
                                         mfem::Vector& residual,
