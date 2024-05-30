@@ -1,3 +1,5 @@
+#include <thread>
+
 #include "mimi/solvers/newton.hpp"
 
 #include "mimi/integrators/materials.hpp"
@@ -23,11 +25,12 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
   }
 
   // get residual
-  if (nl_oper_)
-    nl_oper_->AssembleGradOn();
-  Base_::oper->Mult(x, Base_::r);
-  if (nl_oper_)
-    nl_oper_->AssembleGradOff();
+  if (nl_oper_) {
+    Base_::grad = nl_oper_->ResidualAndGrad(x, -1, Base_::r);
+  } else {
+    Base_::oper->Mult(x, Base_::r);
+    Base_::grad = &Base_::oper->GetGradient(x);
+  }
 
   if (have_b) {
     r -= b;
@@ -72,7 +75,7 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     }
 
     // set dr/du
-    Base_::grad = &Base_::oper->GetGradient(x);
+    // Base_::grad = &Base_::oper->GetGradient(x);
     Base_::prec->SetOperator(*Base_::grad);
 
     if (Base_::lin_rtol_type) {
@@ -86,11 +89,12 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
       AdaptiveLinRtolPostSolve(c, Base_::r, it, norm);
     }
 
-    mfem::Vector tmp_x(x); // copy init
+    line_search_temp_x_.SetSize(x.Size());
 
+    // at first sight, it seems like we can
     // full step
-    add(tmp_x, -1.0, Base_::c, tmp_x);
-    oper->Mult(tmp_x, Base_::r);
+    add(x, -1.0, Base_::c, line_search_temp_x_);
+    oper->Mult(line_search_temp_x_, Base_::r);
     if (have_b) {
       r -= b;
     }
@@ -99,9 +103,8 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     const double q3 = Base_::Norm(Base_::r);
 
     // half step
-    tmp_x = x;
-    add(tmp_x, -0.5, Base_::c, tmp_x);
-    Base_::oper->Mult(tmp_x, Base_::r);
+    add(x, -0.5, Base_::c, line_search_temp_x_);
+    Base_::oper->Mult(line_search_temp_x_, Base_::r);
     if (have_b) {
       Base_::r -= b;
     }
@@ -131,12 +134,15 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     // update solution
     add(x, -scale, Base_::c, x);
 
-    // get current residual - also one used for next iteration
-    if (nl_oper_)
-      nl_oper_->AssembleGradOn();
-    Base_::oper->Mult(x, Base_::r);
-    if (nl_oper_)
-      nl_oper_->AssembleGradOff();
+    // get current residual and grad - also one used for next iteration
+    // the last assembled grad is wasted
+    if (nl_oper_) {
+      Base_::grad = nl_oper_->ResidualAndGrad(x, -1, Base_::r);
+    } else {
+      Base_::oper->Mult(x, Base_::r);
+      Base_::grad = &Base_::oper->GetGradient(x);
+    }
+
     if (have_b) {
       Base_::r -= b;
     }

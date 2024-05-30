@@ -88,6 +88,7 @@ public:
 
   virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
                                         const int nthreads,
+                                        const double grad_factor,
                                         mfem::Vector& residual,
                                         mfem::SparseMatrix& grad) const {
     mimi::utils::PrintAndThrowError("AddDomainResidualAndGrad not implemented");

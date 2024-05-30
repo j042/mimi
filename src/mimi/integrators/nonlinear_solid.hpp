@@ -378,7 +378,6 @@ public:
         residual.AddElementVector(*e.v_dofs_, tmp.forward_residual_.GetData());
       }
     };
-
     mimi::utils::NThreadExe(assemble_element_residual_and_contribute,
                             n_elements_,
                             (nthreads < 1) ? n_threads_ : nthreads);
@@ -460,6 +459,7 @@ public:
 
   virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
                                         const int nthreads,
+                                        const double grad_factor,
                                         mfem::Vector& residual,
                                         mfem::SparseMatrix& grad) const {
 
@@ -477,7 +477,7 @@ public:
             local_residual.SetSize(e.n_dof_, dim_);
             local_grad.SetSize(e.n_tdof_, e.n_tdof_);
             local_residual = 0.0;
-            local_grad = 0.0;
+            // local_grad = 0.0;
 
             // set shape for tmp data - first call will allocate
             tmp.SetShape(e.n_dof_, dim_);
@@ -527,7 +527,7 @@ public:
             const double* local_A = local_grad.GetData();
             const auto& A_ids = *precomputed_->domain_A_ids_[i];
             for (int k{}; k < A_ids.size(); ++k) {
-              A[A_ids[k]] += *local_A++;
+              A[A_ids[k]] += *local_A++ * grad_factor;
             }
           }
         };

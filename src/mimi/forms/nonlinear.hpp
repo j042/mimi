@@ -100,8 +100,38 @@ public:
     }
   }
 
+  virtual void AddResidual(const mfem::Vector& current_x,
+                           const int nthread,
+                           mfem::Vector& residual) const {
+    MIMI_FUNC()
+
+    // we assemble all first - these will call nthreadexe
+    // domain
+    for (auto& domain_integ : domain_nfi_) {
+      domain_integ->dt_ = dt_;
+      domain_integ->first_effective_dt_ = first_effective_dt_;
+      domain_integ->second_effective_dt_ = second_effective_dt_;
+      domain_integ->AddDomainResidual(current_x, nthread, residual);
+    }
+
+    // boundary
+    for (auto& boundary_integ : boundary_face_nfi_) {
+      boundary_integ->dt_ = dt_;
+      boundary_integ->first_effective_dt_ = first_effective_dt_;
+      boundary_integ->second_effective_dt_ = second_effective_dt_;
+      boundary_integ->AssembleBoundaryResidual(current_x);
+      boundary_integ->AddToGlobalBoundaryResidual(residual);
+    }
+
+    // set true dofs - if we have time, we could use nthread this.
+    for (const auto& tdof : Base_::ess_tdof_list) {
+      residual[tdof] = 0.0;
+    }
+  }
+
   virtual void AddMultGrad(const mfem::Vector& current_x,
                            const int nthread,
+                           const double grad_factor,
                            mfem::Vector& residual,
                            mfem::SparseMatrix& grad) const {
     for (auto& domain_integ : domain_nfi_) {
@@ -110,6 +140,7 @@ public:
       domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AddDomainResidualAndGrad(current_x,
                                              nthread,
+                                             grad_factor,
                                              residual,
                                              grad);
     }
@@ -121,6 +152,12 @@ public:
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AssembleBoundaryResidual(current_x);
       boundary_integ->AddToGlobalBoundaryResidual(residual);
+    }
+
+    // set true dofs - if we have time, we could use nthread this.
+    for (const auto& tdof : Base_::ess_tdof_list) {
+      residual[tdof] = 0.0;
+      grad.EliminateRowCol(tdof);
     }
   }
 
