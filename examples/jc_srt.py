@@ -58,7 +58,7 @@ bc.initial.body_force(1, -7)
 nl.boundary_condition = bc
 
 nl.setup(1)
-nl.configure_newton("nonlinear_visco_solid", 1e-10, 1e-8, 20, False)
+nl.configure_newton("nonlinear_visco_solid", 1e-10, 1e-8, 20, False, False)
 
 rhs = nl.linear_form_view2("rhs")
 print(rhs)
@@ -73,7 +73,7 @@ s.show_options["control_points"] = False
 s.show_options["resolutions"] = 50
 s.cps[:] = x[to_s]
 
-plt = gus.show(s, close=False)
+plt = gus.show(s, interactive=False, close=False)
 for i in range(10000):
     if True:
         s.cps[:] = x[to_s]

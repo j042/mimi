@@ -102,6 +102,7 @@ public:
   }
 
   virtual void AddMultGrad(const mfem::Vector& current_x,
+                           const mfem::Vector& current_v,
                            const int nthread,
                            const double grad_factor,
                            mfem::Vector& residual,
@@ -111,6 +112,7 @@ public:
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AddDomainResidualAndGrad(current_x,
+                                             current_v,
                                              nthread,
                                              grad_factor,
                                              residual,
@@ -122,7 +124,7 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AssembleBoundaryResidual(current_x);
+      boundary_integ->AssembleBoundaryResidual(current_x, current_v);
       boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
 

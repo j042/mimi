@@ -216,6 +216,54 @@ public:
 
     return *jacobian_;
   }
+
+  virtual mfem::Operator* ResidualAndGrad(const mfem::Vector& d2x_dt2,
+                                          const int nthread,
+                                          mfem::Vector& y) const {
+
+    temp_x.SetSize(d2x_dt2.Size());
+    add(*x_, fac0_, d2x_dt2, temp_x);
+    temp_v.SetSize(v_->Size());
+    add(*v_, fac1_, d2x_dt2, temp_v);
+
+    // do usual residual operation
+    mass_->Mult(d2x_dt2, y); // this initializes y to zero
+    if (viscosity_) {
+      add(*v_, fac1_, d2x_dt2, temp_v);
+      viscosity_->AddMult(temp_v, y);
+    }
+    if (contact_) {
+      contact_->AddMult(temp_x, y);
+    }
+    // substract rhs linear forms
+    if (rhs_) {
+      y.Add(-1.0, *rhs_);
+    }
+    // this is usually just for fsi
+    if (rhs_vector_) {
+      y.Add(-1.0, *rhs_vector_);
+    }
+
+    // now nonlin part
+    // 1. initalize grad with mass
+    std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
+    nonlinear_visco_stiffness_
+        ->AddMultGrad(temp_x, temp_v, nthread, fac0_, y, *jacobian_);
+
+    // 3. viscosity
+    if (viscosity_) {
+      jacobian_->Add(fac1_, viscosity_->SpMat());
+    }
+
+    // 4. contact - use AddMultGrad for this one too, as contact is always NL
+    if (contact_) {
+      jacobian_->Add(
+          fac0_,
+          *dynamic_cast<mfem::SparseMatrix*>(&contact_->GetGradient(temp_x)));
+    }
+
+    return jacobian_;
+  }
 };
 
 } // namespace mimi::operators
