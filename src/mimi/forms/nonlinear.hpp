@@ -183,9 +183,7 @@ public:
         mimi::utils::PrintAndThrowError("Invalid sparsity pattern saved");
       }
 
-      mimi::utils::PrintInfo("sparsemat");
       Base_::Grad = new mfem::SparseMatrix(*sparsity_pattern); // deep copy
-      mimi::utils::PrintInfo("sparsemat copied");
       *Base_::Grad = 0.0;
     } else {
       *Base_::Grad = 0.0;

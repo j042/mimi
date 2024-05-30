@@ -381,7 +381,7 @@ public:
     mimi::utils::NThreadExe(assemble_element_residual_and_contribute,
                             n_elements_,
                             (nthreads < 1) ? n_threads_ : nthreads);
-  };
+  }
 
   virtual void AddDomainGrad(const mfem::Vector& current_x,
                              const int nthreads,
