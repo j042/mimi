@@ -90,8 +90,9 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AssembleBoundaryResidual(current_x);
-      boundary_integ->AddToGlobalBoundaryResidual(residual);
+      boundary_integ->AddBoundaryResidual(current_x, -1, residual);
+      // boundary_integ->AssembleBoundaryResidual(current_x);
+      // boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -119,8 +120,9 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AssembleBoundaryResidual(current_x);
-      boundary_integ->AddToGlobalBoundaryResidual(residual);
+      boundary_integ->AddBoundaryResidual(current_x, nthread, residual);
+      // boundary_integ->AssembleBoundaryResidual(current_x);
+      // boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -150,8 +152,13 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AssembleBoundaryResidual(current_x);
-      boundary_integ->AddToGlobalBoundaryResidual(residual);
+      boundary_integ->AddBoundaryResidualAndGrad(current_x,
+                                                 nthread,
+                                                 grad_factor,
+                                                 residual,
+                                                 grad);
+      // boundary_integ->AssembleBoundaryResidual(current_x);
+      // boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.

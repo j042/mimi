@@ -153,6 +153,9 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
 
   // residual one last time -> This is going to the exactly the same as the last
   // assembly, but this time, we accumulate state.
+  //
+  // TODO: we only need to call this for stiffness integrator, which removes a
+  // need to keep freeze flag.
   if (nl_oper_ && !freeze_) {
     nl_oper_->MeltStates();
     Base_::oper->Mult(x, Base_::r);

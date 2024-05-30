@@ -94,6 +94,27 @@ public:
     mimi::utils::PrintAndThrowError("AddDomainResidualAndGrad not implemented");
   };
 
+  virtual void AddBoundaryResidual(const mfem::Vector& current_x,
+                                   const int nthreads,
+                                   mfem::Vector& residual) {
+    mimi::utils::PrintAndThrowError("AddBoundaryResidual not implemented");
+  };
+
+  virtual void AddBoundaryGrad(const mfem::Vector& current_x,
+                               const int nthreads,
+                               mfem::SparseMatrix& grad) const {
+    mimi::utils::PrintAndThrowError("AddBoundaryGrad not implemented");
+  };
+
+  virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
+                                          const int nthreads,
+                                          const double grad_factor,
+                                          mfem::Vector& residual,
+                                          mfem::SparseMatrix& grad) {
+    mimi::utils::PrintAndThrowError(
+        "AddBoundaryResidualAndGrad not implemented");
+  };
+
   /// NThread domain assemble
   virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()

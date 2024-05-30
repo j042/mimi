@@ -12,7 +12,7 @@ nl = mimi.PyNonlinearViscoSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
-nl.subdivide(3)
+nl.subdivide(4)
 
 # create material
 mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
@@ -57,8 +57,8 @@ bc.initial.body_force(1, -7)
 
 nl.boundary_condition = bc
 
-nl.setup(1)
-nl.configure_newton("nonlinear_visco_solid", 1e-10, 1e-8, 20, False, False)
+nl.setup(4)
+nl.configure_newton("nonlinear_visco_solid", 1e-7, 1e-9, 20, False, False)
 
 rhs = nl.linear_form_view2("rhs")
 print(rhs)

@@ -328,9 +328,9 @@ public:
       add(*v_, fac1_, d2x_dt2, temp_v);
       viscosity_->AddMult(temp_v, y);
     }
-    if (contact_) {
-      contact_->AddMult(temp_x, y);
-    }
+    // if (contact_) {
+    //   contact_->AddMult(temp_x, y);
+    // }
     // substract rhs linear forms
     if (rhs_) {
       y.Add(-1.0, *rhs_);
@@ -344,6 +344,10 @@ public:
     // 1. initalize grad with mass
     std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
     nonlinear_stiffness_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
+
+    if (contact_) {
+      contact_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
+    }
 
     // 3. viscosity
     if (viscosity_) {

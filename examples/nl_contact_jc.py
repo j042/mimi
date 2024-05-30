@@ -69,7 +69,7 @@ le.boundary_condition = bc
 tic.toc()
 
 # setup needs to be called this assembles bilinear forms, linear forms
-le.setup(1)
+le.setup(4)
 
 le.configure_newton("nonlinear_visco_solid", 1e-14, 1e-8, 20, False, True)
 
@@ -147,24 +147,22 @@ for i in range(2000):
     scene.coefficient = coe
     for j in range(20):
         sol()
-        le.configure_newton(
-            "nonlinear_visco_solid", 1e-6, 1e-8, 5, True, False
-        )
+        le.configure_newton("nonlinear_visco_solid", 1e-6, 1e-8, 5, True, True)
         rel, ab = le.newton_final_norms("nonlinear_visco_solid")
         bdr_norm = np.linalg.norm(n.boundary_residual())
         print("augumenting")
         print()
-        if ni.gap_norm() < 1e-4:
-            print(ni.gap_norm(), "exit!")
-            break
+        # if ni.gap_norm() < 1e-4:
+        #    print(ni.gap_norm(), "exit!")
+        #    break
     print("final solve!")
-    le.configure_newton("nonlinear_visco_solid", 1e-7, 1e-8, 20, True, True)
+    le.configure_newton("nonlinear_visco_solid", 1e-7, 1e-8, 20, True, False)
     le.update_contact_lagrange()
     scene.coefficient = 0.0
     c_sol()
     rel, ab = le.newton_final_norms("nonlinear_visco_solid")
 
-    le.configure_newton("nonlinear_visco_solid", 1e-8, 1e-10, 3, False, False)
+    le.configure_newton("nonlinear_visco_solid", 1e-8, 1e-10, 3, False, True)
     scene.coefficient = coe
     adv()
     show()

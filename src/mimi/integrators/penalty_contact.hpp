@@ -44,10 +44,9 @@ public:
 
     double integration_weight_;
     double det_dX_dxi_;
-    double det_F_;
+    double det_J_;
     double lagrange_;     // lambda_k
     double new_lagrange_; // lambda_k+1
-    double penalty_;      // penalty factor
     double g_;            // normal gap
     double old_g_;        // normal gap
 
@@ -55,9 +54,6 @@ public:
     /// thanks to Jac's hint, it turns out we can just work with this for
     /// boundary
     mfem::DenseMatrix dN_dxi_; // shape grad
-
-    mimi::coefficients::NearestDistanceBase::Query distance_query_;
-    mimi::coefficients::NearestDistanceBase::Results distance_results_;
   };
 
   /// everything here is based on boundary element.
@@ -93,6 +89,10 @@ public:
     /// and Base_::element_matrices_
     mfem::DenseMatrix* element_grad_;
 
+    // direct access id to sparse matrix
+    // as we only loop over marked boundaries, keep this pointer for easy access
+    std::shared_ptr<mimi::utils::Vector<int>> sparse_matrix_A_ids_;
+
     const mfem::IntegrationRule&
     GetIntRule(mfem::IntegrationRules& thread_int_rules) const {
       MIMI_FUNC()
@@ -108,17 +108,36 @@ public:
     mfem::Vector element_x_;
     /// wraps element_x_
     mfem::DenseMatrix element_x_mat_;
-    /// wraps F_data
-    mfem::DenseMatrix F_;
+    /// wraps J_data
+    mfem::DenseMatrix J_;
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
 
-    void SetShape(const int n_dof, const int dim) {
+    mimi::coefficients::NearestDistanceBase::Query distance_query_;
+    mimi::coefficients::NearestDistanceBase::Results distance_results_;
+
+    mimi::utils::Data<double> normal_traction_;
+
+    int dim_{-1};
+
+    void SetDim(const int dim) {
       MIMI_FUNC()
-      element_x_.SetSize(n_dof * dim);
-      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
-      F_.SetSize(dim, dim - 1);
-      forward_residual_.SetSize(n_dof, dim);
+
+      assert(dim > 0);
+      dim_ = dim;
+      distance_query_.SetSize(dim);
+      distance_results_.SetSize(dim - 1, dim);
+      normal_traction_.Reallocate(dim);
+    }
+
+    void SetDof(const int n_dof) {
+      MIMI_FUNC()
+
+      assert(dim > 0);
+      element_x_.SetSize(n_dof * dim_);
+      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
+      J_.SetSize(dim_, dim_ - 1);
+      forward_residual_.SetSize(n_dof, dim_);
     }
 
     mfem::DenseMatrix&
@@ -259,6 +278,8 @@ public:
                                          n_tdof,
                                          n_tdof);
 
+        i_bed.sparse_matrix_A_ids_ = precomputed_->boundary_A_ids_[m];
+
         // let's prepare quad loop
         i_bed.quadrature_order_ = (quadrature_order < 0)
                                       ? i_bed.element_->GetOrder() * 2 + 3
@@ -278,9 +299,9 @@ public:
           q_data.integration_weight_ = ip.weight;
           q_data.N_.SetSize(i_bed.n_dof_);
           q_data.dN_dxi_.SetSize(i_bed.n_dof_, boundary_para_dim_);
-          q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
-          q_data.distance_query_.SetSize(dim_);
-          q_data.distance_query_.max_iterations_ = 20;
+          // q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
+          // q_data.distance_query_.SetSize(dim_);
+          // q_data.distance_query_.max_iterations_ = 20;
 
           // precompute
           // shape comes from boundary element
@@ -292,7 +313,6 @@ public:
           q_data.active_ = false;
           q_data.lagrange_ = 0.0;
           q_data.new_lagrange_ = 0.0;
-          q_data.penalty_ = nearest_distance_coeff_->coefficient_;
           q_data.g_ = 0.0;
           q_data.old_g_ = 0.0;
         }
@@ -342,46 +362,48 @@ public:
       for (auto& qd : be.quad_data_) {
         qd.lagrange_ = value;
         qd.new_lagrange_ = value;
-        qd.penalty_ = nearest_distance_coeff_->coefficient_;
       }
     }
 
     mimi::utils::PrintInfo("GAP NORM:", GapNorm());
   }
 
-  void QuadLoop(const mfem::DenseMatrix& x,
+  bool QuadLoop(const mfem::DenseMatrix& x,
                 const int i_thread,
                 Vector_<QuadData>& q_data,
                 TemporaryData& tmp,
-                mfem::DenseMatrix& residual_matrix) {
+                mfem::DenseMatrix& residual_matrix,
+                const bool keep_record) const {
     MIMI_FUNC()
-    double t_n_data[3];
-    mimi::utils::Data<double> t_n(t_n_data, dim_);
+    bool any_active = false;
+    const double penalty = nearest_distance_coeff_->coefficient_;
 
     double* residual_begin = residual_matrix.GetData();
     for (QuadData& q : q_data) {
       // get current position and F
-      x.MultTranspose(q.N_, q.distance_query_.query_.data());
-      mfem::MultAtB(x, q.dN_dxi_, tmp.F_);
+      x.MultTranspose(q.N_, tmp.distance_query_.query_.data());
+      mfem::MultAtB(x, q.dN_dxi_, tmp.J_);
 
       // nearest distance query
       q.active_ = false; // init
-      nearest_distance_coeff_->NearestDistance(q.distance_query_,
-                                               q.distance_results_);
-      q.distance_results_.ComputeNormal<true>(); // unit normal
-      const double g = q.distance_results_.NormalGap();
-
+      nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
+                                               tmp.distance_results_);
+      tmp.distance_results_.ComputeNormal<true>(); // unit normal
+      const double g = tmp.distance_results_.NormalGap();
       // for some reason, some query hit right at the very very end
       // and returned super big number / small number
       // Practical solution was to plant the tree with an odd number.
       assert(std::isfinite(g));
 
+      // check for angle and sign of normal gap for the first augmentation loop
+      // otherwise, we detemine exit criteria based on p value.
       if (!(q.lagrange_ < 0.0)) {
         // normalgap validity and angle tolerance
+        // TODO double check angle tol - acos(a * b / (a.norm * b.norm))?
         constexpr const double angle_tol = 1.e-5;
         if (g > 0.
             || std::acos(
-                   std::min(1., std::abs(g) / q.distance_results_.distance_))
+                   std::min(1., std::abs(g) / tmp.distance_results_.distance_))
                    > angle_tol) {
           q.new_lagrange_ = 0.0;
           q.g_ = g;
@@ -389,45 +411,50 @@ public:
         }
       }
 
-      double eps{};
-      if (nearest_distance_coeff_->coefficient_ != 0.0) {
-        eps = q.penalty_;
-      }
-
       // we allow reduction of p, as long as it doesn't change sign
+      // implementation here has flipped sign so we cut at 0.0
       // see https://doi.org/10.1016/0045-7949(92)90540-G
-      double p = q.lagrange_ + eps * g;
-      if (p > 0.0) {
-        p = 0.0;
-      }
-
-      const double det_F = tmp.F_.Weight();
-
-      assert(operator_frozen_state_);
-
-      // this used to be only for frozen state, but it doesn't make difference.
-      // if ((*operator_frozen_state_)) {
-      q.active_ = true;
-      q.new_lagrange_ = p;
-      q.det_F_ = det_F;
-      q.old_g_ = q.g_;
-      q.g_ = g;
-      //}
-
+      const double p = std::min(q.lagrange_ + penalty * g, 0.0);
       if (p == 0.0) {
+        // this quad no longer contributes to contact enforcement
         continue;
       }
 
-      t_n.MultiplyAssign(p, q.distance_results_.normal_.data());
+      const double det_J = tmp.J_.Weight();
+
+      // maybe only a minor difference, but we don't want to keep records from
+      // line search or FD computations
+      if (keep_record) {
+        q.new_lagrange_ = p;
+        q.det_J_ = det_J;
+        q.old_g_ = q.g_;
+        q.g_ = g;
+        q.active_ = true;
+      }
+      // set active after checking p
+      any_active = true;
+
+      tmp.normal_traction_.MultiplyAssign(p,
+                                          tmp.distance_results_.normal_.data());
 
       // again, note no negative sign.
-      AddMult_a_VWt(q.integration_weight_ * det_F,
+      AddMult_a_VWt(q.integration_weight_ * det_J,
                     q.N_.begin(),
                     q.N_.end(),
-                    t_n.begin(),
-                    t_n.end(),
+                    tmp.normal_traction_.begin(),
+                    tmp.normal_traction_.end(),
                     residual_begin);
+
+      // I think we can just do this
+      // AddMult_a_VWt(q.integration_weight_ * det_J * p,
+      //               q.N_.begin(),
+      //               q.N_.end(),
+      //               tmp.distance_results_.normal_.begin(),
+      //               tmp.distance_results_.normal_.end(),
+      //               residual_begin);
     }
+
+    return any_active;
   }
 
   // /// this one is done once each residual assembly
@@ -461,60 +488,66 @@ public:
   virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
-    auto assemble_face_residual_and_maybe_grad =
-        [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
-          // this loops marked boundary elements
-          for (int i{begin}; i < end; ++i) {
-            // get bed
-            BoundaryElementData& bed = boundary_element_data_[i];
+    auto assemble_face_residual_and_maybe_grad = [&](const int begin,
+                                                     const int end,
+                                                     const int i_thread) {
+      TemporaryData tmp;
+      tmp.SetDim(dim_);
+      // this loops marked boundary elements
+      for (int i{begin}; i < end; ++i) {
+        // get bed
+        BoundaryElementData& bed = boundary_element_data_[i];
 
-            // reset residual
-            bed.residual_view_ = 0.0;
+        // reset residual
+        bed.residual_view_ = 0.0;
 
-            // set shape for tmp data
-            tmp.SetShape(bed.n_dof_, dim_);
-            mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, bed);
+        // set shape for tmp data
+        tmp.SetDof(bed.n_dof_);
+        mfem::DenseMatrix& current_element_x =
+            tmp.CurrentElementSolutionCopy(current_x, bed);
 
-            // assemble residual
+        // assemble residual
+        QuadLoop(
+            current_element_x,
+            i_thread,
+            bed.quad_data_,
+            tmp,
+            bed.residual_view_,
+            true); // this will also update during line search, but it doesn't
+                   // matter since the last value will be the one after Mult
+
+        if (assemble_grad_) {
+          assert(*operator_frozen_state_);
+          double* grad_data = bed.grad_view_.GetData();
+          double* solution_data = current_element_x.GetData();
+          const double* residual_data = bed.residual_view_.GetData();
+          const double* fd_forward_data = tmp.forward_residual_.GetData();
+          for (int j{}; j < bed.n_tdof_; ++j) {
+            tmp.forward_residual_ = 0.0;
+
+            double& with_respect_to = *solution_data++;
+            const double orig_wrt = with_respect_to;
+            const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+            const double diff_step_inv = 1. / diff_step;
+
+            with_respect_to = orig_wrt + diff_step;
             QuadLoop(current_element_x,
                      i_thread,
                      bed.quad_data_,
                      tmp,
-                     bed.residual_view_);
+                     tmp.forward_residual_,
+                     false);
 
-            if (assemble_grad_) {
-              assert(*operator_frozen_state_);
-              double* grad_data = bed.grad_view_.GetData();
-              double* solution_data = current_element_x.GetData();
-              const double* residual_data = bed.residual_view_.GetData();
-              const double* fd_forward_data = tmp.forward_residual_.GetData();
-              for (int j{}; j < bed.n_tdof_; ++j) {
-                tmp.forward_residual_ = 0.0;
-
-                double& with_respect_to = *solution_data++;
-                const double orig_wrt = with_respect_to;
-                const double diff_step = std::abs(orig_wrt) * 1.0e-8;
-                const double diff_step_inv = 1. / diff_step;
-
-                with_respect_to = orig_wrt + diff_step;
-                QuadLoop(current_element_x,
-                         i_thread,
-                         bed.quad_data_,
-                         tmp,
-                         tmp.forward_residual_);
-
-                for (int k{}; k < bed.n_tdof_; ++k) {
-                  *grad_data++ =
-                      (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
-                }
-                with_respect_to = orig_wrt;
-              }
+            for (int k{}; k < bed.n_tdof_; ++k) {
+              *grad_data++ =
+                  (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
             }
+            with_respect_to = orig_wrt;
+          }
+        }
 
-          } // marked elem loop
-        };
+      } // marked elem loop
+    };
 
     mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
                             n_marked_boundaries_,
@@ -524,6 +557,135 @@ public:
   virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
     MIMI_FUNC()
   }
+
+  virtual void AddBoundaryResidual(const mfem::Vector& current_x,
+                                   const int nthreads,
+                                   mfem::Vector& residual) {
+    MIMI_FUNC()
+
+    std::mutex residual_mutex;
+
+    auto assemble_face_residual_and_maybe_grad =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          tmp.SetDim(dim_);
+          // this loops marked boundary elements
+          for (int i{begin}; i < end; ++i) {
+            // get bed
+            BoundaryElementData& bed = boundary_element_data_[i];
+            tmp.SetDof(bed.n_dof_);
+            // variable name is misleading - this is just local residual
+            // we use this container, as we already allocate this in tmp anyways
+            tmp.forward_residual_ = 0.0;
+
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, bed);
+
+            // assemble residual
+            // this function is called either at the last step at "melted"
+            // staged or during line search, keep_record = False
+            const bool any_active = QuadLoop(current_element_x,
+                                             i_thread,
+                                             bed.quad_data_,
+                                             tmp,
+                                             tmp.forward_residual_,
+                                             false);
+
+            // only push if any of quad point was active
+            if (any_active) {
+              const std::lock_guard<std::mutex> lock(residual_mutex);
+              residual.AddElementVector(*bed.v_dofs_,
+                                        tmp.forward_residual_.GetData());
+            }
+          } // marked elem loop
+        };
+
+    mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
+                            n_marked_boundaries_,
+                            (nthreads < 0) ? n_threads_ : nthreads);
+  }
+
+  virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
+                                          const int nthreads,
+                                          const double grad_factor,
+                                          mfem::Vector& residual,
+                                          mfem::SparseMatrix& grad) {
+    std::mutex residual_mutex;
+    // lambda for nthread assemble
+    auto assemble_boundary_residual_and_grad_then_contribute =
+        [&](const int begin, const int end, const int i_thread) {
+          mfem::DenseMatrix local_residual;
+          mfem::DenseMatrix local_grad;
+          TemporaryData tmp;
+          tmp.SetDim(dim_);
+          for (int i{begin}; i < end; ++i) {
+            BoundaryElementData& bed = boundary_element_data_[i];
+            tmp.SetDof(bed.n_dof_);
+            local_residual.SetSize(bed.n_dof_, dim_);
+            local_grad.SetSize(bed.n_tdof_, bed.n_tdof_);
+            local_residual = 0.0;
+
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, bed);
+
+            // assemble residual
+            const bool any_active = QuadLoop(current_element_x,
+                                             i_thread,
+                                             bed.quad_data_,
+                                             tmp,
+                                             local_residual,
+                                             true);
+
+            // skip if nothing's active
+            if (!any_active) {
+              continue;
+            }
+
+            double* grad_data = local_grad.GetData();
+            double* solution_data = current_element_x.GetData();
+            const double* residual_data = local_residual.GetData();
+            const double* fd_forward_data = tmp.forward_residual_.GetData();
+            for (int j{}; j < bed.n_tdof_; ++j) {
+              tmp.forward_residual_ = 0.0;
+
+              double& with_respect_to = *solution_data++;
+              const double orig_wrt = with_respect_to;
+              const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+              const double diff_step_inv = 1. / diff_step;
+
+              with_respect_to = orig_wrt + diff_step;
+              QuadLoop(current_element_x,
+                       i_thread,
+                       bed.quad_data_,
+                       tmp,
+                       tmp.forward_residual_,
+                       false);
+
+              for (int k{}; k < bed.n_tdof_; ++k) {
+                *grad_data++ =
+                    (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
+              }
+              with_respect_to = orig_wrt;
+            }
+
+            // push right away
+            std::lock_guard<std::mutex> lock(residual_mutex);
+            const auto& vdofs = *bed.v_dofs_;
+            residual.AddElementVector(vdofs, local_residual.GetData());
+            double* A = grad.GetData();
+            const double* local_A = local_grad.GetData();
+            const auto& A_ids = *bed.sparse_matrix_A_ids_;
+            for (int k{}; k < A_ids.size(); ++k) {
+              A[A_ids[k]] += *local_A++ * grad_factor;
+            }
+          }
+        };
+
+    mimi::utils::NThreadExe(assemble_boundary_residual_and_grad_then_contribute,
+                            n_marked_boundaries_,
+                            (nthreads < 0) ? n_threads_ : nthreads);
+  };
 
   /// boundaries are kept
   virtual void
