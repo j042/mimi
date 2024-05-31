@@ -441,34 +441,6 @@ public:
     return any_active;
   }
 
-  // /// this one is done once each residual assembly
-  // void PrecomputeNormalGapAndSetActivities(const mfem::Vector& current_x) {
-  //   MIMI_FUNC()
-
-  //   auto g_and_activity =
-  //       [&](const int begin, const int end, const int i_thread) {
-  //         TemporaryData tmp;
-  //         double element_x_data[kMaxTrueDof];
-  //         tmp.SetData(element_x_data,
-  //                     nullptr,
-  //                     nullptr,
-  //                     nullptr,
-  //                     nullptr,
-  //                     boundary_para_dim_,
-  //                     dim_);
-  //         for (int i{begin}; i < end; ++i) {
-  //           BoundaryElementData& bed = boundary_element_data_[i];
-  //           // initialize residual - maybe we don't need this?
-  //           bed.residual_view_ = 0.0;
-
-  //           // set shape for tmp
-  //           tmp.SetShape(bed.n_dof_, dim_);
-  //           mfem::DenseMatrix& current_element_x =
-  //               tmp.CurrentElementSolutionCopy(current_x, bed);
-  //         }
-  //       };
-  // }
-
   virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
     MIMI_FUNC()
 
@@ -588,6 +560,84 @@ public:
                             n_marked_boundaries_,
                             (nthreads < 0) ? n_threads_ : nthreads);
   }
+
+  virtual void AddBoundaryGrad(const mfem::Vector& current_x,
+                               const int nthreads,
+                               mfem::SparseMatrix& grad) {
+    std::mutex residual_mutex;
+    // lambda for nthread assemble
+    auto assemble_boundary_residual_and_grad_then_contribute =
+        [&](const int begin, const int end, const int i_thread) {
+          mfem::DenseMatrix local_residual;
+          mfem::DenseMatrix local_grad;
+          TemporaryData tmp;
+          tmp.SetDim(dim_);
+          for (int i{begin}; i < end; ++i) {
+            BoundaryElementData& bed = boundary_element_data_[i];
+            tmp.SetDof(bed.n_dof_);
+            local_residual.SetSize(bed.n_dof_, dim_);
+            local_grad.SetSize(bed.n_tdof_, bed.n_tdof_);
+            local_residual = 0.0;
+
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, bed);
+
+            // assemble residual
+            const bool any_active = QuadLoop(current_element_x,
+                                             i_thread,
+                                             bed.quad_data_,
+                                             tmp,
+                                             local_residual,
+                                             true);
+
+            // skip if nothing's active
+            if (!any_active) {
+              continue;
+            }
+
+            double* grad_data = local_grad.GetData();
+            double* solution_data = current_element_x.GetData();
+            const double* residual_data = local_residual.GetData();
+            const double* fd_forward_data = tmp.forward_residual_.GetData();
+            for (int j{}; j < bed.n_tdof_; ++j) {
+              tmp.forward_residual_ = 0.0;
+
+              double& with_respect_to = *solution_data++;
+              const double orig_wrt = with_respect_to;
+              const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+              const double diff_step_inv = 1. / diff_step;
+
+              with_respect_to = orig_wrt + diff_step;
+              QuadLoop(current_element_x,
+                       i_thread,
+                       bed.quad_data_,
+                       tmp,
+                       tmp.forward_residual_,
+                       false);
+
+              for (int k{}; k < bed.n_tdof_; ++k) {
+                *grad_data++ =
+                    (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
+              }
+              with_respect_to = orig_wrt;
+            }
+
+            // push right away
+            std::lock_guard<std::mutex> lock(residual_mutex);
+            double* A = grad.GetData();
+            const double* local_A = local_grad.GetData();
+            const auto& A_ids = *bed.sparse_matrix_A_ids_;
+            for (int k{}; k < A_ids.size(); ++k) {
+              A[A_ids[k]] += *local_A++;
+            }
+          }
+        };
+
+    mimi::utils::NThreadExe(assemble_boundary_residual_and_grad_then_contribute,
+                            n_marked_boundaries_,
+                            (nthreads < 0) ? n_threads_ : nthreads);
+  };
 
   virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
                                           const int nthreads,
