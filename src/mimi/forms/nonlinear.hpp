@@ -91,8 +91,6 @@ public:
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AddBoundaryResidual(current_x, -1, residual);
-      // boundary_integ->AssembleBoundaryResidual(current_x);
-      // boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -121,8 +119,6 @@ public:
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AddBoundaryResidual(current_x, nthread, residual);
-      // boundary_integ->AssembleBoundaryResidual(current_x);
-      // boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -157,8 +153,6 @@ public:
                                                  grad_factor,
                                                  residual,
                                                  grad);
-      // boundary_integ->AssembleBoundaryResidual(current_x);
-      // boundary_integ->AddToGlobalBoundaryResidual(residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -203,17 +197,6 @@ public:
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AddDomainGrad(current_x, -1, *Base_::Grad);
-      // domain_integ->AssembleDomainGrad(current_x);
-
-      // // add to global
-      // const auto& el_mats = *domain_integ->element_matrices_;
-      // const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
-
-      // for (int i{}; i < el_mats.size(); ++i) {
-      //   const auto& vdofs = *el_vdofs[i];
-      //   Base_::Grad->AddSubMatrix(vdofs, vdofs, el_mats[i], 0 /* skip_zeros
-      //   */);
-      // }
     }
 
     // boundary

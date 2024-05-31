@@ -117,7 +117,7 @@ def show():
     )
 
 
-coe = 1e10
+coe = 3e9
 # initialize a plotter
 plt = gus.show([s, curv], close=False)
 n = le.nonlinear_from2("contact")
@@ -129,7 +129,7 @@ for i in range(1000):
     scene.coefficient = coe
     for j in range(100):
         sol()
-        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True, True)
+        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 3, True, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
         bdr_norm = np.linalg.norm(n.boundary_residual())
         print("augumenting", bdr_norm)

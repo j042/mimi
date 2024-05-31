@@ -116,8 +116,6 @@ public:
     mimi::coefficients::NearestDistanceBase::Query distance_query_;
     mimi::coefficients::NearestDistanceBase::Results distance_results_;
 
-    mimi::utils::Data<double> normal_traction_;
-
     int dim_{-1};
 
     void SetDim(const int dim) {
@@ -127,7 +125,6 @@ public:
       dim_ = dim;
       distance_query_.SetSize(dim);
       distance_results_.SetSize(dim - 1, dim);
-      normal_traction_.Reallocate(dim);
     }
 
     void SetDof(const int n_dof) {
@@ -299,9 +296,6 @@ public:
           q_data.integration_weight_ = ip.weight;
           q_data.N_.SetSize(i_bed.n_dof_);
           q_data.dN_dxi_.SetSize(i_bed.n_dof_, boundary_para_dim_);
-          // q_data.distance_results_.SetSize(boundary_para_dim_, dim_);
-          // q_data.distance_query_.SetSize(dim_);
-          // q_data.distance_query_.max_iterations_ = 20;
 
           // precompute
           // shape comes from boundary element
@@ -399,7 +393,8 @@ public:
       // otherwise, we detemine exit criteria based on p value.
       if (!(q.lagrange_ < 0.0)) {
         // normalgap validity and angle tolerance
-        // TODO double check angle tol - acos(a * b / (a.norm * b.norm))?
+        // angle between two vectors:  acos(a * b / (a.norm * b.norm))
+        // difference * unit_normal is g, distance is denom.
         constexpr const double angle_tol = 1.e-5;
         if (g > 0.
             || std::acos(
@@ -434,24 +429,13 @@ public:
       // set active after checking p
       any_active = true;
 
-      tmp.normal_traction_.MultiplyAssign(p,
-                                          tmp.distance_results_.normal_.data());
-
       // again, note no negative sign.
-      AddMult_a_VWt(q.integration_weight_ * det_J,
+      AddMult_a_VWt(q.integration_weight_ * det_J * p,
                     q.N_.begin(),
                     q.N_.end(),
-                    tmp.normal_traction_.begin(),
-                    tmp.normal_traction_.end(),
+                    tmp.distance_results_.normal_.begin(),
+                    tmp.distance_results_.normal_.end(),
                     residual_begin);
-
-      // I think we can just do this
-      // AddMult_a_VWt(q.integration_weight_ * det_J * p,
-      //               q.N_.begin(),
-      //               q.N_.end(),
-      //               tmp.distance_results_.normal_.begin(),
-      //               tmp.distance_results_.normal_.end(),
-      //               residual_begin);
     }
 
     return any_active;
