@@ -146,9 +146,24 @@ public:
     return true;
   }
 
+  virtual double GapNorm(const mfem::Vector& test_x, const int nthreads) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("GapNorm(x, nthread) not implemented for",
+                                    Name());
+    return 0.0;
+  }
+
   virtual double GapNorm() const {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("GapNorm not implemented for", Name());
+    return 0.0;
+  }
+
+  virtual double PenaltyFactor() const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("PenaltyFactor not implemented for",
+                                    Name());
+
     return 0.0;
   }
 

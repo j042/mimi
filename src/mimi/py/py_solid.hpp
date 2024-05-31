@@ -78,7 +78,58 @@ protected:
   // fsi coupling
   // a raw rhs vector for fsi loads
   std::shared_ptr<mfem::Vector> rhs_vector_ = nullptr;
-  mfem::Vector intermediate_x_;
+  mfem::Vector fixed_point_advanced_x_;
+  mfem::Vector fixed_point_advanced_v_;
+
+  // frequently accessed pointers for augmented lagrange loops
+  struct {
+    std::shared_ptr<mimi::forms::Nonlinear> contact_form;
+    std::shared_ptr<mimi::solvers::LineSearchNewton> newton_solver;
+    mimi::utils::Vector<double> scene_coeffs;
+
+    void SaveSceneCoefficients() {
+      assert(contact_form);
+      scene_coeffs.clear();
+      scene_coeffs.reserve(contact_form->boundary_face_nfi_.size());
+      for (auto& contact_integ : contact_form->boundary_face_nfi_) {
+        scene_coeffs.push_back(contact_integ->PenaltyFactor());
+      }
+    }
+
+    void UpdateContactLagrange() {
+      MIMI_FUNC()
+
+      assert(contact_form);
+      for (auto& contact_integ : contact_form->boundary_face_nfi_) {
+        contact_integ->UpdateLagrange();
+      }
+    }
+
+    void FillContactLagrange(const double val) {
+      MIMI_FUNC()
+
+      assert(contact_form);
+      for (auto& contact_integ : contact_form->boundary_face_nfi_) {
+        contact_integ->FillLagrange(value);
+      }
+    }
+
+    double GapNorm(const mfem::Vector& test_x) const {
+      MIMI_FUNC()
+
+      double total{};
+      for (auto& contact_integ : contact_form->boundary_face_nfi_) {
+        total += contact_integ->GapNorm(test_x, -1);
+      }
+      return total;
+    }
+
+    bool Converged(const double gap, const double gap_tol) const {
+      MIMI_FUNC()
+
+      return newton_solver->GetConverged() && gap < gap_tol;
+    }
+  } ALM;
 
   // holder for coefficients
   std::map<std::string, std::shared_ptr<mfem::Coefficient>> coefficients_;
@@ -438,33 +489,15 @@ public:
   virtual void UpdateContactLagrange() {
     MIMI_FUNC()
 
-    auto* mimi_oper =
-        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
-    if (mimi_oper) {
-      auto& contact_nlf = mimi_oper->nonlinear_forms_.at("contact");
-      for (auto& contact_integ : contact_nlf->boundary_face_nfi_) {
-        contact_integ->UpdateLagrange();
-      }
-    } else {
-      mimi::utils::PrintAndThrowError(
-          "Failed to cast operator to mimi's base.");
-    }
+    PrepareALM();
+    ALM.UpdateContactLagrange();
   }
 
-  virtual void FillContactLagrange(const double& value) {
+  virtual void FillContactLagrange(const double value) {
     MIMI_FUNC()
 
-    auto* mimi_oper =
-        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
-    if (mimi_oper) {
-      auto& contact_nlf = mimi_oper->nonlinear_forms_.at("contact");
-      for (auto& contact_integ : contact_nlf->boundary_face_nfi_) {
-        contact_integ->FillLagrange(value);
-      }
-    } else {
-      mimi::utils::PrintAndThrowError(
-          "Failed to cast operator to mimi's base.");
-    }
+    PrepareALM();
+    ALM.FillContactLagrange(value);
   }
 
   /// @brief sets second order system with given ptr and takes ownership.
@@ -573,23 +606,105 @@ public:
     ode2_solver_->FixedPointSolve2(*x2_, *x2_dot_, t_, dt_);
   }
 
-  virtual void FixedPointAdvance2(py::array_t<double>& x,
-                                  py::array_t<double>& x_dot) {
+  virtual void FixedPointAdvance2(mfem::Vector& fp_x, mfem::Vector& fp_v) {
     MIMI_FUNC()
 
-    const int x_size = x.size();
-    double* x_ptr = static_cast<double*>(x.request().ptr);
-    const int x_dot_size = x_dot.size();
-    double* x_dot_ptr = static_cast<double*>(x_dot.request().ptr);
+    fp_x.SetSize(x2_->Size());
+    fp_v.SetSize(x2_->Size());
 
-    assert(x2_->Size() == x_size);
-    assert(x2_dot_->Size() == x_dot_size);
+    ode2_solver_->FixedPointAdvance2(fp_x, fp_v, t_, dt_);
+  }
 
-    // wrap those ptrs
-    mfem::Vector x_vec(x_ptr, x_size);
-    mfem::Vector x_dot_vec(x_dot_ptr, x_dot_size);
+  // python returning version of fixed point advanced
+  virtual py::tuple FixedPointAdvance2() {
+    MIMI_FUNC()
 
-    ode2_solver_->FixedPointAdvance2(x_vec, x_dot_vec, t_, dt_);
+    FixedPointAdvance2(fixed_point_advanced_x_, fixed_point_advanced_v_);
+
+    return py::make_tuple(
+        mimi::utils::NumpyView<double>(fixed_point_advanced_x_,
+                                       fixed_point_advanced_x_.Size()),
+        mimi::utils::NumpyView<double>(fixed_point_advanced_v_,
+                                       fixed_point_advanced_v_.Size()));
+  }
+
+  virtual void PrepareALM() {
+    MIMI_FUNC()
+
+    if (ALM.contact_form && ALM.newton_solver) {
+      return;
+    }
+    auto* mimi_oper =
+        dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
+    if (mimi_oper) {
+      ALM.contact_form = mimi_oper->nonlinear_forms_.at("contact");
+    } else {
+      mimi::utils::PrintAndThrowError(
+          "Failed to cast operator to mimi's base.");
+    }
+    // if there's more than one newton, exit.
+    // otherwise, we need to pass the name of the newton
+    if (newton_solvers_.size() != 1) {
+      mimi::utils::PrintAndThrowError(
+          "There are more than one newton solvers. Please extend "
+          "PySolid::PrepareALM to accept solver key.");
+    }
+    // easy way to unpack one elem
+    ALM.newton_solver = newton_solvers_.begin()->second;
+  }
+
+  virtual void FixedPointALMSolve2(int n_outer,
+                                   const int n_inner,
+                                   const int n_final,
+                                   const double rel_tol,
+                                   const double abs_tol,
+                                   const double gap_tol) {
+    MIMI_FUNC()
+
+    PrepareALM();
+
+    const bool prev_itermode = ALM.newton_solver->iterative_mode;
+    const bool
+
+        // first iteration
+        ALM.newton_solver->SetRelTol(rel_tol);
+    ALM.newton_solver->SetAbsTol(abs_tol);
+    ALM.newton_solver->SetMaxIter(n_inner);
+    ALM.newton_solver->iterative_mode = false;
+    FixedPointSolve2();
+    FixedPointAdvance2();
+    --n_outer;
+    double gap = ALM.GapNorm(fixed_point_advanced_x_);
+
+    auto is_converged = [&]() -> bool {
+      if (ALM.Converged(gap, gap_tol)) {
+        mimi::utils::PrintInfo("FixedPointALMSolve2 successful. Gap:", gap);
+        ALM.newton_solver->iterative_mode = prev_itermode;
+        return true;
+      }
+      return false;
+    };
+
+    if (is_converged())
+      return;
+    ALM.UpdateContactLagrange();
+
+    // do the rest loops
+    ALM.newton_solver->iterative_mode = true;
+    for (int i{}; i < n_outer; ++i) {
+      FixedPointSolve2();
+      FixedPointAdvance2();
+      gap = ALM.GapNorm(fixed_point_advanced_x_);
+      if (is_converged())
+        return;
+      ALM.UpdateContactLagrange();
+    }
+
+    // last run - reducing coefficient
+    ALM.newton_solver->SetMaxIter(n_final);
+    FixedPointSolve2();
+    FixedPointAdvance2();
+    gap = ALM.GapNorm(fixed_point_advanced_x_);
   }
 
   virtual void AdvanceTime2() {

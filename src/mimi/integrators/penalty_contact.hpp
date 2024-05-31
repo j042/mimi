@@ -172,6 +172,10 @@ public:
       : NonlinearBase(name, precomputed),
         nearest_distance_coeff_(nearest_distance_coeff) {}
 
+  virtual double PenaltyFactor() const {
+    return nearest_distance_coeff_->coefficient_;
+  }
+
   /// this one needs
   /// - shape function
   /// - weights of target to refrence
@@ -318,7 +322,6 @@ public:
         qd.lagrange_ = qd.new_lagrange_;
       }
     }
-    mimi::utils::PrintInfo("GAP NORM:", GapNorm());
   }
 
   virtual void FillLagrange(const double value) {
@@ -330,8 +333,6 @@ public:
         qd.new_lagrange_ = value;
       }
     }
-
-    mimi::utils::PrintInfo("GAP NORM:", GapNorm());
   }
 
   bool QuadLoop(const mfem::DenseMatrix& x,
@@ -618,6 +619,50 @@ public:
     mimi::utils::NThreadExe(assemble_boundary_residual_and_grad_then_contribute,
                             n_marked_boundaries_,
                             (nthreads < 0) ? n_threads_ : nthreads);
+  }
+
+  /// checks GapNorm from given test_x
+  virtual double GapNorm(const mfem::Vector& test_x, const int nthreads) const {
+    MIMI_FUNC()
+
+    std::mutex gap_norm;
+    double gap_squared_total{};
+    auto find_gap = [&](const int begin, const int end, const int i_thread) {
+      TemporaryData tmp;
+      tmp.SetDim(dim_);
+      double local_g_squared_sum{};
+      // this loops marked boundary elements
+      for (int i{begin}; i < end; ++i) {
+        // get bed
+        const BoundaryElementData& bed = boundary_element_data_[i];
+        tmp.SetDof(bed.n_dof_);
+
+        mfem::DenseMatrix& current_element_x =
+            tmp.CurrentElementSolutionCopy(current_x, bed);
+
+        for (const QuadData& q : q_data) {
+          // get current position and F
+          current_element_x.MultTranspose(q.N_,
+                                          tmp.distance_query_.query_.data());
+          // query
+          nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
+                                                   tmp.distance_results_);
+          tmp.distance_results_.ComputeNormal<true>(); // unit normal
+          const double g = tmp.distance_results_.NormalGap();
+          local_g_squared_sum += g * g;
+        }
+      } // marked elem loop
+      {
+        std::lock_guard<std::mutex> lock(gap_norm);
+        gap_squared_total += sum_g_squared;
+      }
+    };
+
+    mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
+                            n_marked_boundaries_,
+                            (nthreads < 0) ? n_threads_ : nthreads);
+
+    return std::sqrt(gap_squared_total);
   }
 
   virtual double GapNorm() const {
