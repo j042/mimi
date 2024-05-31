@@ -14,8 +14,8 @@ le.read_mesh("tests/data/sqn.mesh")
 # set param
 
 # refine
-le.elevate_degrees(1)
-le.subdivide(4)
+le.elevate_degrees(3)
+le.subdivide(3)
 
 # mat
 mat = mimi.PyCompressibleOgdenNeoHookean()
@@ -75,7 +75,7 @@ tic.summary(print_=True)
 # s.show_options["control_points"] = False
 # s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-s.show_options["control_points"] = False
+# s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
@@ -140,7 +140,7 @@ for i in range(1000):
             print(ni.gap_norm(), "exit!")
             break
     print("final solve!", n.boundary_residual().sum())
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True, False)
+    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 20, True, False)
     le.update_contact_lagrange()
     scene.coefficient = 0.0
     c_sol()

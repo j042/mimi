@@ -42,8 +42,10 @@ public:
     mimi::utils::PrintAndThrowError("StepTime2 is not implemented for", Name());
   }
 
-  virtual void
-  FixedPointSolve2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
+  virtual void FixedPointSolve2(const mfem::Vector& x,
+                                const mfem::Vector& dxdt,
+                                double& t,
+                                double& dt) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("FixedPointSolve2 is not implemented for",
                                     Name());
@@ -74,7 +76,8 @@ public:
 
 class GeneralizedAlpha2 : public mfem::GeneralizedAlpha2Solver, public OdeBase {
 protected:
-  double fac0_, fac1_, fac2_, fac3_, fac4_, fac5_;
+  double fac0_, fac1_, fac2_, fac3_, fac4_, fac5_, fac1_inv_, fac5_inv_;
+  bool fixed_point_predict_alpha_level_{true};
 
 public:
   using Base_ = mfem::GeneralizedAlpha2Solver;
@@ -83,7 +86,8 @@ public:
 
   GeneralizedAlpha2(mfem::SecondOrderTimeDependentOperator& oper,
                     double rho_inf = 0.25)
-      : Base_(rho_inf) {
+      : Base_(rho_inf),
+        fixed_point_predict_alpha_level_{true} {
 
     Base_::Init(oper);
     ComputeFactors();
@@ -93,10 +97,12 @@ public:
   virtual void ComputeFactors() {
     fac0_ = (0.5 - (beta / alpha_m));
     fac1_ = alpha_f;
+    fac1_inv_ = 1. / fac1_;
     fac2_ = alpha_f * (1.0 - (gamma / alpha_m));
     fac3_ = beta * alpha_f / alpha_m;
     fac4_ = gamma * alpha_f / alpha_m;
     fac5_ = alpha_m;
+    fac5_inv_ = 1. / fac5_;
   }
 
   virtual std::string Name() const { return "GeneralizedAlpha2"; }
@@ -115,8 +121,10 @@ public:
     mimi_operator_->dt_ = dt;
     Base_::Step(x, dxdt, t, dt);
   }
-  virtual void
-  FixedPointSolve2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
+  virtual void FixedPointSolve2(const mfem::Vector& x,
+                                const mfem::Vector& dxdt,
+                                double& t,
+                                double& dt) {
     MIMI_FUNC()
 
     // In the first pass compute d2xdt2 directy from operator.
@@ -125,14 +133,17 @@ public:
       nstate = 1;
     }
 
-    for (const int& d_id : *dirichlet_dofs_) {
-      d2xdt2[d_id] = 0.0;
-    }
+    // for (const int& d_id : *dirichlet_dofs_) {
+    //   d2xdt2[d_id] = 0.0;
+    // }
 
     // Predict alpha levels
-    add(dxdt, fac0_ * dt, d2xdt2, va);
-    add(x, fac1_ * dt, va, xa);
-    add(dxdt, fac2_ * dt, d2xdt2, va);
+    if (fixed_point_predict_alpha_level_) {
+      add(dxdt, fac0_ * dt, d2xdt2, va);
+      add(x, fac1_ * dt, va, xa);
+      add(dxdt, fac2_ * dt, d2xdt2, va);
+      fixed_point_predict_alpha_level_ = false;
+    }
 
     // Solve alpha levels
     mimi_operator_->dt_ = dt;
@@ -145,45 +156,89 @@ public:
                                   double& t,
                                   double& dt) {
     MIMI_FUNC()
+    if (fixed_point_predict_alpha_level_) {
+      mimi::utils::PrintAndThrowError(
+          "FixedPointAdvance2() should be called after FixedPointSolve2()");
+    }
 
-    // xa and va are always freshly overwritten in fixedpointsolve,
-    // but would duplicate in AdvanceTime2, so assign a temp vector
-    mfem::Vector tmp_xa(x.Size());
-    mfem::Vector tmp_va(dxdt.Size());
+    // // xa and va are always freshly overwritten in fixedpointsolve,
+    // // but would duplicate in AdvanceTime2, so assign a temp vector
+    // fixed_point_tmp_xa_.SetSize(x.Size());
+    // fixed_point_tmp_va_.SetSize(dxdt.Size());
 
-    // Correct alpha levels
-    // xa.Add(fac3_ * dt * dt, aa); // <- do this
-    add(xa, fac3_ * dt * dt, Base_::aa, tmp_xa);
-    // va.Add(fac4_ * dt, aa); // <- do this
-    add(va, fac4_ * dt, Base_::aa, tmp_va);
+    const double fac3dtdt = fac3_ * dt * dt;
+    const double fac4dt = fac4_ * dt;
+    // // Correct alpha levels
+    // // xa.Add(fac3_ * dt * dt, aa); // <- do this
+    // add(xa, fac3dtdt, Base_::aa, fixed_point_tmp_xa_);
+    // // va.Add(fac4_ * dt, aa); // <- do this
+    // add(va, fac4dt, Base_::aa, fixed_point_tmp_va_);
 
-    // extrapolate using temp vectors
-    x *= 1.0 - 1.0 / fac1_;
-    x.Add(1.0 / fac1_, tmp_xa);
+    // // extrapolate using temp vectors
+    // x *= 1.0 - 1.0 / fac1_;
+    // x.Add(1.0 / fac1_, fixed_point_tmp_xa_);
 
-    dxdt *= 1.0 - 1.0 / fac1_;
-    dxdt.Add(1.0 / fac1_, tmp_va);
+    // dxdt *= 1.0 - 1.0 / fac1_;
+    // dxdt.Add(1.0 / fac1_, fixed_point_tmp_va_);
+
+    const double prev_fac = 1. - fac1_inv_;
+    double* x_ptr = x.GetData();
+    double* v_ptr = dxdt.GetData();
+    const double* xa_ptr = xa.GetData();
+    const double* va_ptr = va.GetData();
+    const double* aa_ptr = aa.GetData();
+    for (int i{}; i < x.Size(); ++i) {
+      const double aa_val = aa_ptr[i];
+      x_ptr[i] =
+          (x_ptr[i] * prev_fac) + (fac1_inv_ * (xa_ptr[i] + fac3dtdt * aa_val));
+      v_ptr[i] =
+          (v_ptr[i] * prev_fac) + (fac1_inv_ * (va_ptr[i] + fac4dt * aa_val));
+    }
   }
 
   virtual void
   AdvanceTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
 
-    // Correct alpha levels
-    xa.Add(fac3_ * dt * dt, aa);
-    va.Add(fac4_ * dt, aa);
+    // // Correct alpha levels
+    // xa.Add(fac3_ * dt * dt, aa);
+    // va.Add(fac4_ * dt, aa);
 
-    // Extrapolate
-    x *= 1.0 - 1.0 / fac1_;
-    x.Add(1.0 / fac1_, xa);
+    // // Extrapolate
+    // x *= 1.0 - 1.0 / fac1_;
+    // x.Add(1.0 / fac1_, xa);
 
-    dxdt *= 1.0 - 1.0 / fac1_;
-    dxdt.Add(1.0 / fac1_, va);
+    // dxdt *= 1.0 - 1.0 / fac1_;
+    // dxdt.Add(1.0 / fac1_, va);
 
-    d2xdt2 *= 1.0 - 1.0 / fac5_;
-    d2xdt2.Add(1.0 / fac5_, aa);
+    // d2xdt2 *= 1.0 - 1.0 / fac5_;
+    // d2xdt2.Add(1.0 / fac5_, aa);
+
+    // do what's above in one loop
+    const double prev_fac = 1. - fac1_inv_;
+    const double fac3dtdt = fac3_ * dt * dt;
+    const double fac4dt = fac4_ * dt;
+    double* x_p = x.GetData();
+    double* v_p = dxdt.GetData();
+    double* a_p = d2xdt2.GetData();
+    double* xa_p = xa.GetData();
+    double* va_p = va.GetData();
+    const double* aa_p = aa.GetData();
+    for (int i{}; i < x.Size(); ++i) {
+      const double aa_val = aa_p[i];
+      // corect alpha values
+      xa_p[i] += fac3dtdt * aa_val;
+      va_p[i] += fac4dt * aa_val;
+      // extrapolate
+      x_p[i] = (x_p[i] * prev_fac) + (fac1_inv_ * xa_p[i]);
+      v_p[i] = (v_p[i] * prev_fac) + (fac1_inv_ * va_p[i]);
+      a_p[i] = (a_p[i] * prev_fac) + (fac5_inv_ * aa_val);
+    }
 
     t += dt;
+
+    // now xa and va should be changing
+    fixed_point_predict_alpha_level_ = true;
   }
 };
 
@@ -297,9 +352,11 @@ public:
     os << "gamma   = " << gamma_ << std::endl;
 
     if (gamma_ == 0.5) {
-      os << "Second order" << " and ";
+      os << "Second order"
+         << " and ";
     } else {
-      os << "First order" << " and ";
+      os << "First order"
+         << " and ";
     }
 
     if ((gamma_ >= 0.5) && (beta_ >= (gamma_ + 0.5) * (gamma_ + 0.5) / 4)) {
@@ -351,8 +408,10 @@ public:
     Step(x, dxdt, t, dt);
   }
 
-  virtual void
-  FixedPointSolve2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
+  virtual void FixedPointSolve2(const mfem::Vector& x,
+                                const mfem::Vector& dxdt,
+                                double& t,
+                                double& dt) {
     MIMI_FUNC()
 
     // In the first pass compute d2xdt2 directly from operator.
