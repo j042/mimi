@@ -20,10 +20,6 @@ public:
 
   using Base_::Base_;
 
-  // extra freeze option
-  // if freeze == false, considered as melt
-  bool freeze_{false};
-
   /// pointer to nl oper to
   mimi::operators::NonlinearSolid* nl_oper_{nullptr};
 

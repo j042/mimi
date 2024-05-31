@@ -417,8 +417,7 @@ public:
                                const double rel_tol,
                                const double abs_tol,
                                const double max_iter,
-                               const bool iterative_mode,
-                               const bool freeze) {
+                               const bool iterative_mode) {
     MIMI_FUNC()
 
     auto& newton = newton_solvers_.at(name);
@@ -426,7 +425,6 @@ public:
     newton->SetAbsTol(abs_tol);
     newton->SetMaxIter(max_iter);
     newton->iterative_mode = iterative_mode;
-    newton->freeze_ = freeze;
   }
 
   /// get final norms. can be used for augmented langrange iterations

@@ -114,7 +114,7 @@ public:
     void SetDim(const int dim) {
       MIMI_FUNC()
 
-      assert(dim > 0);
+      assert(dim_ > 0);
       dim_ = dim;
       distance_query_.SetSize(dim);
       distance_results_.SetSize(dim - 1, dim);
@@ -123,7 +123,7 @@ public:
     void SetDof(const int n_dof) {
       MIMI_FUNC()
 
-      assert(dim > 0);
+      assert(dim_ > 0);
       element_x_.SetSize(n_dof * dim_);
       element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
       J_.SetSize(dim_, dim_ - 1);
