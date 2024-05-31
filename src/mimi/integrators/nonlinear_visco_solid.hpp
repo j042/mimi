@@ -78,7 +78,6 @@ public:
   /// Performs quad loop with element data and temporary data
   void QuadLoop(const mfem::DenseMatrix& x,
                 const mfem::DenseMatrix& v,
-                const int i_thread,
                 const Vector_<QuadData>& q_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) const {
@@ -91,7 +90,6 @@ public:
       // currently we will just use PK1
       material_->EvaluatePK1(tmp.F_,
                              tmp.F_dot_,
-                             i_thread,
                              q.material_state_,
                              tmp.stress_); // quad loop is always frozen
 
@@ -104,7 +102,6 @@ public:
 
   void AccumulateStatesAtQuads(const mfem::DenseMatrix& x,
                                const mfem::DenseMatrix& v,
-                               const int i_thread,
                                Vector_<QuadData>& q_data,
                                TemporaryData& tmp) const {
     MIMI_FUNC()
@@ -115,7 +112,7 @@ public:
       mfem::MultAtB(v, q.dN_dX_, tmp.F_dot_);
 
       // currently we will just use PK1
-      material_->Accumulate(tmp.F_, tmp.F_dot_, i_thread, q.material_state_);
+      material_->Accumulate(tmp.F_, tmp.F_dot_, q.material_state_);
     }
   }
 
@@ -152,7 +149,6 @@ public:
         // assemble residual
         QuadLoop(current_element_x,
                  current_element_v,
-                 i_thread,
                  e.quad_data_,
                  tmp,
                  tmp.forward_residual_);
@@ -197,7 +193,6 @@ public:
             // accumulate
             AccumulateStatesAtQuads(current_element_x,
                                     current_element_v,
-                                    i_thread,
                                     e.quad_data_,
                                     tmp);
           }
@@ -238,7 +233,6 @@ public:
             // assemble residual
             QuadLoop(current_element_x,
                      current_element_v,
-                     i_thread,
                      e.quad_data_,
                      tmp,
                      local_residual);
@@ -258,7 +252,6 @@ public:
               with_respect_to = orig_wrt + diff_step;
               QuadLoop(current_element_x,
                        current_element_v,
-                       i_thread,
                        e.quad_data_,
                        tmp,
                        tmp.forward_residual_);
@@ -323,7 +316,6 @@ public:
             // assemble residual
             QuadLoop(current_element_x,
                      current_element_v,
-                     i_thread,
                      e.quad_data_,
                      tmp,
                      local_residual);
@@ -343,7 +335,6 @@ public:
               with_respect_to = orig_wrt + diff_step;
               QuadLoop(current_element_x,
                        current_element_v,
-                       i_thread,
                        e.quad_data_,
                        tmp,
                        tmp.forward_residual_);

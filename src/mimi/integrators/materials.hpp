@@ -12,6 +12,7 @@
 #include "mimi/utils/print.hpp"
 
 namespace mimi::integrators {
+constexpr static const int kDimDim = 9;
 
 template<typename T>
 using Vector_ = mimi::utils::Vector<T>;
@@ -41,13 +42,13 @@ protected:
   /// I want to be thread-safe. Don't touch me after Setup
   mfem::DenseMatrix I_;
 
-  /// those tmp/aux containers needs to be initialized in Setup
-  /// for thread safe use.
-  Vector_<Vector_<mfem::DenseMatrix>> aux_matrices_;
-  Vector_<Vector_<mfem::Vector>> aux_vectors_;
+  // /// those tmp/aux containers needs to be initialized in Setup
+  // /// for thread safe use.
+  // Vector_<Vector_<mfem::DenseMatrix>> aux_matrices_;
+  // Vector_<Vector_<mfem::Vector>> aux_vectors_;
 
-  /// this is to help switch from PK1 to sigma and vice versa
-  Vector_<Vector_<mfem::DenseMatrix>> stress_conversions_;
+  // /// this is to help switch from PK1 to sigma and vice versa
+  // Vector_<Vector_<mfem::DenseMatrix>> stress_conversions_;
 
   static constexpr const int k_P{0};
   static constexpr const int k_sigma{1};
@@ -96,9 +97,9 @@ public:
     dim_ = dim;
     n_threads_ = n_threads;
 
-    stress_conversions_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+    // stress_conversions_.resize(
+    //     n_threads_,
+    //     Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
 
     I_.Diag(1., dim);
 
@@ -139,17 +140,14 @@ public:
   /// @param state
   /// @param sigma
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
                               const MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
-
-    // setup aux
-    auto& i_conv = stress_conversions_[i_thread];
-    mfem::DenseMatrix& P = i_conv[k_P];
+    double buf[kDimDim];
+    mfem::DenseMatrix P(buf, dim_, dim_);
 
     // get P
-    EvaluatePK1(F, i_thread, state, P);
+    EvaluatePK1(F, state, P);
 
     // 1 / det(F) * P * F^T
     // they don't have mfem::Mult_a_ABt();
@@ -159,16 +157,14 @@ public:
 
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const mfem::DenseMatrix& F_dot,
-                              const int& i_thread,
                               const MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
 
-    // setup aux
-    auto& i_conv = stress_conversions_[i_thread];
-    mfem::DenseMatrix& P = i_conv[k_P];
+    double buf[kDimDim];
+    mfem::DenseMatrix P(buf, dim_, dim_);
 
-    EvaluatePK1(F, F_dot, i_thread, state, sigma);
+    EvaluatePK1(F, F_dot, state, sigma);
 
     // 1 / det(F) * P * F^T
     // they don't have mfem::Mult_a_ABt();
@@ -180,18 +176,17 @@ public:
   /// transform if none of stress is implemented, you will be stuck in a
   /// neverending loop current implementation is not so memory efficient
   virtual void EvaluatePK1(const mfem::DenseMatrix& F,
-                           const int& i_thread,
                            const MaterialStatePtr_& state,
                            mfem::DenseMatrix& P) {
     MIMI_FUNC()
 
     // setup aux
-    auto& i_conv = stress_conversions_[i_thread];
-    mfem::DenseMatrix& F_inv = i_conv[k_F_inv];
-    mfem::DenseMatrix& sigma = i_conv[k_sigma];
+    double buf[2][kDimDim];
+    mfem::DenseMatrix F_inv(buf[0], dim_, dim_);
+    mfem::DenseMatrix sigma(buf[1], dim_, dim_);
 
     // get sigma
-    EvaluateCauchy(F, i_thread, state, sigma);
+    EvaluateCauchy(F, state, sigma);
 
     // P = det(F) * sigma * F^-T
     mfem::CalcInverse(F, F_inv);
@@ -201,18 +196,17 @@ public:
 
   virtual void EvaluatePK1(const mfem::DenseMatrix& F,
                            const mfem::DenseMatrix& F_dot,
-                           const int& i_thread,
                            const MaterialStatePtr_& state,
                            mfem::DenseMatrix& P) {
     MIMI_FUNC()
 
     // setup aux
-    auto& i_conv = stress_conversions_[i_thread];
-    mfem::DenseMatrix& F_inv = i_conv[k_F_inv];
-    mfem::DenseMatrix& sigma = i_conv[k_sigma];
+    double buf[2][kDimDim];
+    mfem::DenseMatrix F_inv(buf[0], dim_, dim_);
+    mfem::DenseMatrix sigma(buf[1], dim_, dim_);
 
     // get sigma
-    EvaluateCauchy(F, F_dot, i_thread, state, sigma);
+    EvaluateCauchy(F, F_dot, state, sigma);
 
     // P = det(F) * sigma * F^-T
     mfem::CalcInverse(F, F_inv);
@@ -222,7 +216,6 @@ public:
 
   /// state accumulating version
   virtual void Accumulate(const mfem::DenseMatrix& F,
-                          const int& i_thread,
                           MaterialStatePtr_& state) {
     MIMI_FUNC()
 
@@ -232,7 +225,6 @@ public:
   /// this is state accumulating version of evaluation call
   virtual void Accumulate(const mfem::DenseMatrix& F,
                           const mfem::DenseMatrix& F_dot,
-                          const int& i_thread,
                           MaterialStatePtr_& state) {
     MIMI_FUNC()
 
@@ -272,23 +264,20 @@ public:
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
 
-    /// make space for C F S
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+    // /// make space for C F S
+    // aux_matrices_.resize(
+    //     n_threads_,
+    //     Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
   }
 
   virtual void EvaluatePK1(const mfem::DenseMatrix& F,
-                           const int& i_thread,
                            const MaterialStatePtr_&,
                            mfem::DenseMatrix& P) {
     MIMI_FUNC()
-
-    // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& C = i_aux[k_C];
-    mfem::DenseMatrix& E = i_aux[k_E];
-    mfem::DenseMatrix& S = i_aux[k_S];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix C(buf[0], dim_, dim_);
+    mfem::DenseMatrix E(buf[1], dim_, dim_);
+    mfem::DenseMatrix S(buf[2], dim_, dim_);
 
     // C
     mfem::MultAtB(F, F, C);
@@ -331,22 +320,21 @@ public:
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
 
-    /// make space for C F S
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(1, mfem::DenseMatrix(dim_)));
+    // /// make space for C F S
+    // aux_matrices_.resize(
+    //     n_threads_,
+    //     Vector_<mfem::DenseMatrix>(1, mfem::DenseMatrix(dim_)));
   }
 
   /// mu / det(F) * (B - I) + lambda * (det(F) - 1) I
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
                               const MaterialStatePtr_&,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& B = i_aux[k_B];
+    double buf[kDimDim];
+    mfem::DenseMatrix B(buf, dim_, dim_);
 
     // precompute aux values
     const double det_F = F.Det();
@@ -419,10 +407,10 @@ public:
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
 
-    /// make space for du_dX
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+    // /// make space for du_dX
+    // aux_matrices_.resize(
+    //     n_threads_,
+    //     Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -441,14 +429,13 @@ public:
   }
 
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
                               const MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& eta = i_aux[k_eta];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix eps(buf[0], dim_, dim_);
+    mfem::DenseMatrix s(buf[1], dim_, dim_);
+    mfem::DenseMatrix eta(buf[2], dim_, dim_);
 
     // get states
     const mfem::DenseMatrix& beta = state->matrices_[State::k_beta];
@@ -487,15 +474,14 @@ public:
   }
 
   virtual void Accumulate(const mfem::DenseMatrix& F,
-                          const int& i_thread,
                           MaterialStatePtr_& state) {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& eta = i_aux[k_eta];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix eps(buf[0], dim_, dim_);
+    mfem::DenseMatrix s(buf[1], dim_, dim_);
+    mfem::DenseMatrix eta(buf[2], dim_, dim_);
 
     // get states
     mfem::DenseMatrix& beta = state->matrices_[State::k_beta];
@@ -700,10 +686,10 @@ public:
     /// base setup for conversions and dim, nthread
     Base_::Setup(dim, nthread);
 
-    /// make space for du_dX
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+    // /// make space for du_dX
+    // aux_matrices_.resize(
+    //     n_threads_,
+    //     Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -722,16 +708,15 @@ public:
   };
 
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
                               const MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix eps(buf[0], dim_, dim_);
+    mfem::DenseMatrix s(buf[1], dim_, dim_);
+    mfem::DenseMatrix N_p(buf[2], dim_, dim_);
 
     // get states
     const mfem::DenseMatrix& plastic_strain =
@@ -788,15 +773,15 @@ public:
   }
 
   virtual void Accumulate(const mfem::DenseMatrix& F,
-                          const int& i_thread,
+
                           MaterialStatePtr_& state) {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix eps(buf[0], dim_, dim_);
+    mfem::DenseMatrix s(buf[1], dim_, dim_);
+    mfem::DenseMatrix N_p(buf[2], dim_, dim_);
 
     // get states
     mfem::DenseMatrix& plastic_strain =
@@ -1063,10 +1048,10 @@ public:
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
 
-    /// make space for du_dX
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+    // /// make space for du_dX
+    // aux_matrices_.resize(
+    //     n_threads_,
+    //     Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -1085,7 +1070,6 @@ public:
   };
 
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
                               const MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
@@ -1095,16 +1079,15 @@ public:
 
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const mfem::DenseMatrix& F_dot,
-                              const int& i_thread,
                               const MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix eps(buf[0], dim_, dim_);
+    mfem::DenseMatrix s(buf[1], dim_, dim_);
+    mfem::DenseMatrix N_p(buf[2], dim_, dim_);
 
     // get states
     const mfem::DenseMatrix& plastic_strain =
@@ -1166,15 +1149,14 @@ public:
 
   virtual void Accumulate(const mfem::DenseMatrix& F,
                           const mfem::DenseMatrix& F_dot,
-                          const int& i_thread,
                           MaterialStatePtr_& state) {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix eps(buf[0], dim_, dim_);
+    mfem::DenseMatrix s(buf[1], dim_, dim_);
+    mfem::DenseMatrix N_p(buf[2], dim_, dim_);
 
     // get states
     mfem::DenseMatrix& plastic_strain =
@@ -1405,10 +1387,10 @@ public:
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
 
-    /// make space for du_dX
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
+    // /// make space for du_dX
+    // aux_matrices_.resize(
+    //     n_threads_,
+    //     Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
 
     // temporary solution to getting melt t.
     // TODO do better
@@ -1437,7 +1419,6 @@ public:
   };
 
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
                               const MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
@@ -1549,17 +1530,15 @@ public:
 
   virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
                               const mfem::DenseMatrix& F_dot,
-                              const int& i_thread,
                               const MaterialStatePtr_& state,
                               mfem::DenseMatrix& sigma) {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
-    mfem::DenseMatrix& L = i_aux[k_L];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix eps(buf[0], dim_, dim_);
+    mfem::DenseMatrix s(buf[1], dim_, dim_);
+    mfem::DenseMatrix N_p(buf[2], dim_, dim_);
 
     // get states
     const mfem::DenseMatrix& plastic_strain =
@@ -1630,16 +1609,14 @@ public:
 
   virtual void Accumulate(const mfem::DenseMatrix& F,
                           const mfem::DenseMatrix& F_dot,
-                          const int& i_thread,
                           MaterialStatePtr_& state) {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
-    mfem::DenseMatrix& L = i_aux[k_L];
+    double buf[3][kDimDim];
+    mfem::DenseMatrix eps(buf[0], dim_, dim_);
+    mfem::DenseMatrix s(buf[1], dim_, dim_);
+    mfem::DenseMatrix N_p(buf[2], dim_, dim_);
 
     // get states
     mfem::DenseMatrix& plastic_strain =

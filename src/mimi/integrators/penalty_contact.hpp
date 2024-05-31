@@ -97,19 +97,16 @@ public:
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
   struct TemporaryData {
-    /// wraps element_state_data_
+
+    int dim_{-1};
+
     mfem::Vector element_x_;
-    /// wraps element_x_
     mfem::DenseMatrix element_x_mat_;
-    /// wraps J_data
     mfem::DenseMatrix J_;
-    /// wraps forward_residual data
     mfem::DenseMatrix forward_residual_;
 
     mimi::coefficients::NearestDistanceBase::Query distance_query_;
     mimi::coefficients::NearestDistanceBase::Results distance_results_;
-
-    int dim_{-1};
 
     void SetDim(const int dim) {
       MIMI_FUNC()
@@ -335,7 +332,6 @@ public:
   }
 
   bool QuadLoop(const mfem::DenseMatrix& x,
-                const int i_thread,
                 Vector_<QuadData>& q_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix,
@@ -440,7 +436,6 @@ public:
             // this function is called either at the last step at "melted"
             // staged or during line search, keep_record = False
             const bool any_active = QuadLoop(current_element_x,
-                                             i_thread,
                                              bed.quad_data_,
                                              tmp,
                                              tmp.forward_residual_,
@@ -484,7 +479,6 @@ public:
 
             // assemble residual
             const bool any_active = QuadLoop(current_element_x,
-                                             i_thread,
                                              bed.quad_data_,
                                              tmp,
                                              local_residual,
@@ -509,7 +503,6 @@ public:
 
               with_respect_to = orig_wrt + diff_step;
               QuadLoop(current_element_x,
-                       i_thread,
                        bed.quad_data_,
                        tmp,
                        tmp.forward_residual_,
@@ -564,7 +557,6 @@ public:
 
             // assemble residual
             const bool any_active = QuadLoop(current_element_x,
-                                             i_thread,
                                              bed.quad_data_,
                                              tmp,
                                              local_residual,
@@ -589,7 +581,6 @@ public:
 
               with_respect_to = orig_wrt + diff_step;
               QuadLoop(current_element_x,
-                       i_thread,
                        bed.quad_data_,
                        tmp,
                        tmp.forward_residual_,
