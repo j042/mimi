@@ -328,10 +328,7 @@ public:
       add(*v_, fac1_, d2x_dt2, temp_v);
       viscosity_->AddMult(temp_v, y);
     }
-    // if (contact_) {
-    //   contact_->AddMult(temp_x, y);
-    // }
-    // substract rhs linear forms
+
     if (rhs_) {
       y.Add(-1.0, *rhs_);
     }
