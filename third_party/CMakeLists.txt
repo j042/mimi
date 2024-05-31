@@ -1,4 +1,4 @@
-add_subdirectory(mfem)
+add_subdirectory(mfem-fork)
 add_subdirectory(pybind11)
 
 if(MIMI_COMPILE_SPLINEPY)
