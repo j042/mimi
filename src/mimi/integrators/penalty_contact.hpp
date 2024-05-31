@@ -74,8 +74,6 @@ public:
     bool active_ = false;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
-    mfem::DenseMatrix residual_view_; // we always assemble at the same place
-    mfem::DenseMatrix grad_view_;     // we always assemble at the same place
 
     Vector_<QuadData> quad_data_;
 
@@ -83,11 +81,6 @@ public:
     /// but maybe for further processing or something
     std::shared_ptr<mfem::NURBSFiniteElement> element_;
     std::shared_ptr<mfem::FaceElementTransformations> element_trans_;
-
-    /// pointers to corresponding Base_::element_vectors_
-    mfem::Vector* element_residual_;
-    /// and Base_::element_matrices_
-    mfem::DenseMatrix* element_grad_;
 
     // direct access id to sparse matrix
     // as we only loop over marked boundaries, keep this pointer for easy access
@@ -224,14 +217,6 @@ public:
     boundary_geometry_type_ =
         precomputed_->boundary_elements_[0]->GetGeomType();
 
-    // allocate element vectors and matrices
-    Base_::boundary_element_matrices_ =
-        std::make_unique<mimi::utils::Data<mfem::DenseMatrix>>();
-    Base_::boundary_element_matrices_->Reallocate(n_marked_boundaries_);
-    Base_::boundary_element_vectors_ =
-        std::make_unique<mimi::utils::Data<mfem::Vector>>();
-    Base_::boundary_element_vectors_->Reallocate(n_marked_boundaries_);
-
     boundary_element_data_.resize(n_marked_boundaries_);
 
     // now, weight of jacobian.
@@ -261,19 +246,6 @@ public:
 
         // quick size check
         const int n_tdof = i_bed.n_tdof_;
-
-        // now, setup some more from local properties
-        i_bed.element_residual_ = &(*boundary_element_vectors_)[i];
-        i_bed.element_residual_->SetSize(n_tdof);
-        i_bed.residual_view_.UseExternalData(i_bed.element_residual_->GetData(),
-                                             i_bed.n_dof_,
-                                             dim_);
-
-        i_bed.element_grad_ = &(*boundary_element_matrices_)[i];
-        i_bed.element_grad_->SetSize(n_tdof, n_tdof);
-        i_bed.grad_view_.UseExternalData(i_bed.element_grad_->GetData(),
-                                         n_tdof,
-                                         n_tdof);
 
         i_bed.sparse_matrix_A_ids_ = precomputed_->boundary_A_ids_[m];
 

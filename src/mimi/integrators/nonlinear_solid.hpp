@@ -41,8 +41,6 @@ public:
     int n_tdof_;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
-    mfem::DenseMatrix residual_view_; // we always assemble at the same place
-    mfem::DenseMatrix grad_view_;     // we always assemble at the same place
 
     mfem::Array<int> scalar_v_dofs_;
     mfem::Vector
@@ -55,11 +53,6 @@ public:
     /// but maybe for further processing or something
     std::shared_ptr<mfem::NURBSFiniteElement> element_;
     std::shared_ptr<mfem::IsoparametricTransformation> element_trans_;
-
-    /// pointers to corresponding Base_::element_vectors_
-    mfem::Vector* element_residual_;
-    /// and Base_::element_matrices_
-    mfem::DenseMatrix* element_grad_;
 
     const mfem::IntegrationRule&
     GetIntRule(mfem::IntegrationRules& thread_int_rules) const {
@@ -154,102 +147,79 @@ public:
       has_states_ = false;
     }
 
-    // allocate element vectors and matrices
-    element_matrices_ =
-        std::make_unique<mimi::utils::Data<mfem::DenseMatrix>>(n_elements_);
-    element_vectors_ =
-        std::make_unique<mimi::utils::Data<mfem::Vector>>(n_elements_);
-
     // extract element geometry type
     geometry_type_ = precomputed_->elements_[0]->GetGeomType();
 
     // allocate element data
     element_data_.resize(n_elements_);
 
-    auto precompute_at_elements_and_quads = [&](const int el_begin,
-                                                const int el_end,
-                                                const int i_thread) {
-      // thread's obj
-      auto& int_rules = precomputed_->int_rules_[i_thread];
+    auto precompute_at_elements_and_quads =
+        [&](const int el_begin, const int el_end, const int i_thread) {
+          // thread's obj
+          auto& int_rules = precomputed_->int_rules_[i_thread];
 
-      mfem::DenseMatrix dN_dxi, dxi_dX;
+          mfem::DenseMatrix dN_dxi, dxi_dX;
 
-      // element loop
-      for (int i{el_begin}; i < el_end; ++i) {
-        // prepare element level data
-        auto& i_el_data = element_data_[i];
+          // element loop
+          for (int i{el_begin}; i < el_end; ++i) {
+            // prepare element level data
+            auto& i_el_data = element_data_[i];
 
-        // save (shared) pointers to element and el_trans
-        i_el_data.element_ = precomputed_->elements_[i];
-        i_el_data.geometry_type_ = i_el_data.element_->GetGeomType();
-        i_el_data.element_trans_ =
-            precomputed_->reference_to_target_element_trans_[i];
-        i_el_data.n_dof_ = i_el_data.element_->GetDof();
-        i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
-        auto& v_dofs = *i_el_data.v_dofs_;
+            // save (shared) pointers to element and el_trans
+            i_el_data.element_ = precomputed_->elements_[i];
+            i_el_data.geometry_type_ = i_el_data.element_->GetGeomType();
+            i_el_data.element_trans_ =
+                precomputed_->reference_to_target_element_trans_[i];
+            i_el_data.n_dof_ = i_el_data.element_->GetDof();
+            i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
+            auto& v_dofs = *i_el_data.v_dofs_;
 
-        // v_dofs are organized in xyzxyzxyz, so we just want to skip through
-        // and divide them to create scalar_vdofs
-        i_el_data.scalar_v_dofs_.SetSize(v_dofs.Size() / dim_);
-        for (int i{}, j{}; i < v_dofs.Size(); i += dim_, ++j) {
-          i_el_data.scalar_v_dofs_[j] = v_dofs[i] / dim_;
-        }
+            // v_dofs are organized in xyzxyzxyz, so we just want to skip
+            // through and divide them to create scalar_vdofs
+            i_el_data.scalar_v_dofs_.SetSize(v_dofs.Size() / dim_);
+            for (int i{}, j{}; i < v_dofs.Size(); i += dim_, ++j) {
+              i_el_data.scalar_v_dofs_[j] = v_dofs[i] / dim_;
+            }
 
-        // check suitability of temp data
-        // for structure simulations, tdof and vdof are the same
-        const int n_tdof = i_el_data.n_dof_ * dim_;
-        i_el_data.n_tdof_ = n_tdof;
+            // check suitability of temp data
+            // for structure simulations, tdof and vdof are the same
+            const int n_tdof = i_el_data.n_dof_ * dim_;
+            i_el_data.n_tdof_ = n_tdof;
 
-        // also allocate element based vectors and matrix (assembly output)
-        i_el_data.element_residual_ = &(*element_vectors_)[i];
-        i_el_data.element_residual_->SetSize(n_tdof);
-        i_el_data.residual_view_.UseExternalData(
-            i_el_data.element_residual_->GetData(),
-            i_el_data.n_dof_,
-            dim_);
-        i_el_data.scalar_post_process_view_.SetDataAndSize(
-            i_el_data.element_residual_->GetData(),
-            i_el_data.n_dof_);
-        i_el_data.element_grad_ = &(*element_matrices_)[i];
-        i_el_data.element_grad_->SetSize(n_tdof, n_tdof);
-        i_el_data.grad_view_.UseExternalData(i_el_data.element_grad_->GetData(),
-                                             n_tdof,
-                                             n_tdof);
+            // get quad order
+            i_el_data.quadrature_order_ =
+                (quadrature_order < 0) ? i_el_data.element_->GetOrder() * 2 + 3
+                                       : quadrature_order;
 
-        // get quad order
-        i_el_data.quadrature_order_ =
-            (quadrature_order < 0) ? i_el_data.element_->GetOrder() * 2 + 3
-                                   : quadrature_order;
+            // get int rule
+            const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);
 
-        // get int rule
-        const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);
+            // prepare quad loop
+            i_el_data.n_quad_ = ir.GetNPoints();
+            i_el_data.quad_data_.resize(i_el_data.n_quad_);
 
-        // prepare quad loop
-        i_el_data.n_quad_ = ir.GetNPoints();
-        i_el_data.quad_data_.resize(i_el_data.n_quad_);
+            for (int j{}; j < i_el_data.n_quad_; ++j) {
+              // get int point - this is just look up within ir
+              const mfem::IntegrationPoint& ip = ir.IntPoint(j);
+              i_el_data.element_trans_->SetIntPoint(&ip);
 
-        for (int j{}; j < i_el_data.n_quad_; ++j) {
-          // get int point - this is just look up within ir
-          const mfem::IntegrationPoint& ip = ir.IntPoint(j);
-          i_el_data.element_trans_->SetIntPoint(&ip);
+              auto& q_data = i_el_data.quad_data_[j];
+              q_data.integration_weight_ = ip.weight;
 
-          auto& q_data = i_el_data.quad_data_[j];
-          q_data.integration_weight_ = ip.weight;
+              dN_dxi.SetSize(i_el_data.n_dof_, dim_);
+              q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
+              dxi_dX.SetSize(dim_, dim_);
+              q_data.material_state_ = material_->CreateState();
+              q_data.N_.SetSize(i_el_data.n_dof_);
 
-          dN_dxi.SetSize(i_el_data.n_dof_, dim_);
-          q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
-          dxi_dX.SetSize(dim_, dim_);
-          q_data.material_state_ = material_->CreateState();
-          q_data.N_.SetSize(i_el_data.n_dof_);
-
-          i_el_data.element_->CalcShape(ip, q_data.N_);
-          i_el_data.element_->CalcDShape(ip, dN_dxi);
-          mfem::CalcInverse(i_el_data.element_trans_->Jacobian(), dxi_dX);
-          mfem::Mult(dN_dxi, dxi_dX, q_data.dN_dX_);
-          q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
-        }
-      }
-    };
+              i_el_data.element_->CalcShape(ip, q_data.N_);
+              i_el_data.element_->CalcDShape(ip, dN_dxi);
+              mfem::CalcInverse(i_el_data.element_trans_->Jacobian(), dxi_dX);
+              mfem::Mult(dN_dxi, dxi_dX, q_data.dN_dX_);
+              q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
+            }
+          }
+        };
 
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
                             n_elements_,
