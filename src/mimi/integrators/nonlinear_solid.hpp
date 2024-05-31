@@ -30,7 +30,7 @@ public:
     mfem::Vector N_; // basis - used for post processing
     mfem::DenseMatrix dN_dX_;
     double det_dX_dxi_;
-    mutable std::shared_ptr<MaterialState> material_state_;
+    std::shared_ptr<MaterialState> material_state_;
   };
 
   struct ElementData {
@@ -39,8 +39,6 @@ public:
     int n_quad_;
     int n_dof_; // this is not true dof
     int n_tdof_;
-    bool has_states_ = false;
-    bool frozen_ = false;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
     mfem::DenseMatrix residual_view_; // we always assemble at the same place
@@ -112,6 +110,8 @@ protected:
   std::shared_ptr<MaterialBase> material_;
   /// element data
   Vector_<ElementData> element_data_;
+  // no plan for mixed material, so we can have this flag in integrator level
+  bool has_states_;
 
 public:
   NonlinearSolid(
@@ -146,6 +146,13 @@ public:
 
     // setup material
     material_->Setup(dim_, n_threads_);
+    // set flag for this integrator
+    if (material_->CreateState()) {
+      // not a nullptr -> has states
+      has_states_ = true;
+    } else {
+      has_states_ = false;
+    }
 
     // allocate element vectors and matrices
     element_matrices_ =
@@ -241,12 +248,6 @@ public:
           mfem::Mult(dN_dxi, dxi_dX, q_data.dN_dX_);
           q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
         }
-
-        if (!i_el_data.quad_data_[0].material_state_) {
-          i_el_data.has_states_ = false;
-        } else {
-          i_el_data.has_states_ = true;
-        }
       }
     };
 
@@ -262,21 +263,31 @@ public:
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) const {
     MIMI_FUNC()
-    const bool frozen = *operator_frozen_state_;
     for (const QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
 
       // currently we will just use PK1
-      material_->EvaluatePK1(tmp.F_,
-                             i_thread,
-                             q.material_state_,
-                             tmp.stress_,
-                             frozen);
+      material_->EvaluatePK1(tmp.F_, i_thread, q.material_state_, tmp.stress_);
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,
                           tmp.stress_,
                           residual_matrix);
+    }
+  }
+
+  /// Performs quad loop with element data and temporary data
+  void AccumulateStatesAtQuads(const mfem::DenseMatrix& x,
+                               const int i_thread,
+                               Vector_<QuadData>& q_data,
+                               TemporaryData& tmp) const {
+    MIMI_FUNC()
+    for (QuadData& q : q_data) {
+      // get dx_dX = x * dN_dX
+      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
+
+      // currently we will just use PK1
+      material_->Accumulate(tmp.F_, i_thread, q.material_state_);
     }
   }
 
@@ -317,6 +328,31 @@ public:
     mimi::utils::NThreadExe(assemble_element_residual_and_contribute,
                             n_elements_,
                             (nthreads < 1) ? n_threads_ : nthreads);
+  }
+
+  virtual void AccumulateDomainStates(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+    if (!has_states_)
+      return;
+    auto accumulate_states = [&](const int begin,
+                                 const int end,
+                                 const int i_thread) {
+      TemporaryData tmp;
+      for (int i{begin}; i < end; ++i) {
+        // in
+        ElementData& e = element_data_[i];
+        // set shape for tmp data - first call will allocate
+        tmp.SetShape(e.n_dof_, dim_);
+
+        // get current element solution as matrix
+        mfem::DenseMatrix& current_element_x =
+            tmp.CurrentElementSolutionCopy(current_x, e);
+
+        // accumulate
+        AccumulateStatesAtQuads(current_element_x, i_thread, e.quad_data_, tmp);
+      }
+    };
+    mimi::utils::NThreadExe(accumulate_states, n_elements_, n_threads_);
   }
 
   virtual void AddDomainGrad(const mfem::Vector& current_x,
@@ -472,11 +508,6 @@ public:
                             n_elements_,
                             (nthreads < 0) ? n_threads_ : nthreads);
   };
-
-  /// @brief assembles grad. In fact, it is already done in domain residual and
-  /// this doesn't do anything.
-  /// @param current_x
-  virtual void AssembleDomainGrad(const mfem::Vector& current_x) { MIMI_FUNC() }
 
   /// Create mass matrix if we don't have one.
   virtual void CreateMassMatrix(const int size) {

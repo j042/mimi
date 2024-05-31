@@ -259,6 +259,12 @@ public:
 
     return jacobian_;
   }
+
+  virtual void AccumulateStates(const mfem::Vector& x, const mfem::Vector& v) {
+    MIMI_FUNC()
+
+    nonlinear_visco_stiffness_->AccumulateStates(x, v);
+  }
 };
 
 } // namespace mimi::operators

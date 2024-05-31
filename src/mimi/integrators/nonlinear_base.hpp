@@ -94,6 +94,10 @@ public:
     mimi::utils::PrintAndThrowError("AddDomainResidualAndGrad not implemented");
   };
 
+  virtual void AccumulateDomainStates(const mfem::Vector& current_x) {
+    mimi::utils::PrintAndThrowError("AccumulateDomainStates not implemented");
+  }
+
   virtual void AddBoundaryResidual(const mfem::Vector& current_x,
                                    const int nthreads,
                                    mfem::Vector& residual) {

@@ -40,18 +40,6 @@ public:
 
   virtual std::string Name() const { return "NonlinearSolid"; }
 
-  /// flag to inform grad assembly is relevant
-  virtual void AssembleGradOn() {
-    MIMI_FUNC()
-    nonlinear_stiffness_->AssembleGradOn();
-  }
-
-  /// flag to inform grad assembly is NOT relevant
-  virtual void AssembleGradOff() {
-    MIMI_FUNC()
-    nonlinear_stiffness_->AssembleGradOff();
-  }
-
   /// freeze material states - no accumulation
   virtual void FreezeStates() {
     MIMI_FUNC()
@@ -353,6 +341,12 @@ public:
     }
 
     return jacobian_;
+  }
+
+  virtual void AccumulateStates(const mfem::Vector& x, const mfem::Vector& v) {
+    MIMI_FUNC()
+
+    nonlinear_stiffness_->AccumulateStates(x);
   }
 };
 

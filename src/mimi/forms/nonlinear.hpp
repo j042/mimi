@@ -38,23 +38,12 @@ public:
   double first_effective_dt_{0.0};  // this is for x
   double second_effective_dt_{0.0}; // this is for x_dot (=v).
 
-  virtual void AssembleGradOn() {
+  virtual void AccumulateStates(const mfem::Vector& x) {
     MIMI_FUNC()
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->assemble_grad_ = true;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->assemble_grad_ = true;
-    }
-  }
 
-  virtual void AssembleGradOff() {
-    MIMI_FUNC()
+    // currently, we don't do boundaries
     for (auto& dnfi : domain_nfi_) {
-      dnfi->assemble_grad_ = false;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->assemble_grad_ = false;
+      dnfi->AccumulateDomainStates(x);
     }
   }
 
@@ -81,7 +70,6 @@ public:
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
-
       domain_integ->AddDomainResidual(current_x, -1, residual);
     }
 

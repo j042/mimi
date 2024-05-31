@@ -33,23 +33,12 @@ public:
     }
   }
 
-  virtual void AssembleGradOn() {
+  virtual void AccumulateStates(const mfem::Vector& x, const mfem::Vector& v) {
     MIMI_FUNC()
-    for (auto& dnfi : domain_nfvi_) {
-      dnfi->assemble_grad_ = true;
-    }
-    for (auto& bnfi : boundary_face_nfvi_) {
-      bnfi->assemble_grad_ = true;
-    }
-  }
 
-  virtual void AssembleGradOff() {
-    MIMI_FUNC()
+    // currently, we don't do boundaries
     for (auto& dnfi : domain_nfvi_) {
-      dnfi->assemble_grad_ = false;
-    }
-    for (auto& bnfi : boundary_face_nfvi_) {
-      bnfi->assemble_grad_ = false;
+      dnfi->AccumulateDomainStates(x, v);
     }
   }
 

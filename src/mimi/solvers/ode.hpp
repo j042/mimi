@@ -120,6 +120,7 @@ public:
 
     mimi_operator_->dt_ = dt;
     Base_::Step(x, dxdt, t, dt);
+    mimi_operator_->AccumulateStates(x, dxdt);
   }
   virtual void FixedPointSolve2(const mfem::Vector& x,
                                 const mfem::Vector& dxdt,
@@ -239,6 +240,9 @@ public:
 
     // now xa and va should be changing
     fixed_point_predict_alpha_level_ = true;
+
+    // accumulate!
+    mimi_operator_->AccumulateStates(x, dxdt);
   }
 };
 
@@ -389,6 +393,7 @@ public:
     x.Add(fac3_ * dt * dt, d2xdt2);
     dxdt.Add(fac4_ * dt, d2xdt2);
     t += dt;
+    mimi_operator_->AccumulateStates(x, dxdt);
   }
 
   virtual std::string Name() const { return "Newmark"; }
@@ -406,6 +411,7 @@ public:
 
     mimi_operator_->dt_ = dt;
     Step(x, dxdt, t, dt);
+    mimi_operator_->AccumulateStates(x, dxdt);
   }
 
   virtual void FixedPointSolve2(const mfem::Vector& x,
@@ -448,6 +454,7 @@ public:
     add(vn, fac4_ * dt, d2xdt2, dxdt);
 
     t += dt;
+    mimi_operator_->AccumulateStates(x, dxdt);
   }
 };
 

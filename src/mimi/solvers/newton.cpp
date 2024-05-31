@@ -10,11 +10,6 @@ namespace mimi::solvers {
 void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
   MIMI_FUNC()
 
-  // now, line search
-  // turn off the (plastic) state accumulation
-  if (nl_oper_)
-    nl_oper_->FreezeStates();
-
   int it;
   double norm0, norm, norm_goal;
   const bool have_b = (b.Size() == Height());
@@ -149,16 +144,6 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
 
     // current norm
     norm = Base_::Norm(Base_::r);
-  }
-
-  // residual one last time -> This is going to the exactly the same as the last
-  // assembly, but this time, we accumulate state.
-  //
-  // TODO: we only need to call this for stiffness integrator, which removes a
-  // need to keep freeze flag.
-  if (nl_oper_ && !freeze_) {
-    nl_oper_->MeltStates();
-    Base_::oper->Mult(x, Base_::r);
   }
 
   Base_::final_iter = it;

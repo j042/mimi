@@ -79,6 +79,9 @@ public:
     newton_solver_ = newton_solver;
   }
 
+  virtual void AccumulateStates(const mfem::Vector& x,
+                                const mfem::Vector& v) = 0;
+
   virtual void Setup() = 0;
 };
 

@@ -83,8 +83,6 @@ public:
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) const {
     MIMI_FUNC()
-    const bool frozen = *Base_::operator_frozen_state_;
-
     for (const QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
@@ -95,13 +93,29 @@ public:
                              tmp.F_dot_,
                              i_thread,
                              q.material_state_,
-                             tmp.stress_,
-                             frozen);
+                             tmp.stress_); // quad loop is always frozen
 
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,
                           tmp.stress_,
                           residual_matrix);
+    }
+  }
+
+  void AccumulateStatesAtQuads(const mfem::DenseMatrix& x,
+                               const mfem::DenseMatrix& v,
+                               const int i_thread,
+                               Vector_<QuadData>& q_data,
+                               TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    for (QuadData& q : q_data) {
+      // get dx_dX = x * dN_dX
+      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
+      mfem::MultAtB(v, q.dN_dX_, tmp.F_dot_);
+
+      // currently we will just use PK1
+      material_->Accumulate(tmp.F_, tmp.F_dot_, i_thread, q.material_state_);
     }
   }
 
@@ -151,6 +165,44 @@ public:
     mimi::utils::NThreadExe(assemble_element_residual_and_contribute,
                             n_elements_,
                             (nthreads < 1) ? n_threads_ : nthreads);
+  }
+
+  virtual void AccumulateDomainStates(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "Visco solids needs current_v to accumulate states");
+  }
+
+  virtual void AccumulateDomainStates(const mfem::Vector& current_x,
+                                      const mfem::Vector& current_v) {
+    MIMI_FUNC()
+    if (!has_states_)
+      return;
+    auto accumulate_states =
+        [&](const int begin, const int end, const int i_thread) {
+          TemporaryData tmp;
+          for (int i{begin}; i < end; ++i) {
+            // in
+            ElementData& e = element_data_[i];
+            // set shape for tmp data - first call will allocate
+            tmp.SetShape(e.n_dof_, dim_);
+
+            // get current element solution as matrix
+            tmp.CurrentElementSolutionCopy(current_x, current_v, e);
+
+            // get element state view
+            mfem::DenseMatrix& current_element_x = tmp.element_x_mat_;
+            mfem::DenseMatrix& current_element_v = tmp.element_v_mat_;
+
+            // accumulate
+            AccumulateStatesAtQuads(current_element_x,
+                                    current_element_v,
+                                    i_thread,
+                                    e.quad_data_,
+                                    tmp);
+          }
+        };
+    mimi::utils::NThreadExe(accumulate_states, n_elements_, n_threads_);
   }
 
   virtual void AddDomainGrad(const mfem::Vector& current_x,
