@@ -76,7 +76,7 @@ le.configure_newton("nonlinear_visco_solid", 1e-14, 1e-8, 20, False)
 tic.toc("bilinear, linear forms assembly")
 
 # set step size
-le.time_step_size = 0.001
+le.time_step_size = 0.0005
 
 # get view of solution, displacement
 x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
@@ -131,7 +131,7 @@ def show():
     )
 
 
-coe = 3e11
+coe = 5e11
 # initialize a plotter
 plt = gus.show(
     [s, curv],

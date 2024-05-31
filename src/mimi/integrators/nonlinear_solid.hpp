@@ -106,6 +106,9 @@ protected:
   // no plan for mixed material, so we can have this flag in integrator level
   bool has_states_;
 
+  Vector_<std::unique_ptr<mfem::NURBSMeshRules>> patch_rules_;
+  int patch_quadrature_order_;
+
 public:
   NonlinearSolid(
       const std::string& name,
@@ -153,73 +156,111 @@ public:
     // allocate element data
     element_data_.resize(n_elements_);
 
-    auto precompute_at_elements_and_quads =
-        [&](const int el_begin, const int el_end, const int i_thread) {
-          // thread's obj
-          auto& int_rules = precomputed_->int_rules_[i_thread];
+    // patch-wise integration - create for each thread
+    patch_rules_.resize(n_threads_);
 
-          mfem::DenseMatrix dN_dxi, dxi_dX;
+    auto precompute_at_elements_and_quads = [&](const int el_begin,
+                                                const int el_end,
+                                                const int i_thread) {
+      // thread's obj
+      auto& mesh = precomputed_->meshes_[i_thread];
+      auto& int_rules = precomputed_->int_rules_[i_thread];
+      auto& patch_rule = patch_rules_[i_thread];
+      patch_rule =
+          std::make_unique<mfem::NURBSMeshRules>(mesh->NURBSext->GetNP(), dim_);
 
-          // element loop
-          for (int i{el_begin}; i < el_end; ++i) {
-            // prepare element level data
-            auto& i_el_data = element_data_[i];
+      const int ir_order =
+          (quadrature_order < 0)
+              ? precomputed_->fe_spaces_[i_thread]->GetOrder(0) * 2 + 3
+              : quadrature_order;
+      patch_quadrature_order_ = ir_order;
+      // loop patch and create patchrule
+      for (int p{}; p < mesh->NURBSext->GetNP(); ++p) {
+        mfem::Array<const mfem::KnotVector*> kv(dim_);
+        mesh->NURBSext->GetPatchKnotVectors(p, kv);
+        std::vector<const mfem::IntegrationRule*> ir1D(dim_);
+        const mfem::IntegrationRule* ir =
+            &int_rules.Get(mfem::Geometry::SEGMENT, ir_order);
+        for (int i = 0; i < dim_; ++i) {
+          ir1D[i] = ir->ApplyToKnotIntervals(*kv[i]);
+        }
+        patch_rule->SetPatchRules1D(p, ir1D);
+      }
+      patch_rule->Finalize(*mesh);
+      mfem::DenseMatrix dN_dxi, dxi_dX;
 
-            // save (shared) pointers to element and el_trans
-            i_el_data.element_ = precomputed_->elements_[i];
-            i_el_data.geometry_type_ = i_el_data.element_->GetGeomType();
-            i_el_data.element_trans_ =
-                precomputed_->reference_to_target_element_trans_[i];
-            i_el_data.n_dof_ = i_el_data.element_->GetDof();
-            i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
-            auto& v_dofs = *i_el_data.v_dofs_;
+      // element loop
+      for (int i{el_begin}; i < el_end; ++i) {
+        // prepare element level data
+        auto& i_el_data = element_data_[i];
 
-            // v_dofs are organized in xyzxyzxyz, so we just want to skip
-            // through and divide them to create scalar_vdofs
-            i_el_data.scalar_v_dofs_.SetSize(v_dofs.Size() / dim_);
-            for (int i{}, j{}; i < v_dofs.Size(); i += dim_, ++j) {
-              i_el_data.scalar_v_dofs_[j] = v_dofs[i] / dim_;
-            }
+        // save (shared) pointers to element and el_trans
+        i_el_data.element_ = precomputed_->elements_[i];
+        i_el_data.geometry_type_ = i_el_data.element_->GetGeomType();
+        i_el_data.element_trans_ =
+            precomputed_->reference_to_target_element_trans_[i];
+        i_el_data.n_dof_ = i_el_data.element_->GetDof();
+        i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
+        auto& v_dofs = *i_el_data.v_dofs_;
 
-            // check suitability of temp data
-            // for structure simulations, tdof and vdof are the same
-            const int n_tdof = i_el_data.n_dof_ * dim_;
-            i_el_data.n_tdof_ = n_tdof;
+        // v_dofs are organized in xyzxyzxyz, so we just want to skip
+        // through and divide them to create scalar_vdofs
+        i_el_data.scalar_v_dofs_.SetSize(v_dofs.Size() / dim_);
+        for (int i{}, j{}; i < v_dofs.Size(); i += dim_, ++j) {
+          i_el_data.scalar_v_dofs_[j] = v_dofs[i] / dim_;
+        }
 
-            // get quad order
-            i_el_data.quadrature_order_ =
-                (quadrature_order < 0) ? i_el_data.element_->GetOrder() * 2 + 3
-                                       : quadrature_order;
+        // check suitability of temp data
+        // for structure simulations, tdof and vdof are the same
+        const int n_tdof = i_el_data.n_dof_ * dim_;
+        i_el_data.n_tdof_ = n_tdof;
 
-            // get int rule
-            const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);
+        // get quad order
+        i_el_data.quadrature_order_ =
+            (quadrature_order < 0) ? i_el_data.element_->GetOrder() * 2 + 3
+                                   : quadrature_order;
 
-            // prepare quad loop
-            i_el_data.n_quad_ = ir.GetNPoints();
-            i_el_data.quad_data_.resize(i_el_data.n_quad_);
+        // get int rule
+        // const mfem::IntegrationRule& ir_old =
+        // i_el_data.GetIntRule(int_rules);
+        bool delete_intrule = false;
+        const mfem::IntegrationRule& ir =
+            patch_rule->GetElementRule(i_el_data.element_->GetElement(),
+                                       i_el_data.element_->GetPatch(),
+                                       i_el_data.element_->GetIJK(),
+                                       i_el_data.element_->KnotVectors(),
+                                       delete_intrule);
 
-            for (int j{}; j < i_el_data.n_quad_; ++j) {
-              // get int point - this is just look up within ir
-              const mfem::IntegrationPoint& ip = ir.IntPoint(j);
-              i_el_data.element_trans_->SetIntPoint(&ip);
+        // prepare quad loop
+        i_el_data.n_quad_ = ir.GetNPoints();
+        i_el_data.quad_data_.resize(i_el_data.n_quad_);
 
-              auto& q_data = i_el_data.quad_data_[j];
-              q_data.integration_weight_ = ip.weight;
+        for (int j{}; j < i_el_data.n_quad_; ++j) {
+          // get int point - this is just look up within ir
+          const mfem::IntegrationPoint& ip = ir.IntPoint(j);
+          i_el_data.element_trans_->SetIntPoint(&ip);
 
-              dN_dxi.SetSize(i_el_data.n_dof_, dim_);
-              q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
-              dxi_dX.SetSize(dim_, dim_);
-              q_data.material_state_ = material_->CreateState();
-              q_data.N_.SetSize(i_el_data.n_dof_);
+          auto& q_data = i_el_data.quad_data_[j];
+          q_data.integration_weight_ = ip.weight;
 
-              i_el_data.element_->CalcShape(ip, q_data.N_);
-              i_el_data.element_->CalcDShape(ip, dN_dxi);
-              mfem::CalcInverse(i_el_data.element_trans_->Jacobian(), dxi_dX);
-              mfem::Mult(dN_dxi, dxi_dX, q_data.dN_dX_);
-              q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
-            }
-          }
-        };
+          dN_dxi.SetSize(i_el_data.n_dof_, dim_);
+          q_data.dN_dX_.SetSize(i_el_data.n_dof_, dim_);
+          dxi_dX.SetSize(dim_, dim_);
+          q_data.material_state_ = material_->CreateState();
+          q_data.N_.SetSize(i_el_data.n_dof_);
+
+          i_el_data.element_->CalcShape(ip, q_data.N_);
+          i_el_data.element_->CalcDShape(ip, dN_dxi);
+          mfem::CalcInverse(i_el_data.element_trans_->Jacobian(), dxi_dX);
+          mfem::Mult(dN_dxi, dxi_dX, q_data.dN_dX_);
+          q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
+        }
+
+        if (delete_intrule) {
+          delete &ir;
+        }
+      }
+    };
 
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
                             n_elements_,
