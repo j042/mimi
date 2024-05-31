@@ -846,7 +846,6 @@ public:
       s.Add(-2.0 * G_ * delta_eqps, N_p);
 
       // accumulate!
-      mimi::utils::PrintSynced("accumulating!");
       accumulated_plastic_strain += delta_eqps;
       plastic_strain.Add(delta_eqps, N_p);
     }
@@ -1228,7 +1227,6 @@ public:
       s.Add(-2.0 * G_ * delta_eqps, N_p);
 
       // accumulate
-      mimi::utils::PrintSynced("accumulating!");
       accumulated_plastic_strain += delta_eqps;
       plastic_strain.Add(delta_eqps, N_p);
     }
@@ -1505,8 +1503,6 @@ public:
       sig3 -= sig_trace_over_dim;
 
       const double work = (ed0 * sig0 + ed1 * sig1 + ed1 * sig2 + ed3 * sig3);
-      // mimi::utils::PrintInfo(sig0, sig1, sig2, sig3, ed0, ed1, ed3, work);
-      // std::cout << "work " << work << "\n";
       if (work < 0.0) {
         temperature_rate = 0.0;
       } else {
@@ -1702,7 +1698,6 @@ public:
       s.Add(-2.0 * G_ * delta_eqps, N_p);
 
       // accumulate
-      mimi::utils::PrintSynced("accumulating!");
       accumulated_plastic_strain += delta_eqps;
       plastic_strain.Add(delta_eqps, N_p);
       // clip at melting temp + 1, just to make sure that in next

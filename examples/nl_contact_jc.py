@@ -131,7 +131,7 @@ def show():
     )
 
 
-coe = 5e11
+coe = 3e11
 # initialize a plotter
 plt = gus.show(
     [s, curv],
