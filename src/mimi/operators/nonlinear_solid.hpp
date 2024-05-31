@@ -345,6 +345,7 @@ public:
     std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
     nonlinear_stiffness_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
 
+    // contact -> both grad and residual
     if (contact_) {
       contact_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
     }
@@ -352,13 +353,6 @@ public:
     // 3. viscosity
     if (viscosity_) {
       jacobian_->Add(fac1_, viscosity_->SpMat());
-    }
-
-    // 4. contact - use AddMultGrad for this one too, as contact is always NL
-    if (contact_) {
-      jacobian_->Add(
-          fac0_,
-          *dynamic_cast<mfem::SparseMatrix*>(&contact_->GetGradient(temp_x)));
     }
 
     return jacobian_;

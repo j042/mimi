@@ -232,9 +232,6 @@ public:
       add(*v_, fac1_, d2x_dt2, temp_v);
       viscosity_->AddMult(temp_v, y);
     }
-    if (contact_) {
-      contact_->AddMult(temp_x, y);
-    }
     // substract rhs linear forms
     if (rhs_) {
       y.Add(-1.0, *rhs_);
@@ -250,16 +247,14 @@ public:
     nonlinear_visco_stiffness_
         ->AddMultGrad(temp_x, temp_v, nthread, fac0_, y, *jacobian_);
 
+    // contact -> both grad and residual
+    if (contact_) {
+      contact_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
+    }
+
     // 3. viscosity
     if (viscosity_) {
       jacobian_->Add(fac1_, viscosity_->SpMat());
-    }
-
-    // 4. contact - use AddMultGrad for this one too, as contact is always NL
-    if (contact_) {
-      jacobian_->Add(
-          fac0_,
-          *dynamic_cast<mfem::SparseMatrix*>(&contact_->GetGradient(temp_x)));
     }
 
     return jacobian_;
