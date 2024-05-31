@@ -102,7 +102,7 @@ public:
 
   virtual void AddBoundaryGrad(const mfem::Vector& current_x,
                                const int nthreads,
-                               mfem::SparseMatrix& grad) const {
+                               mfem::SparseMatrix& grad) {
     mimi::utils::PrintAndThrowError("AddBoundaryGrad not implemented");
   };
 

@@ -395,7 +395,37 @@ public:
     mimi::utils::NThreadExe(assemble_element_residual_and_grad_then_contribute,
                             n_elements_,
                             (nthreads < 0) ? n_threads_ : nthreads);
-  };
+  }
+
+  virtual void AddBoundaryResidual(const mfem::Vector& current_x,
+                                   const mfem::Vector& current_v,
+                                   const int nthreads,
+                                   mfem::Vector& residual) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("mimi::integrators::NonlinearViscoSolid::"
+                                    "AddBoundaryResidual not implemented");
+  }
+
+  virtual void AddBoundaryGrad(const mfem::Vector& current_x,
+                               const mfem::Vector& current_v,
+                               const int nthreads,
+                               mfem::Vector& residual) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("mimi::integrators::NonlinearViscoSolid::"
+                                    "AddBoundaryGrad not implemented");
+  }
+
+  virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
+                                          const mfem::Vector& current_v,
+                                          const int nthreads,
+                                          const double grad_factor,
+                                          mfem::Vector& residual,
+                                          mfem::SparseMatrix& grad) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "mimi::integrators::NonlinearViscoSolid::"
+        "AddBoundaryResidualAndGrad not implemented");
+  }
 };
 
 } // namespace mimi::integrators

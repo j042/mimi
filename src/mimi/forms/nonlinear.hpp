@@ -204,8 +204,7 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AssembleBoundaryGrad(current_x);
-      boundary_integ->AddToGlobalBoundaryGrad(*Base_::Grad);
+      boundary_integ->AddBoundaryGrad(current_x, -1, *Base_::Grad);
     }
 
     if (!Base_::Grad->Finalized()) {
