@@ -115,37 +115,10 @@ public:
         "AddBoundaryResidualAndGrad not implemented");
   };
 
-  /// NThread domain assemble
-  virtual void AssembleDomainResidual(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-
-    mimi::utils::PrintAndThrowError("AssembleDomainResidual not implemented");
-  }
-
-  /// NThread domain grad assemble
-  virtual void AssembleDomainGrad(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-
-    mimi::utils::PrintAndThrowError("AssembleDomainGrad not implemented");
-  }
-
   virtual void SetBoundaryMarker(const mfem::Array<int>* b_marker) {
     MIMI_FUNC()
 
     boundary_marker_ = b_marker;
-  }
-
-  /// NThread boundary assemble
-  virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-
-    mimi::utils::PrintAndThrowError("AssembleBoundaryResidual not implemented");
-  }
-
-  /// NThread boundary grad assemble
-  virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("AssembleBoundaryGrad not implemented");
   }
 
   virtual void UpdateLagrange() {
@@ -169,21 +142,6 @@ public:
     return true;
   }
 
-  /// boundaries are kept
-  virtual void
-  AddToGlobalBoundaryResidual(mfem::Vector& global_residual) const {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError(
-        "AddToGlobalBoundaryResidual not implemented for",
-        Name());
-  }
-
-  virtual void AddToGlobalBoundaryGrad(mfem::SparseMatrix& global_grad) const {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError(
-        "AddToGlobalBoundaryGrad not implemented for",
-        Name());
-  }
   virtual double GapNorm() const {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("GapNorm not implemented for", Name());

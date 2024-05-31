@@ -441,79 +441,6 @@ public:
     return any_active;
   }
 
-  virtual void AssembleBoundaryResidual(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-
-    auto assemble_face_residual_and_maybe_grad = [&](const int begin,
-                                                     const int end,
-                                                     const int i_thread) {
-      TemporaryData tmp;
-      tmp.SetDim(dim_);
-      // this loops marked boundary elements
-      for (int i{begin}; i < end; ++i) {
-        // get bed
-        BoundaryElementData& bed = boundary_element_data_[i];
-
-        // reset residual
-        bed.residual_view_ = 0.0;
-
-        // set shape for tmp data
-        tmp.SetDof(bed.n_dof_);
-        mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_x, bed);
-
-        // assemble residual
-        QuadLoop(
-            current_element_x,
-            i_thread,
-            bed.quad_data_,
-            tmp,
-            bed.residual_view_,
-            true); // this will also update during line search, but it doesn't
-                   // matter since the last value will be the one after Mult
-
-        if (assemble_grad_) {
-          assert(*operator_frozen_state_);
-          double* grad_data = bed.grad_view_.GetData();
-          double* solution_data = current_element_x.GetData();
-          const double* residual_data = bed.residual_view_.GetData();
-          const double* fd_forward_data = tmp.forward_residual_.GetData();
-          for (int j{}; j < bed.n_tdof_; ++j) {
-            tmp.forward_residual_ = 0.0;
-
-            double& with_respect_to = *solution_data++;
-            const double orig_wrt = with_respect_to;
-            const double diff_step = std::abs(orig_wrt) * 1.0e-8;
-            const double diff_step_inv = 1. / diff_step;
-
-            with_respect_to = orig_wrt + diff_step;
-            QuadLoop(current_element_x,
-                     i_thread,
-                     bed.quad_data_,
-                     tmp,
-                     tmp.forward_residual_,
-                     false);
-
-            for (int k{}; k < bed.n_tdof_; ++k) {
-              *grad_data++ =
-                  (fd_forward_data[k] - residual_data[k]) * diff_step_inv;
-            }
-            with_respect_to = orig_wrt;
-          }
-        }
-
-      } // marked elem loop
-    };
-
-    mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
-                            n_marked_boundaries_,
-                            n_threads_);
-  }
-
-  virtual void AssembleBoundaryGrad(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-  }
-
   virtual void AddBoundaryResidual(const mfem::Vector& current_x,
                                    const int nthreads,
                                    mfem::Vector& residual) {
@@ -719,25 +646,6 @@ public:
     mimi::utils::NThreadExe(assemble_boundary_residual_and_grad_then_contribute,
                             n_marked_boundaries_,
                             (nthreads < 0) ? n_threads_ : nthreads);
-  };
-
-  /// boundaries are kept
-  virtual void
-  AddToGlobalBoundaryResidual(mfem::Vector& global_residual) const {
-    MIMI_FUNC()
-    for (const BoundaryElementData& bed : boundary_element_data_) {
-      global_residual.AddElementVector(*bed.v_dofs_, *bed.element_residual_);
-    }
-  }
-
-  virtual void AddToGlobalBoundaryGrad(mfem::SparseMatrix& global_grad) const {
-    MIMI_FUNC()
-    for (const BoundaryElementData& bed : boundary_element_data_) {
-      global_grad.AddSubMatrix(*bed.v_dofs_,
-                               *bed.v_dofs_,
-                               *bed.element_grad_,
-                               0);
-    }
   }
 
   virtual double GapNorm() const {

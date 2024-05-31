@@ -117,7 +117,7 @@ def show():
     )
 
 
-coe = 3e9
+coe = 1e10
 # initialize a plotter
 plt = gus.show([s, curv], close=False)
 n = le.nonlinear_from2("contact")
