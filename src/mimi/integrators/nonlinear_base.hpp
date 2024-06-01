@@ -159,14 +159,6 @@ public:
     return 0.0;
   }
 
-  virtual double PenaltyFactor() const {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("PenaltyFactor not implemented for",
-                                    Name());
-
-    return 0.0;
-  }
-
   virtual void AccumulatedPlasticStrain(mfem::Vector& x,
                                         mfem::Vector& integrated) {
     MIMI_FUNC()

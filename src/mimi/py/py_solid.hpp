@@ -86,13 +86,43 @@ protected:
     std::shared_ptr<mimi::forms::Nonlinear> contact_form;
     std::shared_ptr<mimi::solvers::LineSearchNewton> newton_solver;
     mimi::utils::Vector<double> scene_coeffs;
+    std::map<int, std::shared_ptr<mimi::coefficients::NearestDistanceBase>>*
+        contact_scenes;
 
-    void SaveSceneCoefficients() {
-      assert(contact_form);
+    std::map<int, std::shared_ptr<mimi::coefficients::NearestDistanceBase>>&
+    ContactScenes() {
+      MIMI_FUNC()
+      if (!contact_scenes) {
+        contact_scenes =
+            &GetBoundaryConditions()->CurrentConfiguration().contact_;
+        if (!contact_scenes) {
+          mimi::utils::PrintAndThrowError("ContactScenes does not exist.");
+        }
+      }
+
+      return *contact_scenes;
+    }
+
+    void StoreOriginalAndScaleSceneCoefficients(const double factor) {
+      assert(contact_scenes);
+
       scene_coeffs.clear();
       scene_coeffs.reserve(contact_form->boundary_face_nfi_.size());
-      for (auto& contact_integ : contact_form->boundary_face_nfi_) {
-        scene_coeffs.push_back(contact_integ->PenaltyFactor());
+      for (auto& [bid, scene_ptr] : ContactScenes()) {
+        scene_coeffs.push_back(scene_ptr->coefficient_); // penalty factor
+        scene_ptr->coefficient_ *= factor;
+      }
+    }
+
+    void RestoreSceneCoefficients() {
+      MIMI_FUNC()
+      if (scene_coeffs.size() == 0) {
+        mimi::utils::PrintAndThrowError(
+            "RestoreSceneCoefficients() - No stored coefficients");
+      }
+      int i{};
+      for (auto& [bid, scene_ptr] : ContactScenes()) {
+        scene_ptr->coefficient_ = scene_coeffs[i++];
       }
     }
 
@@ -656,6 +686,7 @@ public:
   virtual void FixedPointALMSolve2(int n_outer,
                                    const int n_inner,
                                    const int n_final,
+                                   const double final_penalty_scale,
                                    const double rel_tol,
                                    const double abs_tol,
                                    const double gap_tol) {
@@ -663,11 +694,12 @@ public:
 
     PrepareALM();
 
-    const bool prev_itermode = ALM.newton_solver->iterative_mode;
-    const bool
+    /// maye add something like - ensure planted tree
 
-        // first iteration
-        ALM.newton_solver->SetRelTol(rel_tol);
+    const bool prev_itermode = ALM.newton_solver->iterative_mode;
+
+    // first iteration
+    ALM.newton_solver->SetRelTol(rel_tol);
     ALM.newton_solver->SetAbsTol(abs_tol);
     ALM.newton_solver->SetMaxIter(n_inner);
     ALM.newton_solver->iterative_mode = false;
@@ -702,9 +734,27 @@ public:
 
     // last run - reducing coefficient
     ALM.newton_solver->SetMaxIter(n_final);
+    ALM.StoreOriginalAndScaleSceneCoefficients(final_penalty_scale);
     FixedPointSolve2();
     FixedPointAdvance2();
     gap = ALM.GapNorm(fixed_point_advanced_x_);
+    ALM.RestoreSceneCoefficients();
+    if (!is_converged()) {
+      mimi::utils::PrintInfo("FixedPointALMSolve2 didn't converge.");
+      mimi::utils::PrintInfo("  Gap    --", (gap < gap_tol) ? "good" : "bad");
+      mimi::utils::PrintInfo("    gap:", gap, "gap_tol:", gap_tol);
+      mimi::utils::PrintInfo("  Newton --",
+                             (ALM.newton_solver->GetConverged()) ? "good"
+                                                                 : "bad");
+      mimi::utils::PrintInfo("    rel:",
+                             ALM.newton_solver->GetFinalRelNorm(),
+                             "rel_tol:",
+                             rel_tol);
+      mimi::utils::PrintInfo("    abs:",
+                             ALM.newton_solver->GetFinalNorm(),
+                             "abs_tol:",
+                             abs_tol);
+    }
   }
 
   virtual void AdvanceTime2() {

@@ -172,10 +172,6 @@ public:
       : NonlinearBase(name, precomputed),
         nearest_distance_coeff_(nearest_distance_coeff) {}
 
-  virtual double PenaltyFactor() const {
-    return nearest_distance_coeff_->coefficient_;
-  }
-
   /// this one needs
   /// - shape function
   /// - weights of target to refrence
