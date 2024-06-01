@@ -645,7 +645,9 @@ public:
                                                    tmp.distance_results_);
           tmp.distance_results_.ComputeNormal<true>(); // unit normal
           const double g = tmp.distance_results_.NormalGap();
-          local_g_squared_sum += g * g;
+          if (g < 0.0) {
+            local_g_squared_sum += g * g;
+          }
         }
       } // marked elem loop
       {

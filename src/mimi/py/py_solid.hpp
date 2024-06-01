@@ -665,10 +665,19 @@ public:
 
     FixedPointAdvance2(fixed_point_advanced_x_, fixed_point_advanced_v_);
 
-    return py::make_tuple(NumpyView<double>(fixed_point_advanced_x_,
-                                            fixed_point_advanced_x_.Size()),
-                          NumpyView<double>(fixed_point_advanced_v_,
-                                            fixed_point_advanced_v_.Size()));
+    return FixedPointAdvancedVectorViews();
+  }
+
+  virtual py::tuple FixedPointAdvancedVectorViews() {
+    MIMI_FUNC()
+
+    return py::make_tuple(
+        NumpyView<double>(fixed_point_advanced_x_,
+                          fixed_point_advanced_x_.Size() / MeshDim(),
+                          MeshDim()),
+        NumpyView<double>(fixed_point_advanced_v_,
+                          fixed_point_advanced_v_.Size() / MeshDim(),
+                          MeshDim()));
   }
 
   virtual void PrepareALM() {
@@ -710,8 +719,10 @@ public:
     PrepareALM();
 
     /// maye add something like - ensure planted tree
-
     const bool prev_itermode = ALM.newton_solver->iterative_mode;
+
+    // initialize ALM
+    ALM.FillContactLagrange(0.0);
 
     // first iteration
     ALM.newton_solver->SetRelTol(rel_tol);
@@ -770,6 +781,7 @@ public:
                              "abs_tol:",
                              abs_tol);
     }
+    ALM.newton_solver->iterative_mode = prev_itermode;
   }
 
   virtual void AdvanceTime2() {
