@@ -634,9 +634,9 @@ public:
         tmp.SetDof(bed.n_dof_);
 
         mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_x, bed);
+            tmp.CurrentElementSolutionCopy(test_x, bed);
 
-        for (const QuadData& q : q_data) {
+        for (const QuadData& q : bed.quad_data_) {
           // get current position and F
           current_element_x.MultTranspose(q.N_,
                                           tmp.distance_query_.query_.data());
@@ -650,18 +650,18 @@ public:
       } // marked elem loop
       {
         std::lock_guard<std::mutex> lock(gap_norm);
-        gap_squared_total += sum_g_squared;
+        gap_squared_total += local_g_squared_sum;
       }
     };
 
-    mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
+    mimi::utils::NThreadExe(find_gap,
                             n_marked_boundaries_,
                             (nthreads < 0) ? n_threads_ : nthreads);
 
     return std::sqrt(gap_squared_total);
   }
 
-  virtual double GapNorm() const {
+  virtual double LastGapNorm() const {
     MIMI_FUNC()
 
     double negative_gap_sum{};

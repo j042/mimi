@@ -63,9 +63,7 @@ void init_py_solid(py::module_& m) {
            py::arg("value"))
       .def("fixed_point_solve2", &PySolid::FixedPointSolve2)
       .def("fixed_point_advance2",
-           &PySolid::FixedPointAdvance2,
-           py::arg("x"),
-           py::arg("x_dot"))
+           py::overload_cast<>(&PySolid::FixedPointAdvance2))
       .def("advance_time2", &PySolid::AdvanceTime2);
 }
 

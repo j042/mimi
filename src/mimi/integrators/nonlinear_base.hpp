@@ -153,7 +153,7 @@ public:
     return 0.0;
   }
 
-  virtual double GapNorm() const {
+  virtual double LastGapNorm() const {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("GapNorm not implemented for", Name());
     return 0.0;

@@ -85,6 +85,7 @@ protected:
   struct {
     std::shared_ptr<mimi::forms::Nonlinear> contact_form;
     std::shared_ptr<mimi::solvers::LineSearchNewton> newton_solver;
+    std::shared_ptr<mimi::utils::BoundaryConditions> bc;
     mimi::utils::Vector<double> scene_coeffs;
     std::map<int, std::shared_ptr<mimi::coefficients::NearestDistanceBase>>*
         contact_scenes;
@@ -92,9 +93,11 @@ protected:
     std::map<int, std::shared_ptr<mimi::coefficients::NearestDistanceBase>>&
     ContactScenes() {
       MIMI_FUNC()
+      if (!bc) {
+        mimi::utils::PrintAndThrowError("ALM.bc is not set");
+      }
       if (!contact_scenes) {
-        contact_scenes =
-            &GetBoundaryConditions()->CurrentConfiguration().contact_;
+        contact_scenes = &bc->CurrentConfiguration().contact_;
         if (!contact_scenes) {
           mimi::utils::PrintAndThrowError("ContactScenes does not exist.");
         }
@@ -140,7 +143,7 @@ protected:
 
       assert(contact_form);
       for (auto& contact_integ : contact_form->boundary_face_nfi_) {
-        contact_integ->FillLagrange(value);
+        contact_integ->FillLagrange(val);
       }
     }
 
@@ -639,8 +642,19 @@ public:
   virtual void FixedPointAdvance2(mfem::Vector& fp_x, mfem::Vector& fp_v) {
     MIMI_FUNC()
 
-    fp_x.SetSize(x2_->Size());
-    fp_v.SetSize(x2_->Size());
+    const int x_size = x2_->Size();
+
+    fp_x.SetSize(x_size);
+    fp_v.SetSize(x_size);
+
+    double* fx = fp_x.GetData();
+    double* fv = fp_v.GetData();
+    const double* x = x2_->GetData();
+    const double* v = x2_dot_->GetData();
+    for (int i{}; i < x_size; ++i) {
+      fx[i] = x[i];
+      fv[i] = v[i];
+    }
 
     ode2_solver_->FixedPointAdvance2(fp_x, fp_v, t_, dt_);
   }
@@ -651,17 +665,16 @@ public:
 
     FixedPointAdvance2(fixed_point_advanced_x_, fixed_point_advanced_v_);
 
-    return py::make_tuple(
-        mimi::utils::NumpyView<double>(fixed_point_advanced_x_,
-                                       fixed_point_advanced_x_.Size()),
-        mimi::utils::NumpyView<double>(fixed_point_advanced_v_,
-                                       fixed_point_advanced_v_.Size()));
+    return py::make_tuple(NumpyView<double>(fixed_point_advanced_x_,
+                                            fixed_point_advanced_x_.Size()),
+                          NumpyView<double>(fixed_point_advanced_v_,
+                                            fixed_point_advanced_v_.Size()));
   }
 
   virtual void PrepareALM() {
     MIMI_FUNC()
 
-    if (ALM.contact_form && ALM.newton_solver) {
+    if (ALM.contact_form && ALM.newton_solver && ALM.bc) {
       return;
     }
     auto* mimi_oper =
@@ -681,6 +694,8 @@ public:
     }
     // easy way to unpack one elem
     ALM.newton_solver = newton_solvers_.begin()->second;
+
+    ALM.bc = GetBoundaryConditions();
   }
 
   virtual void FixedPointALMSolve2(int n_outer,
