@@ -53,3 +53,6 @@ struct NpyArray {
 ```
 
 See [example1.cpp](example1.cpp) for examples of how to use the library. example1 will also be build during cmake installation.
+
+## NOTE:
+This version applied https://github.com/rogersce/cnpy/pull/42 from @ngc92
