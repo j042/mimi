@@ -249,6 +249,8 @@ public:
 
     boundary_element_data_.resize(n_marked_boundaries_);
 
+    last_force_.Reallocate(dim_);
+
     const int default_q_order =
         RuntimeCommunication()->GetInteger("contact_quadrature_order", -1);
 
@@ -415,7 +417,7 @@ public:
       if (keep_record) {
         mfem::MultAtB(x, q.dN_dxi_, tmp.J_);
         det_J = tmp.J_.Weight();
-        area += det_J;
+        area += det_J * q.integration_weight_;
       }
 
       // check for angle and sign of normal gap for the first augmentation loop
@@ -465,7 +467,8 @@ public:
                     tmp.distance_results_.normal_.end(),
                     residual_begin);
       if (keep_record) {
-        force.Add(p * det_J, tmp.distance_results_.normal_.begin());
+        force.Add(p * det_J * q.integration_weight_,
+                  tmp.distance_results_.normal_.begin());
       }
     }
 
@@ -614,6 +617,8 @@ public:
                                           const double grad_factor,
                                           mfem::Vector& residual,
                                           mfem::SparseMatrix& grad) {
+    last_area_ = 0.0;
+    last_force_.Fill(0.0);
     std::mutex residual_mutex;
     // lambda for nthread assemble
     auto assemble_boundary_residual_and_grad_then_contribute =
@@ -688,6 +693,10 @@ public:
               A[A_ids[k]] += *local_A++ * grad_factor;
             }
           }
+          // reuse mutex for area and force update
+          std::lock_guard<std::mutex> lock(residual_mutex);
+          last_area_ += tl_area;
+          last_force_.Add(tl_force);
         };
 
     mimi::utils::NThreadExe(assemble_boundary_residual_and_grad_then_contribute,
@@ -745,8 +754,13 @@ public:
     MIMI_FUNC()
 
     auto& rc = *RuntimeCommunication();
-
     if (rc.ShouldSave("contact_history")) {
+      rc.RecordRealHistory("area", last_area_);
+      rc.RecordRealHistory("force_x", last_force_[0]);
+      rc.RecordRealHistory("force_y", last_force_[1]);
+      if (dim_ > 2) {
+        rc.RecordRealHistory("force_z", last_force_[2]);
+      }
     }
     if (rc.ShouldSave("contact_forces")) {
     }

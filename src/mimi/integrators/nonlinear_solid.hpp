@@ -13,7 +13,6 @@ namespace mimi::integrators {
 class NonlinearSolid : public NonlinearBase {
 public:
   /// used to project
-  std::unique_ptr<mfem::BilinearForm> mass_;
   std::unique_ptr<mfem::SparseMatrix> m_mat_;
   mfem::CGSolver mass_inv_;
   mfem::DSmoother mass_inv_prec_;
