@@ -216,8 +216,9 @@ public:
 
             // get quad order
             i_el_data.quadrature_order_ =
-                (quadrature_order < 0) ? i_el_data.element_->GetOrder() * 2 + 3
-                                       : quadrature_order;
+                (quadrature_order < 0)
+                    ? i_el_data.element_->GetOrder() * 2 + dim_
+                    : quadrature_order;
 
             // get int rule
             const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);

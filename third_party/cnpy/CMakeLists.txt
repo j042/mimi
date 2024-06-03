@@ -12,10 +12,10 @@ find_package(ZLIB REQUIRED)
 
 add_library(cnpy STATIC "cnpy.cpp")
 target_compile_options(cnpy PRIVATE -fPIC)
-target_include_directories(
-  cnpy PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-              $<INSTALL_INTERFACE:${incl_dest}>)
+target_include_directories(cnpy PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
+                                       $<INSTALL_INTERFACE:${incl_dest}>)
 set_target_properties(cnpy PROPERTIES CXX_STANDARD 11)
+target_link_libraries(cnpy PRIVATE ZLIB::ZLIB)
 
 install(TARGETS "cnpy" ARCHIVE DESTINATION ${lib_dest})
 install(FILES "cnpy.h" DESTINATION ${incl_dest})
