@@ -560,6 +560,8 @@ public:
     // ode solvers also wants to know dirichlet dofs
     auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper2_.get());
     ode2_solver_->SetupDirichletDofs(op_base->dirichlet_dofs_);
+
+    RuntimeCommunication()->InitializeTimeStep();
   }
 
   virtual double CurrentTime() const { MIMI_FUNC() return t_; }
@@ -641,6 +643,7 @@ public:
     assert(x2_dot_);
 
     ode2_solver_->StepTime2(*x2_, *x2_dot_, t_, dt_);
+    RuntimeCommunication()->NextTimeStep(dt_);
   }
 
   virtual void FixedPointSolve2() {
@@ -804,6 +807,7 @@ public:
     assert(x2_dot_);
 
     ode2_solver_->AdvanceTime2(*x2_, *x2_dot_, t_, dt_);
+    RuntimeCommunication()->NextTimeStep(dt_);
   }
 };
 

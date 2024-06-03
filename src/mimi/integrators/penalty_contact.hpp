@@ -38,17 +38,44 @@ public:
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
 
+  // post process
+  std::unique_ptr<mfem::SparseMatrix> m_mat_;
+  mfem::CGSolver mass_inv_;
+  mfem::DSmoother mass_inv_prec_;
+  mfem::UMFPackSolver mass_inv_direct_;
+  mfem::Vector mass_x_;        // for answer
+  mfem::Vector last_residual_; // Forces
+  double last_area_;           // for p = forces / A
+  mimi::utils::Data<double> last_force_;
+
   /// precomputed data at quad points
   struct QuadData {
     bool active_{false}; // needed for
 
     double integration_weight_;
     double det_dX_dxi_;
+
     double det_J_;
     double lagrange_;     // lambda_k
-    double new_lagrange_; // lambda_k+1
+    double new_lagrange_; // lambda_k+1 - this is also last_p
     double g_;            // normal gap
     double old_g_;        // normal gap
+
+    inline void Record(const bool really,
+                       const double detj,
+                       const double new_lag,
+                       const double g,
+                       const bool activ) {
+      MIMI_FUNC()
+
+      if (!really)
+        return;
+      det_J_ = detj;
+      new_lagrange_ = new_lag;
+      old_g_ = g_;
+      g_ = g;
+      active_ = activ;
+    }
 
     mfem::Vector N_; // shape
     /// thanks to Jac's hint, it turns out we can just work with this for
@@ -74,6 +101,7 @@ public:
     bool active_ = false;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
+    mfem::Array<int> mass_mat_dofs_; // scalar dofs for L2Projection
 
     Vector_<QuadData> quad_data_;
 
@@ -157,6 +185,8 @@ protected:
   /// residual contribution indices
   /// size == n_marked_boundaries_;
   Vector_<int> marked_boundary_v_dofs_;
+  Vector_<int> local_marked_v_dofs_;
+  Vector_<int> local_marked_dofs_;
 
   /// two vectors for load balancing
   /// first we visit all quad points and also mark quad activity
@@ -245,6 +275,10 @@ public:
         i_bed.n_dof_ = i_bed.element_->GetDof();
         i_bed.n_tdof_ = i_bed.n_dof_ * dim_;
         i_bed.v_dofs_ = precomputed_->boundary_v_dofs_[m];
+        // i_bed.dofs_.SetSize(i_bed.v_dofs_->Size() / dim_);
+        // for (int k{}; l{}; k < i_bed.v_dofs_->Size(); k += dim_, ++l) {
+        //   i_bed.dofs_[l] = (*i_bed.v_dofs_)[k] / dim_;
+        // }
 
         // quick size check
         const int n_tdof = i_bed.n_tdof_;
@@ -309,6 +343,22 @@ public:
                             marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.erase(last, marked_boundary_v_dofs_.end());
     marked_boundary_v_dofs_.shrink_to_fit();
+
+    // get last value -> this is the size we need for extracting
+    // using marked_boundary_v_dofs_, we can extract values from global
+    // vector
+    // using local_marked_v_dof_, we can directly map global v_dof to local
+    // v_dof
+    // same holds for local marked dof, but this is just
+    local_marked_v_dofs_.assign(*(--marked_boundary_v_dofs_.end()) + 1, -1);
+    local_marked_dofs_.assign(local_marked_v_dofs_.size() / dim_, -1);
+    int v_counter{}, counter{};
+    for (const int m_vdof : marked_boundary_v_dofs_) {
+      if (v_counter % dim_ == 0) {
+        local_marked_dofs_[m_vdof / dim_] = counter++;
+      }
+      local_marked_v_dofs_[m_vdof] = v_counter++;
+    }
   }
 
   // we will average lagrange
@@ -333,12 +383,14 @@ public:
     }
   }
 
-  bool QuadLoop(const mfem::DenseMatrix& x,
-                const int i_thread,
-                Vector_<QuadData>& q_data,
-                TemporaryData& tmp,
-                mfem::DenseMatrix& residual_matrix,
-                const bool keep_record) const {
+  bool
+  QuadLoop(const mfem::DenseMatrix& x,
+           Vector_<QuadData>& q_data,
+           TemporaryData& tmp,
+           mfem::DenseMatrix& residual_matrix,
+           const bool keep_record,
+           double& area, // must if keep_record
+           mimi::utils::Data<double>& force /* only if applicable*/) const {
     MIMI_FUNC()
     bool any_active = false;
     const double penalty = nearest_distance_coeff_->coefficient_;
@@ -347,10 +399,8 @@ public:
     for (QuadData& q : q_data) {
       // get current position and F
       x.MultTranspose(q.N_, tmp.distance_query_.query_.data());
-      mfem::MultAtB(x, q.dN_dxi_, tmp.J_);
 
       // nearest distance query
-      q.active_ = false; // init
       nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
                                                tmp.distance_results_);
       tmp.distance_results_.ComputeNormal<true>(); // unit normal
@@ -359,6 +409,14 @@ public:
       // and returned super big number / small number
       // Practical solution was to plant the tree with an odd number.
       assert(std::isfinite(g));
+
+      // defer J eval if this isn't keep_record
+      double det_J{};
+      if (keep_record) {
+        mfem::MultAtB(x, q.dN_dxi_, tmp.J_);
+        det_J = tmp.J_.Weight();
+        area += det_J;
+      }
 
       // check for angle and sign of normal gap for the first augmentation loop
       // otherwise, we detemine exit criteria based on p value.
@@ -371,8 +429,7 @@ public:
             || std::acos(
                    std::min(1., std::abs(g) / tmp.distance_results_.distance_))
                    > angle_tol) {
-          q.new_lagrange_ = 0.0;
-          q.g_ = g;
+          q.Record(!keep_record, det_J, 0.0, g, false);
           continue;
         }
       }
@@ -383,20 +440,20 @@ public:
       const double p = std::min(q.lagrange_ + penalty * g, 0.0);
       if (p == 0.0) {
         // this quad no longer contributes to contact enforcement
+        q.Record(!keep_record, det_J, 0.0, g, false);
         continue;
       }
 
-      const double det_J = tmp.J_.Weight();
+      // do deferred
+      if (!keep_record) {
+        mfem::MultAtB(x, q.dN_dxi_, tmp.J_);
+        det_J = tmp.J_.Weight();
+      }
 
       // maybe only a minor difference, but we don't want to keep records from
       // line search or FD computations
-      if (keep_record) {
-        q.new_lagrange_ = p;
-        q.det_J_ = det_J;
-        q.old_g_ = q.g_;
-        q.g_ = g;
-        q.active_ = true;
-      }
+      q.Record(!keep_record, det_J, p, g, true);
+
       // set active after checking p
       any_active = true;
 
@@ -407,11 +464,16 @@ public:
                     tmp.distance_results_.normal_.begin(),
                     tmp.distance_results_.normal_.end(),
                     residual_begin);
+      if (keep_record) {
+        force.Add(p * det_J, tmp.distance_results_.normal_.begin());
+      }
     }
 
     return any_active;
   }
 
+  /// rhs (for us, we have them on lhs - thus fliped sign) - used in line
+  /// search
   virtual void AddBoundaryResidual(const mfem::Vector& current_x,
                                    const int nthreads,
                                    mfem::Vector& residual) {
@@ -423,13 +485,16 @@ public:
         [&](const int begin, const int end, const int i_thread) {
           TemporaryData tmp;
           tmp.SetDim(dim_);
+          double area_dummy;
+          mimi::utils::Data<double> force_dummy;
           // this loops marked boundary elements
           for (int i{begin}; i < end; ++i) {
             // get bed
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
             // variable name is misleading - this is just local residual
-            // we use this container, as we already allocate this in tmp anyways
+            // we use this container, as we already allocate this in tmp
+            // anyways
             tmp.forward_residual_ = 0.0;
 
             mfem::DenseMatrix& current_element_x =
@@ -439,11 +504,12 @@ public:
             // this function is called either at the last step at "melted"
             // staged or during line search, keep_record = False
             const bool any_active = QuadLoop(current_element_x,
-                                             i_thread,
                                              bed.quad_data_,
                                              tmp,
                                              tmp.forward_residual_,
-                                             false);
+                                             false,
+                                             area_dummy,
+                                             force_dummy);
 
             // only push if any of quad point was active
             if (any_active) {
@@ -470,6 +536,8 @@ public:
           mfem::DenseMatrix local_grad;
           TemporaryData tmp;
           tmp.SetDim(dim_);
+          double area_dummy;
+          mimi::utils::Data<double> force_dummy;
           for (int i{begin}; i < end; ++i) {
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
@@ -483,11 +551,12 @@ public:
 
             // assemble residual
             const bool any_active = QuadLoop(current_element_x,
-                                             i_thread,
                                              bed.quad_data_,
                                              tmp,
                                              local_residual,
-                                             true);
+                                             false,
+                                             area_dummy,
+                                             force_dummy);
 
             // skip if nothing's active
             if (!any_active) {
@@ -508,11 +577,12 @@ public:
 
               with_respect_to = orig_wrt + diff_step;
               QuadLoop(current_element_x,
-                       i_thread,
                        bed.quad_data_,
                        tmp,
                        tmp.forward_residual_,
-                       false);
+                       false,
+                       area_dummy,
+                       force_dummy);
 
               for (int k{}; k < bed.n_tdof_; ++k) {
                 *grad_data++ =
@@ -537,6 +607,8 @@ public:
                             (nthreads < 0) ? n_threads_ : nthreads);
   };
 
+  /// assembles residual and grad at the same time. this should also have
+  /// assembled the last converged residual
   virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
                                           const int nthreads,
                                           const double grad_factor,
@@ -550,6 +622,8 @@ public:
           mfem::DenseMatrix local_grad;
           TemporaryData tmp;
           tmp.SetDim(dim_);
+          double tl_area{};
+          mimi::utils::Data<double> tl_force(dim_);
           for (int i{begin}; i < end; ++i) {
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
@@ -563,11 +637,12 @@ public:
 
             // assemble residual
             const bool any_active = QuadLoop(current_element_x,
-                                             i_thread,
                                              bed.quad_data_,
                                              tmp,
                                              local_residual,
-                                             true);
+                                             true,
+                                             tl_area,
+                                             tl_force);
 
             // skip if nothing's active
             if (!any_active) {
@@ -588,11 +663,12 @@ public:
 
               with_respect_to = orig_wrt + diff_step;
               QuadLoop(current_element_x,
-                       i_thread,
                        bed.quad_data_,
                        tmp,
                        tmp.forward_residual_,
-                       false);
+                       false,
+                       tl_area, /* this won't be changed */
+                       tl_force /* this either */);
 
               for (int k{}; k < bed.n_tdof_; ++k) {
                 *grad_data++ =
@@ -669,6 +745,57 @@ public:
     MIMI_FUNC()
 
     auto& rc = *RuntimeCommunication();
+
+    if (rc.ShouldSave("contact_history")) {
+    }
+    if (rc.ShouldSave("contact_forces")) {
+    }
+    if (rc.ShouldSave("")) {
+    }
+  }
+
+  virtual void CreateMassMatrix() {
+    MIMI_FUNC()
+
+    const int height = local_marked_dofs_.size();
+
+    if (m_mat_) {
+      if (m_mat_->Height() != height) {
+        m_mat_ = nullptr;
+      }
+    }
+
+    if (!m_mat_) {
+      // this is where we set mass_mat_dofs_
+      m_mat_ = std::make_unique<mfem::SparseMatrix>(height);
+      mfem::DenseMatrix elmat;
+      for (auto& be : boundary_element_data_) {
+        elmat.SetSize(be.n_dof_, be.n_dof_);
+        elmat = 0.0;
+        for (const auto& q_data : be.quad_data_) {
+          mfem::AddMult_a_VVt(q_data.integration_weight_ * q_data.det_dX_dxi_,
+                              q_data.N_,
+                              elmat);
+        }
+        be.mass_mat_dofs_.SetSize(be.n_dof_);
+        auto& vdof = *be.v_dofs_;
+        for (int i{}; i < be.n_dof_; ++i) {
+          be.mass_mat_dofs_[i] = local_marked_dofs_[vdof[i] / dim_];
+        }
+        m_mat_->AddSubMatrix(be.mass_mat_dofs_, be.mass_mat_dofs_, elmat, 0);
+      }
+    }
+
+    m_mat_->Finalize();
+    m_mat_->SortColumnIndices();
+    mass_inv_direct_.SetOperator(*m_mat_);
+    mass_inv_direct_.SetPrintLevel(1);
+  }
+
+  virtual void L2Project(const mfem::Vector& vec, mfem::Vector& projected) {
+    MIMI_FUNC()
+
+    mass_inv_direct_.Mult(vec, projected);
   }
 
   virtual double LastGapNorm() const {

@@ -113,7 +113,11 @@ public:
     MIMI_FUNC()
 
     auto search = save_those_vectors_every_.find(name);
-    return search != save_those_vectors_every_.end();
+    if (search == save_those_vectors_every_.end())
+      return false;
+
+    // value contains "every"
+    return i_timestep_ % search->second == 0;
   }
 
   void SetupRealHistory(const std::string& name, const int n_reserve) {
