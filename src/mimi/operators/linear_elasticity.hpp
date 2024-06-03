@@ -290,7 +290,7 @@ public:
     return *jacobian_;
   }
 
-  virtual void AccumulateStates(const mfem::Vector& x, const mfem::Vector& v) {
+  virtual void PostTimeAdvance(const mfem::Vector& x, const mfem::Vector& v) {
     MIMI_FUNC()
     // nichts
   }

@@ -33,12 +33,12 @@ public:
     }
   }
 
-  virtual void AccumulateStates(const mfem::Vector& x, const mfem::Vector& v) {
+  virtual void PostTimeAdvance(const mfem::Vector& x, const mfem::Vector& v) {
     MIMI_FUNC()
 
     // currently, we don't do boundaries
     for (auto& dnfi : domain_nfvi_) {
-      dnfi->AccumulateDomainStates(x, v);
+      dnfi->DomainPostTimeAdvance(x, v);
     }
   }
 

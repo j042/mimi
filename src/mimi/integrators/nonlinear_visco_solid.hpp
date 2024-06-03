@@ -167,14 +167,14 @@ public:
                             (nthreads < 1) ? n_threads_ : nthreads);
   }
 
-  virtual void AccumulateDomainStates(const mfem::Vector& current_x) {
+  virtual void DomainPostTimeAdvance(const mfem::Vector& current_x) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError(
         "Visco solids needs current_v to accumulate states");
   }
 
-  virtual void AccumulateDomainStates(const mfem::Vector& current_x,
-                                      const mfem::Vector& current_v) {
+  virtual void DomainPostTimeAdvance(const mfem::Vector& current_x,
+                                     const mfem::Vector& current_v) {
     MIMI_FUNC()
     if (!has_states_)
       return;

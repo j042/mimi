@@ -340,7 +340,7 @@ public:
                             (nthreads < 1) ? n_threads_ : nthreads);
   }
 
-  virtual void AccumulateDomainStates(const mfem::Vector& current_x) {
+  virtual void DomainPostTimeAdvance(const mfem::Vector& current_x) {
     MIMI_FUNC()
     if (!has_states_)
       return;

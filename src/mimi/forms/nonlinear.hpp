@@ -38,12 +38,12 @@ public:
   double first_effective_dt_{0.0};  // this is for x
   double second_effective_dt_{0.0}; // this is for x_dot (=v).
 
-  virtual void AccumulateStates(const mfem::Vector& x) {
+  virtual void PostTimeAdvance(const mfem::Vector& x) {
     MIMI_FUNC()
 
     // currently, we don't do boundaries
     for (auto& dnfi : domain_nfi_) {
-      dnfi->AccumulateDomainStates(x);
+      dnfi->DomainPostTimeAdvance(x);
     }
   }
 

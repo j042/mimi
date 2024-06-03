@@ -106,7 +106,7 @@ public:
     mimi::utils::PrintAndThrowError("AddDomainResidualAndGrad not implemented");
   };
 
-  virtual void AccumulateDomainStates(const mfem::Vector& current_x) {
+  virtual void DomainPostTimeAdvance(const mfem::Vector& current_x) {
     mimi::utils::PrintAndThrowError("AccumulateDomainStates not implemented");
   }
 

@@ -260,10 +260,12 @@ public:
     return jacobian_;
   }
 
-  virtual void AccumulateStates(const mfem::Vector& x, const mfem::Vector& v) {
+  virtual void PostTimeAdvance(const mfem::Vector& x, const mfem::Vector& v) {
     MIMI_FUNC()
 
-    nonlinear_visco_stiffness_->AccumulateStates(x, v);
+    nonlinear_visco_stiffness_->PostTimeAdvance(x, v);
+    if (contact_)
+      contact_->PostTimeAdvance(x);
   }
 };
 
