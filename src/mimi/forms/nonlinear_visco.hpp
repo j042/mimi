@@ -40,6 +40,9 @@ public:
     for (auto& dnfi : domain_nfvi_) {
       dnfi->DomainPostTimeAdvance(x, v);
     }
+    for (auto& bfnfi : boundary_face_nfvi_) {
+      bfnfi->BoundaryPostTimeAdvance(x, v);
+    }
   }
 
   /// we skip a lot of checks that's performed by base here

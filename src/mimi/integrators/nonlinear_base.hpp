@@ -107,7 +107,7 @@ public:
   };
 
   virtual void DomainPostTimeAdvance(const mfem::Vector& current_x) {
-    mimi::utils::PrintAndThrowError("AccumulateDomainStates not implemented");
+    mimi::utils::PrintAndThrowError("DomainPostTimeAdvance not implemented");
   }
 
   virtual void AddBoundaryResidual(const mfem::Vector& current_x,
@@ -130,6 +130,11 @@ public:
     mimi::utils::PrintAndThrowError(
         "AddBoundaryResidualAndGrad not implemented");
   };
+
+  virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("BoundaryPostTimeAdvance not implemented");
+  }
 
   virtual void SetBoundaryMarker(const mfem::Array<int>* b_marker) {
     MIMI_FUNC()

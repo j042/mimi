@@ -170,7 +170,7 @@ public:
   virtual void DomainPostTimeAdvance(const mfem::Vector& current_x) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError(
-        "Visco solids needs current_v to accumulate states");
+        "Visco solids needs current_v for post time step processing");
   }
 
   virtual void DomainPostTimeAdvance(const mfem::Vector& current_x,
@@ -203,6 +203,19 @@ public:
           }
         };
     mimi::utils::NThreadExe(accumulate_states, n_elements_, n_threads_);
+  }
+
+  virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "Visco solids needs current_v for post time step processing");
+  }
+
+  virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x,
+                                       const mfem::Vector& current_v) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "NonlinearViscoSolid::BoundaryPostTimeAdvance not implemented");
   }
 
   virtual void AddDomainGrad(const mfem::Vector& current_x,

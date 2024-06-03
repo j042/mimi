@@ -663,6 +663,11 @@ public:
     return std::sqrt(gap_squared_total);
   }
 
+  virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError("BoundaryPostTimeAdvance not implemented");
+  }
+
   virtual double LastGapNorm() const {
     MIMI_FUNC()
 
