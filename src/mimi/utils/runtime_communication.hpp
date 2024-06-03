@@ -57,8 +57,16 @@ protected:
   int i_timestep_;
   double t_;
 
+  const std::string& FName() const {
+    if (fname_.size() == 0) {
+      mimi::utils::PrintInfo(
+          "Save requested, but fname not set in RuntimeCommunication");
+    }
+    return fname_;
+  }
+
 public:
-  std::string fname_;
+  std::string fname_{};
 
   RuntimeCommunication() = default;
 
@@ -152,7 +160,7 @@ public:
                   const IndexType buf_size) const {
     MIMI_FUNC()
 
-    cnpy::npz_save(fname_,
+    cnpy::npz_save(FName(),
                    vector_name,
                    buf,
                    {static_cast<size_t>(buf_size)},

@@ -57,8 +57,10 @@ le.boundary_condition = bc
 
 rc = mimi.PyRuntimeCommunication()
 # rc.set_int("contact_quadrature_order", 50)
-rc.set_int("nonlinear_solid_quadrature_order", 3)
+# rc.set_int("nonlinear_solid_quadrature_order", 3)
+rc.fname = "tout/n.npz"
 rc.append_should_save("contact_history", 1)
+rc.append_should_save("contact_forces", 1)
 rc.setup_real_history("area", 10000)
 rc.setup_real_history("force_x", 10000)
 rc.setup_real_history("force_y", 10000)
@@ -66,7 +68,7 @@ le.runtime_communication = rc
 tic.toc()
 
 # setup needs to be called this assembles bilinear forms, linear forms
-le.setup(1)
+le.setup(4)
 
 le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
 

@@ -359,6 +359,7 @@ public:
     int v_counter{}, counter{};
     for (const int m_vdof : marked_boundary_v_dofs_) {
       if (v_counter % dim_ == 0) {
+        // marked_boundary_v_dofs_ is sorted, which means xyzxyzxyz...
         local_marked_dofs_[m_vdof / dim_] = counter++;
       }
       local_marked_v_dofs_[m_vdof] = v_counter++;
@@ -370,6 +371,13 @@ public:
       for (int i{}; i < bed.n_tdof_; ++i) {
         bed.local_v_dofs_[i] = local_marked_v_dofs_[(*bed.v_dofs_)[i]];
       }
+    }
+
+    // save indices
+    if (RuntimeCommunication()->ShouldSave("contact_forces")) {
+      RuntimeCommunication()->SaveVector("contact_residual_index_mapping",
+                                         local_marked_v_dofs_.data(),
+                                         local_marked_v_dofs_.size());
     }
   }
 
@@ -788,15 +796,14 @@ public:
     if (rc.ShouldSave("contact_forces")) {
       CreateMassMatrix();
       const int height = m_mat_->Height();
-      mass_b_.SetSize(height);
       mass_x_.SetSize(height);
-      double* mb_d = mass_b_.GetData();
-      const double* lr_d = last_residual_.GetData();
+      mass_x_ = 0.;
+      double* lr_d = last_residual_.GetData(); // residual: xxxyyyzz
       assert(last_residual_.Size() == height * dim_);
       for (int i{}; i < dim_; ++i) {
-        for (int j{}; j < height; ++j) {
-          mb_d[j] = lr_d[j * dim_ + i];
-        }
+        mfem::Vector dim_force(lr_d + (height * i), height);
+        L2Project(dim_force, mass_x_);
+        rc.SaveDynamicVector("projected_force" + std::to_string(i), mass_x_);
       }
     }
     if (rc.ShouldSave("")) {
