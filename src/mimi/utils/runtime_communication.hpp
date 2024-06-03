@@ -57,9 +57,9 @@ protected:
   int i_timestep_;
   double t_;
 
+public:
   std::string fname_;
 
-public:
   RuntimeCommunication() = default;
 
   void InitializeTimeStep() {

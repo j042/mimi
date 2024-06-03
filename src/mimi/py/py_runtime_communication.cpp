@@ -16,6 +16,7 @@ void init_py_runtime_communication(py::module_& m) {
 
   py::class_<RC, std::shared_ptr<RC>> rc(m, "PyRuntimeCommunication");
   rc.def(py::init<>())
+      .def_readwrite("fname", &RC::fname_)
       .def("set_fname", &RC::SetFName)
       .def("get_real", &RC::GetReal)
       .def("set_real", &RC::SetReal)
