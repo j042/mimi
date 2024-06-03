@@ -8,6 +8,7 @@
 
 #include "mimi/utils/precomputed.hpp"
 #include "mimi/utils/print.hpp"
+#include "mimi/utils/runtime_communication.hpp"
 
 namespace mimi::integrators {
 
@@ -19,6 +20,8 @@ public:
   std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>> element_matrices_;
   std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>>
       boundary_element_matrices_;
+
+  std::shared_ptr<mimi::utils::RuntimeCommunication> runtime_communication_;
 
   std::string name_;
 
@@ -66,6 +69,15 @@ public:
 
   /// Name of the integrator
   virtual const std::string& Name() const { return name_; }
+
+  virtual std::shared_ptr<mimi::utils::RuntimeCommunication>
+  RuntimeCommunication() {
+    MIMI_FUNC()
+    if (!runtime_communication_) {
+      mimi::utils::PrintAndThrowError("runtime_communication_ not set.");
+    }
+    return runtime_communication_;
+  }
 
   /// Precompute call interface
   virtual void Prepare(const int quadrature_order) {

@@ -51,7 +51,7 @@ protected:
   std::unordered_map<std::string, Vector<int>> integer_history_;
   std::unordered_map<std::string, double> real_;
   std::unordered_map<std::string, int> integer_;
-  std::unordered_set<std::string> save_those_vectors_;
+  std::unordered_map<std::string, int> save_those_vectors_every_;
 
   int i_timestep_;
   double t_;
@@ -102,17 +102,17 @@ public:
     MapSet(integer_, key, value);
   }
 
-  void AppendShouldSave(const std::string& name) {
+  void AppendShouldSave(const std::string& name, const int every) {
     MIMI_FUNC()
 
-    save_those_vectors_.emplace(name);
+    save_those_vectors_every_[name] = every;
   }
 
   bool ShouldSave(const std::string& name) const {
     MIMI_FUNC()
 
-    auto search = save_those_vectors_.find(name);
-    return search != save_those_vectors_.end();
+    auto search = save_those_vectors_every_.find(name);
+    return search != save_those_vectors_every_.end();
   }
 
   void SetupRealHistory(const std::string& name, const int n_reserve) {

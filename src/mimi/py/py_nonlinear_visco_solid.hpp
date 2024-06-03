@@ -173,6 +173,7 @@ public:
             material_->Name() + "-NonlinearViscoSolid",
             material_,
             nonlinear_stiffness_precomputed);
+    nonlinear_solid_integ->runtime_communication_ = RuntimeCommunication();
     nonlinear_solid_integ->Prepare();
     // add integrator to nl form
     nonlinear_stiffness->AddDomainIntegrator(nonlinear_solid_integ);
@@ -263,6 +264,7 @@ public:
                 nd_coeff,
                 std::to_string(bid),
                 contact_precomputed);
+        contact_integ->runtime_communication_ = RuntimeCommunication();
         // set the same boundary marker. It will be internally used for nthread
         // assemble of marked boundaries
         contact_integ->SetBoundaryMarker(&Base_::boundary_markers_[bid]);

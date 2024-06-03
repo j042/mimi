@@ -36,6 +36,7 @@ void init_py_solid(py::module_& m) {
       .def_property("time_step_size",
                     &PySolid::GetTimeStepSize,
                     &PySolid::SetTimeStepSize)
+      .def_readwrite("runtime_communication", &PySolid::runtime_communication_)
       .def("linear_form_view2", &PySolid::LinearFormView2, py::arg("lf_name"))
       .def("solution_view",
            &PySolid::SolutionView,

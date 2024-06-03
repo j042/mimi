@@ -1,3 +1,5 @@
+#include <memory>
+
 /* pybind11 */
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h> // cast std::vectors
@@ -12,7 +14,7 @@ namespace py = pybind11;
 void init_py_runtime_communication(py::module_& m) {
   using RC = mimi::utils::RuntimeCommunication;
 
-  py::class_<RC> rc(m, "PyRuntimeCommunication");
+  py::class_<RC, std::shared_ptr<RC>> rc(m, "PyRuntimeCommunication");
   rc.def(py::init<>())
       .def("set_fname", &RC::SetFName)
       .def("get_real", &RC::GetReal)

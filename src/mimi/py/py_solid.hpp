@@ -183,6 +183,9 @@ public:
   PySolid() = default;
   virtual ~PySolid() = default;
 
+  // runtime comm
+  std::shared_ptr<mimi::utils::RuntimeCommunication> runtime_communication_;
+
   /// @brief sets mesh
   /// @param fname
   virtual void ReadMesh(const std::string fname) {
@@ -294,6 +297,16 @@ public:
   virtual int NumberOfSubelements() const {
     MIMI_FUNC()
     return Mesh()->GetNumFaces();
+  }
+
+  virtual std::shared_ptr<mimi::utils::RuntimeCommunication>
+  RuntimeCommunication() {
+    MIMI_FUNC()
+    if (!runtime_communication_) {
+      runtime_communication_ =
+          std::make_shared<mimi::utils::RuntimeCommunication>();
+    }
+    return runtime_communication_;
   }
 
   /// @brief elevates degrees. can set max_degrees for upper bound.
