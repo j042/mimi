@@ -163,30 +163,29 @@ public:
                                                 const int el_end,
                                                 const int i_thread) {
       // thread's obj
-      auto& mesh = precomputed_->meshes_[i_thread];
       auto& int_rules = precomputed_->int_rules_[i_thread];
-      auto& patch_rule = patch_rules_[i_thread];
-      patch_rule =
-          std::make_unique<mfem::NURBSMeshRules>(mesh->NURBSext->GetNP(), dim_);
+      // auto& mesh = precomputed_->meshes_[i_thread];
+      // auto& patch_rule = patch_rules_[i_thread];
+      // patch_rule =
+      //     std::make_unique<mfem::NURBSMeshRules>(mesh->NURBSext->GetNP(), dim_);
 
-      const int ir_order =
-          (quadrature_order < 0)
-              ? precomputed_->fe_spaces_[i_thread]->GetOrder(0) * 2 + 3
-              : quadrature_order;
-      patch_quadrature_order_ = ir_order;
-      // loop patch and create patchrule
-      for (int p{}; p < mesh->NURBSext->GetNP(); ++p) {
-        mfem::Array<const mfem::KnotVector*> kv(dim_);
-        mesh->NURBSext->GetPatchKnotVectors(p, kv);
-        std::vector<const mfem::IntegrationRule*> ir1D(dim_);
-        const mfem::IntegrationRule* ir =
-            &int_rules.Get(mfem::Geometry::SEGMENT, ir_order);
-        for (int i = 0; i < dim_; ++i) {
-          ir1D[i] = ir->ApplyToKnotIntervals(*kv[i]);
-        }
-        patch_rule->SetPatchRules1D(p, ir1D);
-      }
-      patch_rule->Finalize(*mesh);
+      // const int ir_order = (quadrature_order < 0)
+      //                          ? mesh->NURBSext->GetOrders().Max() * 2 + 3
+      //                          : quadrature_order;
+      // patch_quadrature_order_ = ir_order;
+      // // loop patch and create patchrule
+      // for (int p{}; p < mesh->NURBSext->GetNP(); ++p) {
+      //   mfem::Array<const mfem::KnotVector*> kv(dim_);
+      //   mesh->NURBSext->GetPatchKnotVectors(p, kv);
+      //   std::vector<const mfem::IntegrationRule*> ir1D(dim_);
+      //   const mfem::IntegrationRule* ir =
+      //       &int_rules.Get(mfem::Geometry::SEGMENT, ir_order);
+      //   for (int i = 0; i < dim_; ++i) {
+      //     ir1D[i] = ir->ApplyToKnotIntervals(*kv[i]);
+      //   }
+      //   patch_rule->SetPatchRules1D(p, ir1D);
+      // }
+      // patch_rule->Finalize(*mesh);
       mfem::DenseMatrix dN_dxi, dxi_dX;
 
       // element loop
@@ -221,15 +220,14 @@ public:
                                    : quadrature_order;
 
         // get int rule
-        // const mfem::IntegrationRule& ir_old =
-        // i_el_data.GetIntRule(int_rules);
-        bool delete_intrule = false;
-        const mfem::IntegrationRule& ir =
-            patch_rule->GetElementRule(i_el_data.element_->GetElement(),
-                                       i_el_data.element_->GetPatch(),
-                                       i_el_data.element_->GetIJK(),
-                                       i_el_data.element_->KnotVectors(),
-                                       delete_intrule);
+        const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);
+        // bool delete_intrule = false;
+        // const mfem::IntegrationRule& ir =
+        //     patch_rule->GetElementRule(i_el_data.element_->GetElement(),
+        //                                i_el_data.element_->GetPatch(),
+        //                                i_el_data.element_->GetIJK(),
+        //                                i_el_data.element_->KnotVectors(),
+        //                                delete_intrule);
 
         // prepare quad loop
         i_el_data.n_quad_ = ir.GetNPoints();
@@ -256,9 +254,9 @@ public:
           q_data.det_dX_dxi_ = i_el_data.element_trans_->Weight();
         }
 
-        if (delete_intrule) {
-          delete &ir;
-        }
+        // if (delete_intrule) {
+        //   delete &ir;
+        // }
       }
     };
 
