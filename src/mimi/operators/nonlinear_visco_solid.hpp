@@ -59,11 +59,7 @@ public:
     nonlinear_visco_stiffness_ =
         std::dynamic_pointer_cast<NonlinearFormPointer_::element_type>(
             MimiBase_::nonlinear_forms_.at("nonlinear_visco_stiffness"));
-    nonlinear_visco_stiffness_->SetAndPassOperatorFrozenState(
-        FrozenStatePointer());
-    if (contact_) {
-      contact_->SetAndPassOperatorFrozenState(FrozenStatePointer());
-    }
+
     assert(!stiffness_);
     assert(!nonlinear_stiffness_);
     assert(nonlinear_visco_stiffness_);

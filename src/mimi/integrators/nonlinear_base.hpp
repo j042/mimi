@@ -28,8 +28,6 @@ public:
   /// flag to know when to assemble grad.
   bool assemble_grad_{false};
 
-  std::shared_ptr<const bool> operator_frozen_state_;
-
   /// time step size, in case you need them
   /// nonlinear forms will set them
   double dt_{0.0};
