@@ -129,7 +129,7 @@ public:
   /// - reference to target jacobian weight (det)
   /// - target to reference jacobian (inverse of previous)
   /// - basis derivative at target
-  virtual void Prepare(const int quadrature_order = -1) {
+  virtual void Prepare() {
     MIMI_FUNC()
 
     // get numbers to decide loop size
@@ -159,6 +159,10 @@ public:
     // patch-wise integration - create for each thread
     patch_rules_.resize(n_threads_);
 
+    const int default_q_order = RuntimeCommunication()->GetInteger(
+        "nonlinear_solid_quadrature_order", // this is also used in
+                                            // visco_solid
+        -1);
     auto precompute_at_elements_and_quads =
         [&](const int el_begin, const int el_end, const int i_thread) {
           // thread's obj
@@ -213,12 +217,10 @@ public:
             // for structure simulations, tdof and vdof are the same
             const int n_tdof = i_el_data.n_dof_ * dim_;
             i_el_data.n_tdof_ = n_tdof;
-
             // get quad order
             i_el_data.quadrature_order_ =
-                (quadrature_order < 0)
-                    ? i_el_data.element_->GetOrder() * 2 + dim_
-                    : quadrature_order;
+                (default_q_order < 0) ? i_el_data.element_->GetOrder() * 2 + 3
+                                      : default_q_order;
 
             // get int rule
             const mfem::IntegrationRule& ir = i_el_data.GetIntRule(int_rules);

@@ -42,14 +42,6 @@ public:
   /// ids of contributing boundary elements, extracted based on boundary_marker_
   mimi::utils::Vector<int> marked_boundary_elements_;
 
-  /// @brief quadrature order per elements - alternatively, could be per
-  /// patch thing
-  mimi::utils::Vector<int> quadrature_orders_;
-
-  /// @brief quadrature order per boundary elements - alternatively, could be
-  /// per boundary patch thing
-  mimi::utils::Vector<int> boundary_quadrature_orders_;
-
   /// decided to ask for intrules all the time. but since we don't wanna call
   /// the geometry type all the time, we save this just once.
   mfem::Geometry::Type geometry_type_;
@@ -80,7 +72,7 @@ public:
   }
 
   /// Precompute call interface
-  virtual void Prepare(const int quadrature_order) {
+  virtual void Prepare() {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("Prepare not implemented");

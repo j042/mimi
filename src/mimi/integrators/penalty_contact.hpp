@@ -175,7 +175,7 @@ public:
   /// this one needs
   /// - shape function
   /// - weights of target to refrence
-  virtual void Prepare(const int quadrature_order = -1) {
+  virtual void Prepare() {
     MIMI_FUNC()
 
     // get numbers to decide loop size
@@ -219,7 +219,9 @@ public:
 
     boundary_element_data_.resize(n_marked_boundaries_);
 
-    // now, weight of jacobian.
+    const int default_q_order =
+        RuntimeCommunication()->GetInteger("contact_quadrature_order", -1);
+
     auto precompute_at_elem_and_quad = [&](const int marked_b_el_begin,
                                            const int marked_b_el_end,
                                            const int i_thread) {
@@ -250,9 +252,9 @@ public:
         i_bed.sparse_matrix_A_ids_ = precomputed_->boundary_A_ids_[m];
 
         // let's prepare quad loop
-        i_bed.quadrature_order_ = (quadrature_order < 0)
+        i_bed.quadrature_order_ = (default_q_order < 0)
                                       ? i_bed.element_->GetOrder() * 2 + 3
-                                      : quadrature_order;
+                                      : default_q_order;
 
         const mfem::IntegrationRule& ir = i_bed.GetIntRule(int_rules);
         i_bed.n_quad_ = ir.GetNPoints();
@@ -665,7 +667,8 @@ public:
 
   virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {
     MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("BoundaryPostTimeAdvance not implemented");
+
+    auto& rc = *RuntimeCommunication();
   }
 
   virtual double LastGapNorm() const {

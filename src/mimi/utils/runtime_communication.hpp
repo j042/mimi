@@ -19,6 +19,7 @@ MapDefaultGet(const MapType& map,
               const typename MapType::mapped_type& default_) {
   auto val = map.find(key);
   if (val == map.end()) {
+    // maybe add quiet option
     mimi::utils::PrintInfo("RuntimeCommunication -",
                            key,
                            "requested, but it's not saved. Returning default.");

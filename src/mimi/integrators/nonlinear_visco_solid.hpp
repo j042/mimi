@@ -69,10 +69,10 @@ public:
   /// - reference to target jacobian weight (det)
   /// - target to reference jacobian (inverse of previous)
   /// - basis derivative at target
-  virtual void Prepare(const int quadrature_order = -1) {
+  virtual void Prepare() {
     MIMI_FUNC()
 
-    Base_::Prepare(quadrature_order);
+    Base_::Prepare();
   }
 
   /// Performs quad loop with element data and temporary data
