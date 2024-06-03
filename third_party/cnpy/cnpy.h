@@ -252,7 +252,7 @@ void npz_save(const std::string& zipname,
                   + local_header.size()); // offset of start of global headers,
                                           // since global header now starts
                                           // after newly written array
-  footer += (uint16_t) 0; // zip file comment length
+  footer += (uint16_t) 0;                 // zip file comment length
 
   // write everything
   fwrite(&local_header[0], sizeof(char), local_header.size(), fp);

@@ -1,5 +1,6 @@
 add_subdirectory(mfem-fork)
 add_subdirectory(pybind11)
+add_subdirectory(cnpy)
 
 if(MIMI_COMPILE_SPLINEPY)
   message("buildling splinepy")
