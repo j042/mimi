@@ -182,11 +182,12 @@ public:
             i_el_data.v_dofs_ = precomputed_->v_dofs_[i];
             auto& v_dofs = *i_el_data.v_dofs_;
 
-            // v_dofs are organized in xyzxyzxyz, so we just want to skip
-            // through and divide them to create scalar_vdofs
+            // we organize spline nodes as xyzxyz, but
+            // v_dofs are organized in xxxyyyzzz, so we just need to devide the
+            // first sequence with dim
             i_el_data.scalar_v_dofs_.SetSize(v_dofs.Size() / dim_);
-            for (int i{}, j{}; i < v_dofs.Size(); i += dim_, ++j) {
-              i_el_data.scalar_v_dofs_[j] = v_dofs[i] / dim_;
+            for (int k{}; k < i_el_data.n_dof_; ++k) {
+              i_el_data.scalar_v_dofs_[k] = v_dofs[k] / dim_;
             }
 
             // check suitability of temp data

@@ -43,6 +43,7 @@ public:
   mfem::CGSolver mass_inv_;
   mfem::DSmoother mass_inv_prec_;
   mfem::UMFPackSolver mass_inv_direct_;
+  mfem::Vector mass_b_;        // for rhs
   mfem::Vector mass_x_;        // for answer
   mfem::Vector last_residual_; // Forces
   double last_area_;           // for p = forces / A
@@ -101,7 +102,8 @@ public:
     bool active_ = false;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
-    mfem::Array<int> mass_mat_dofs_; // scalar dofs for L2Projection
+    mfem::Array<int> local_v_dofs_; // scalar dofs for L2Projection
+    mfem::Array<int> local_dofs_;   // scalar dofs for L2Projection
 
     Vector_<QuadData> quad_data_;
 
@@ -361,6 +363,14 @@ public:
       }
       local_marked_v_dofs_[m_vdof] = v_counter++;
     }
+    last_residual_.SetSize(local_marked_v_dofs_.size());
+
+    for (auto& bed : boundary_element_data_) {
+      bed.local_v_dofs_.SetSize(bed.n_tdof_);
+      for (int i{}; i < bed.n_tdof_; ++i) {
+        bed.local_v_dofs_[i] = local_marked_v_dofs_[(*bed.v_dofs_)[i]];
+      }
+    }
   }
 
   // we will average lagrange
@@ -619,6 +629,8 @@ public:
                                           mfem::SparseMatrix& grad) {
     last_area_ = 0.0;
     last_force_.Fill(0.0);
+    const bool save_residual =
+        RuntimeCommunication()->ShouldSave("contact_forces");
     std::mutex residual_mutex;
     // lambda for nthread assemble
     auto assemble_boundary_residual_and_grad_then_contribute =
@@ -682,6 +694,8 @@ public:
               with_respect_to = orig_wrt;
             }
 
+            // save to last_res
+
             // push right away
             std::lock_guard<std::mutex> lock(residual_mutex);
             const auto& vdofs = *bed.v_dofs_;
@@ -691,6 +705,15 @@ public:
             const auto& A_ids = *bed.sparse_matrix_A_ids_;
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++ * grad_factor;
+            }
+            if (save_residual) {
+              // since we don't save our local copy, we can't really have this
+              // serial at the end
+              double* last_r_d = last_residual_.GetData();
+              const double* local_r_d = local_residual.GetData();
+              for (int k{}; k < bed.n_tdof_; ++k) {
+                last_r_d[bed.local_v_dofs_[k]] = local_r_d[k];
+              }
             }
           }
           // reuse mutex for area and force update
@@ -763,6 +786,18 @@ public:
       }
     }
     if (rc.ShouldSave("contact_forces")) {
+      CreateMassMatrix();
+      const int height = m_mat_->Height();
+      mass_b_.SetSize(height);
+      mass_x_.SetSize(height);
+      double* mb_d = mass_b_.GetData();
+      const double* lr_d = last_residual_.GetData();
+      assert(last_residual_.Size() == height * dim_);
+      for (int i{}; i < dim_; ++i) {
+        for (int j{}; j < height; ++j) {
+          mb_d[j] = lr_d[j * dim_ + i];
+        }
+      }
     }
     if (rc.ShouldSave("")) {
     }
@@ -780,7 +815,7 @@ public:
     }
 
     if (!m_mat_) {
-      // this is where we set mass_mat_dofs_
+      // this is where we set local_dofs_
       m_mat_ = std::make_unique<mfem::SparseMatrix>(height);
       mfem::DenseMatrix elmat;
       for (auto& be : boundary_element_data_) {
@@ -791,12 +826,12 @@ public:
                               q_data.N_,
                               elmat);
         }
-        be.mass_mat_dofs_.SetSize(be.n_dof_);
+        be.local_dofs_.SetSize(be.n_dof_);
         auto& vdof = *be.v_dofs_;
         for (int i{}; i < be.n_dof_; ++i) {
-          be.mass_mat_dofs_[i] = local_marked_dofs_[vdof[i] / dim_];
+          be.local_dofs_[i] = local_marked_dofs_[vdof[i] / dim_];
         }
-        m_mat_->AddSubMatrix(be.mass_mat_dofs_, be.mass_mat_dofs_, elmat, 0);
+        m_mat_->AddSubMatrix(be.local_dofs_, be.local_dofs_, elmat, 0);
       }
     }
 
