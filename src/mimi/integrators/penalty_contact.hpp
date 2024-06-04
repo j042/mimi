@@ -378,6 +378,9 @@ public:
       RuntimeCommunication()->SaveVector("contact_residual_index_mapping",
                                          local_marked_v_dofs_.data(),
                                          local_marked_v_dofs_.size());
+      RuntimeCommunication()->SaveVector("contact_residual_index_mapping",
+                                         local_marked_v_dofs_.data(),
+                                         local_marked_v_dofs_.size());
     }
   }
 
@@ -798,10 +801,15 @@ public:
       const int height = m_mat_->Height();
       mass_x_.SetSize(height);
       mass_x_ = 0.;
-      double* lr_d = last_residual_.GetData(); // residual: xxxyyyzz
+      double* lr_d = last_residual_.GetData(); // residual: xyzxyz
+      mimi::utils::Data<double> rhs(height);
       assert(last_residual_.Size() == height * dim_);
       for (int i{}; i < dim_; ++i) {
-        mfem::Vector dim_force(lr_d + (height * i), height);
+        for (int j{}; j < height; ++j) {
+          rhs[j] = lr_d[j * dim_ + i];
+        }
+        mfem::Vector dim_force(rhs.data(), height);
+        // mfem::Vector dim_force(lr_d + height * i, height);
         L2Project(dim_force, mass_x_);
         rc.SaveDynamicVector("projected_force" + std::to_string(i), mass_x_);
       }
@@ -813,7 +821,7 @@ public:
   virtual void CreateMassMatrix() {
     MIMI_FUNC()
 
-    const int height = local_marked_dofs_.size();
+    const int height = marked_boundary_v_dofs_.size() / dim_;
 
     if (m_mat_) {
       if (m_mat_->Height() != height) {
@@ -835,7 +843,10 @@ public:
         }
         be.local_dofs_.SetSize(be.n_dof_);
         auto& vdof = *be.v_dofs_;
+        mimi::utils::PrintInfo("Printing ******");
         for (int i{}; i < be.n_dof_; ++i) {
+          mimi::utils::PrintInfo("vdof", vdof[i]);
+          mimi::utils::PrintInfo("  lmd", local_marked_dofs_[vdof[i] / dim_]);
           be.local_dofs_[i] = local_marked_dofs_[vdof[i] / dim_];
         }
         m_mat_->AddSubMatrix(be.local_dofs_, be.local_dofs_, elmat, 0);
@@ -850,7 +861,6 @@ public:
 
   virtual void L2Project(const mfem::Vector& vec, mfem::Vector& projected) {
     MIMI_FUNC()
-
     mass_inv_direct_.Mult(vec, projected);
   }
 

@@ -58,8 +58,8 @@ curv.cps[:] += [0.0, 0.75]
 
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
-scene.plant_kd_tree(100000, 4)
-scene.coefficient = 0.5e11
+scene.plant_kd_tree(1001, 4)
+scene.coefficient = 1e12
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
@@ -99,7 +99,7 @@ def move():
     else:
         curv.cps[:] -= [0.04, 0]
 
-    scene.plant_kd_tree(1000, 4)
+    scene.plant_kd_tree(111, 4)
 
 
 def sol():
@@ -121,7 +121,6 @@ def show():
     s.cps[:] = x[to_s]
     gus.show(
         [
-            # str(i) + " " + str(j) + " " + str(ab) + " " + str(ni.gap_norm()),
             str(i) + " " + str(ni.gap_norm()),
             s,
             curv,
@@ -131,7 +130,6 @@ def show():
     )
 
 
-coe = 5e11
 # initialize a plotter
 plt = gus.show(
     [s, curv],
@@ -142,31 +140,9 @@ ni = n.boundary_integrator(0)
 for i in range(2000):
     if i < 820:
         move()
-    old = 1
-    b_old = 1
-    scene.coefficient = coe
-    for j in range(20):
-        sol()
-        le.configure_newton("nonlinear_visco_solid", 1e-6, 1e-8, 5, True)
-        rel, ab = le.newton_final_norms("nonlinear_visco_solid")
-        bdr_norm = np.linalg.norm(n.boundary_residual())
-        print("augumenting")
-        print()
-        # if ni.gap_norm() < 1e-4:
-        #    print(ni.gap_norm(), "exit!")
-        #    break
-    print("final solve!")
-    le.configure_newton("nonlinear_visco_solid", 1e-7, 1e-8, 20, True)
-    le.update_contact_lagrange()
-    scene.coefficient = 0.0
-    c_sol()
-    rel, ab = le.newton_final_norms("nonlinear_visco_solid")
-
-    le.configure_newton("nonlinear_visco_solid", 1e-8, 1e-10, 3, False)
-    scene.coefficient = coe
+    le.fixed_point_alm_solve2(15, 3, 10, 0, 1e-8, 1e-5, 1e-5)
     adv()
     show()
-    plt.screenshot(f"pl/{10000+i}.png")
 
 tic.summary(print_=True)
 gus.show(s, vedoplot=plt, interactive=True)
