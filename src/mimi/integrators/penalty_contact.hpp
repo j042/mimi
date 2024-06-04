@@ -803,61 +803,6 @@ public:
     }
     if (rc.ShouldSave("contact_forces")) {
       rc.SaveDynamicVector("vector_residual_", last_residual_);
-
-      CreateMassMatrix();
-      mass_x_.SetSize(last_residual_.Size());
-      mass_x_ = 0.0;
-      mass_inv_direct_.Mult(last_residual_, mass_x_);
-      std::ofstream myfile, myfile2;
-      myfile.open("rhs.txt");
-      myfile2.open("x.txt");
-      last_residual_.Print(myfile);
-      mass_x_.Print(x.txt);
-      myfile.close();
-      myfile2.close();
-      rc.SaveDynamicVector("projected_", mass_x_);
-      mimi::utils::PrintInfo(
-          "************************************************");
-      last_residual_.Print();
-      mimi::utils::PrintInfo("****************");
-      mass_x_.Print();
-      mimi::utils::PrintInfo(
-          "************************************************");
-
-      // const int height = m_mat_->Height();
-      // mass_x_.SetSize(height);
-      // mass_x_ = 0.;
-      // double* lr_d = last_residual_.GetData(); // residual: xyzxyz
-      // last_residual_.Print();
-      // mimi::utils::Data<double> rhs(height);
-      // assert(last_residual_.Size() == height * dim_);
-      // for (int i{}; i < dim_; ++i) {
-      //   mfem::SparseMatrix m(*m_mat_, false);
-      //   for (int j{}; j < height; ++j) {
-      //     rhs[j] = lr_d[j * dim_ + i];
-      //     if (rhs[j] == 0) {
-      //       m.EliminateRowCol(j);
-      //     }
-      //   }
-      //   mfem::Vector dim_force(rhs.data(), height);
-
-      //   mass_inv_direct_.SetOperator(m);
-      //   mass_inv_direct_.Mult(dim_force, mass_x_);
-      //   // mfem::Vector dim_force(lr_d + height * i, height);
-      //   // L2Project(dim_force, mass_x_);
-      //   mimi::utils::PrintInfo("****************");
-      //   dim_force.Print();
-      //   mimi::utils::PrintInfo("********");
-      //   mass_x_.Print();
-      //   mimi::utils::PrintInfo("****************");
-      //   rc.SaveDynamicVector("projected_force_" + std::to_string(i) + "_",
-      //                        mass_x_);
-      // }
-      // mass_x_.SetSize(last_residual_.Size());
-      // mass_x_ = 0.0;
-      // L2Project(last_residual_, mass_x_);
-      // last_residual_.Print();
-      // rc.SaveDynamicVector("projected_force", mass_x_);
     }
     if (rc.ShouldSave("")) {
     }
@@ -902,29 +847,8 @@ public:
         be.local_v_dofs_.Print();
         m_mat_->AddSubMatrix(be.local_v_dofs_, be.local_v_dofs_, v_elmat, 0);
       }
-      // m_mat_ = std::make_unique<mfem::SparseMatrix>(height);
-      // mfem::DenseMatrix elmat;
-      // for (auto& be : boundary_element_data_) {
-      //   elmat.SetSize(be.n_tdof_, be.n_tdof_);
-      //   elmat = 0.0;
-      //   for (const auto& q_data : be.quad_data_) {
-      //     mfem::AddMult_a_VVt(q_data.integration_weight_ *
-      //     q_data.det_dX_dxi_,
-      //                         q_data.N_,
-      //                         elmat);
-      //   }
-      //   for (int d{}; d < dim_; ++d) {
-      //     elmat.AddMatrix(elmat, be.n_dof_ * d, be.n_dof_ * d);
-      //   }
-      //   m_mat_->AddSubMatrix(*be.v_dofs_, *be.v_dofs_, elmat, 0);
-      // }
       m_mat_->Finalize();
       m_mat_->SortColumnIndices();
-      std::ofstream myfile;
-      myfile.open("example.txt");
-
-      m_mat_->PrintCSR2(myfile);
-      myfile.close();
     }
 
     mass_inv_direct_.SetOperator(*m_mat_);

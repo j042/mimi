@@ -14,7 +14,7 @@ le.read_mesh("tests/data/sqn.mesh")
 # set param
 
 # refine
-le.elevate_degrees(1)
+le.elevate_degrees(3)
 le.subdivide(4)
 
 # mat
