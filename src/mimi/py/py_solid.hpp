@@ -107,7 +107,7 @@ protected:
     }
 
     void StoreOriginalAndScaleSceneCoefficients(const double factor) {
-      assert(contact_scenes);
+      MIMI_FUNC()
 
       scene_coeffs.clear();
       scene_coeffs.reserve(contact_form->boundary_face_nfi_.size());

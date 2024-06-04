@@ -47,8 +47,8 @@ curv.cps[:] += [0.0, 0.75]
 
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
-scene.plant_kd_tree(100000, 4)
-scene.coefficient = 0.5e11
+scene.plant_kd_tree(1001, 4)
+scene.coefficient = 1e12
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
@@ -98,7 +98,7 @@ def move():
     else:
         curv.cps[:] -= [0.04, 0]
 
-    scene.plant_kd_tree(1000, 4)
+    scene.plant_kd_tree(1001, 4)
 
 
 def sol():
@@ -128,15 +128,13 @@ def show():
     )
 
 
-coe = 2e11
 # initialize a plotter
-plt = gus.show([s, curv], close=False)
+plt = gus.show([s, curv], interactive=False, close=False)
 n = le.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
 for i in range(1000):
     move()
     le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5)
-    adv()
     le.step_time2()
     show()
 
