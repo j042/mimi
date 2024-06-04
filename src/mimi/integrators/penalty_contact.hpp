@@ -449,7 +449,7 @@ public:
             || std::acos(
                    std::min(1., std::abs(g) / tmp.distance_results_.distance_))
                    > angle_tol) {
-          q.Record(!keep_record, det_J, 0.0, g, false);
+          q.Record(keep_record, det_J, 0.0, g, false);
           continue;
         }
       }
@@ -460,7 +460,7 @@ public:
       const double p = std::min(q.lagrange_ + penalty * g, 0.0);
       if (p == 0.0) {
         // this quad no longer contributes to contact enforcement
-        q.Record(!keep_record, det_J, 0.0, g, false);
+        q.Record(keep_record, det_J, 0.0, g, false);
         continue;
       }
 
@@ -472,7 +472,7 @@ public:
 
       // maybe only a minor difference, but we don't want to keep records from
       // line search or FD computations
-      q.Record(!keep_record, det_J, p, g, true);
+      q.Record(keep_record, det_J, p, g, true);
 
       // set active after checking p
       any_active = true;

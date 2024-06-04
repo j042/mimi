@@ -14,7 +14,7 @@ le.read_mesh("tests/data/sqn.mesh")
 # set param
 
 # refine
-le.elevate_degrees(3)
+le.elevate_degrees(1)
 le.subdivide(4)
 
 # mat
@@ -85,7 +85,7 @@ tic.summary(print_=True)
 # s.show_options["control_points"] = False
 # s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-# s.show_options["control_points"] = False
+s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
@@ -137,6 +137,7 @@ for i in range(1000):
     move()
     le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5)
     adv()
+    le.step_time2()
     show()
 
 
