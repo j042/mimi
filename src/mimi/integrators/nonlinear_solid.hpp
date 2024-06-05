@@ -69,7 +69,6 @@ public:
     mfem::Vector element_x_;
     mfem::DenseMatrix element_x_mat_;
     mfem::DenseMatrix stress_;
-    mfem::DenseMatrix dN_dx_;
     mfem::DenseMatrix F_;
     mfem::DenseMatrix F_inv_;
     mfem::DenseMatrix forward_residual_;
@@ -79,7 +78,6 @@ public:
       element_x_.SetSize(n_dof * dim); // will be resized in getsubvector
       element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
       stress_.SetSize(dim, dim);
-      dN_dx_.SetSize(n_dof, dim);
       F_.SetSize(dim, dim);
       F_inv_.SetSize(dim, dim);
       forward_residual_.SetSize(n_dof, dim);

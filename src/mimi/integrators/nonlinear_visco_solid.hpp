@@ -18,7 +18,6 @@ public:
 
   struct TemporaryData : Base_::TemporaryData {
     using BaseTD_ = Base_::TemporaryData;
-    using BaseTD_::dN_dx_;
     using BaseTD_::element_x_;     // x
     using BaseTD_::element_x_mat_; // x as matrix
     using BaseTD_::F_;
@@ -269,7 +268,8 @@ public:
 
               double& with_respect_to = *solution_data++;
               const double orig_wrt = with_respect_to;
-              const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+              const double diff_step =
+                  (orig_wrt != 0.0) ? std::abs(orig_wrt) * 1.0e-8 : 1.0e-8;
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;
@@ -402,7 +402,7 @@ public:
   virtual void AddBoundaryGrad(const mfem::Vector& current_x,
                                const mfem::Vector& current_v,
                                const int nthreads,
-                               mfem::Vector& residual) {
+                               mfem::SparseMatrix& residual) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("mimi::integrators::NonlinearViscoSolid::"
                                     "AddBoundaryGrad not implemented");
