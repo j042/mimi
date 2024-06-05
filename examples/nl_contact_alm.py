@@ -14,7 +14,7 @@ le.read_mesh("tests/data/sqn.mesh")
 # set param
 
 # refine
-le.elevate_degrees(3)
+le.elevate_degrees(1)
 le.subdivide(4)
 
 # mat
@@ -132,11 +132,12 @@ def show():
 plt = gus.show([s, curv], interactive=False, close=False)
 n = le.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
-for i in range(1000):
+for i in range(200):
     move()
-    le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5)
+    le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
     le.step_time2()
-    show()
+    tic.toc(f"{i}-step")
+#    show()
 
 
 tic.summary(print_=True)

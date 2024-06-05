@@ -18,6 +18,7 @@ public:
   mfem::DSmoother mass_inv_prec_;
   mfem::UMFPackSolver mass_inv_direct_;
   mfem::Vector integrated_;
+  mfem::Vector projected_; /* optional use */
 
   using Base_ = NonlinearBase;
   template<typename T>
@@ -532,7 +533,7 @@ public:
   }
 
   /// pure integration of temperature at quadrature points
-  virtual void Temperature(mfem::Vector& x, mfem::Vector& projected) {
+  virtual void Temperature(mfem::Vector& projected) {
     MIMI_FUNC()
 
     CreateMassMatrix(projected.Size());
@@ -566,7 +567,7 @@ public:
     }
 
     // mass_inv_.Mult(integrated, projected);
-    projected = 0.0;
+    // projected = 0.0;
     mass_inv_direct_.Mult(integrated_, projected);
   }
 

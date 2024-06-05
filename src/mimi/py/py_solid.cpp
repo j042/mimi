@@ -70,10 +70,11 @@ void init_py_solid(py::module_& m) {
            py::arg("n_outer"),
            py::arg("n_inner"),
            py::arg("n_final"),
-           py::arg("finaly_penalty_scale"),
+           py::arg("final_penalty_scale"),
            py::arg("rel_tol"),
            py::arg("abs_tol"),
-           py::arg("gap_tol"))
+           py::arg("gap_tol"),
+           py::arg("restart_augmentation"))
       .def("fixed_point_advanced_vector_views",
            &PySolid::FixedPointAdvancedVectorViews)
       .def("advance_time2", &PySolid::AdvanceTime2);

@@ -203,6 +203,13 @@ public:
           }
         };
     mimi::utils::NThreadExe(accumulate_states, n_elements_, n_threads_);
+
+    auto& rc = *RuntimeCommunication();
+    if (rc.ShouldSave("temperature")) {
+      projected_.SetSize(precomputed_->n_v_dofs_);
+      Temperature(projected_);
+      rc.SaveDynamicVector("temperature_", projected_);
+    }
   }
 
   virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {

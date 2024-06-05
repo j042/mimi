@@ -60,6 +60,11 @@ public:
   using Vector_ = mimi::utils::Vector<T>;
 
   int n_threads_{1};
+  int n_elements_{1};
+  int n_b_elements_{1};
+  int n_v_dofs_{1};
+  int n_dofs_{1};
+  int dim_{1};
 
   // duplicates to help thread safety
 
@@ -185,9 +190,6 @@ public:
     // reset first
     Clear();
 
-    // save nthreads
-    n_threads_ = nthreads;
-
     // create for each threads
     for (int i{}; i < nthreads; ++i) {
       // create int rules
@@ -212,6 +214,13 @@ public:
     const int n_elem = fe_space.GetNE();
     const int n_b_elem = fe_space.GetNBE();
     const int dim = fe_space.GetMesh()->Dimension();
+    // save values
+    n_threads_ = nthreads;
+    n_elements_ = n_elem;
+    n_b_elements_ = n_b_elem;
+    n_v_dofs_ = fe_space.GetMesh()->GetNodes()->Size();
+    dim_ = dim;
+    n_dofs_ = n_v_dofs_ / dim;
 
     // allocate vectors
     v_dofs_.resize(n_elem);

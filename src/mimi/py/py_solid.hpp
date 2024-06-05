@@ -643,7 +643,14 @@ public:
     assert(x2_dot_);
 
     ode2_solver_->StepTime2(*x2_, *x2_dot_, t_, dt_);
-    RuntimeCommunication()->NextTimeStep(dt_);
+    auto& rc = *RuntimeCommunication();
+    if (rc.ShouldSave("x")) {
+      rc.SaveDynamicVector("x_", *x2_);
+    }
+    if (rc.ShouldSave("v")) {
+      rc.SaveDynamicVector("v_", *x2_dot_);
+    }
+    rc.NextTimeStep(dt_);
   }
 
   virtual void FixedPointSolve2() {
@@ -729,7 +736,8 @@ public:
                                    const double final_penalty_scale,
                                    const double rel_tol,
                                    const double abs_tol,
-                                   const double gap_tol) {
+                                   const double gap_tol,
+                                   const bool restart_augmentation) {
     MIMI_FUNC()
 
     PrepareALM();
@@ -738,7 +746,8 @@ public:
     const bool prev_itermode = ALM.newton_solver->iterative_mode;
 
     // initialize ALM
-    ALM.FillContactLagrange(0.0);
+    if (restart_augmentation)
+      ALM.FillContactLagrange(0.0);
 
     // first iteration
     ALM.newton_solver->SetRelTol(rel_tol);
@@ -771,6 +780,10 @@ public:
       gap = ALM.GapNorm(fixed_point_advanced_x_);
       if (is_converged())
         return;
+      if (gap < gap_tol) { // augmentation loop exits once gap requirement is
+                           // fulfilled
+        break;
+      }
       ALM.UpdateContactLagrange();
     }
 
@@ -807,7 +820,14 @@ public:
     assert(x2_dot_);
 
     ode2_solver_->AdvanceTime2(*x2_, *x2_dot_, t_, dt_);
-    RuntimeCommunication()->NextTimeStep(dt_);
+    auto& rc = *RuntimeCommunication();
+    if (rc.ShouldSave("x")) {
+      rc.SaveDynamicVector("x_", *x2_);
+    }
+    if (rc.ShouldSave("v")) {
+      rc.SaveDynamicVector("v_", *x2_dot_);
+    }
+    rc.NextTimeStep(dt_);
   }
 };
 
