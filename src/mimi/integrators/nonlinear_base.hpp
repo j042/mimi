@@ -174,7 +174,7 @@ public:
         Name());
   }
 
-  virtual void Temperature(mfem::Vector& x, mfem::Vector& integrated) {
+  virtual void Temperature(mfem::Vector& integrated) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("Temperature not implemented for", Name());
   }

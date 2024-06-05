@@ -140,7 +140,7 @@ ni = n.boundary_integrator(0)
 for i in range(2000):
     if i < 820:
         move()
-    le.fixed_point_alm_solve2(15, 3, 10, 0, 1e-8, 1e-5, 1e-5)
+    le.fixed_point_alm_solve2(15, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
     adv()
     show()
 

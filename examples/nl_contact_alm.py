@@ -135,7 +135,7 @@ ni = n.boundary_integrator(0)
 for i in range(200):
     move()
     le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
-    le.step_time2()
+    le.advance_time2()
     tic.toc(f"{i}-step")
 #    show()
 

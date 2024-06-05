@@ -58,7 +58,7 @@ bc.initial.body_force(1, -7)
 nl.boundary_condition = bc
 
 nl.setup(4)
-nl.configure_newton("nonlinear_visco_solid", 1e-7, 1e-9, 20, False, False)
+nl.configure_newton("nonlinear_visco_solid", 1e-7, 1e-9, 20, False)
 
 rhs = nl.linear_form_view2("rhs")
 print(rhs)

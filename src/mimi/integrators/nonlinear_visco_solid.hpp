@@ -11,9 +11,6 @@ namespace mimi::integrators {
 /// given current x coordinate (NOT displacement)
 /// Computes F and passes it to material
 class NonlinearViscoSolid : public NonlinearSolid {
-  constexpr static const int kMaxTrueDof = 100;
-  constexpr static const int kDimDim = 9;
-
 public:
   using Base_ = NonlinearSolid;
   template<typename T>
@@ -40,7 +37,7 @@ public:
 
       element_v_.SetSize(n_dof * dim);
       element_v_mat_.UseExternalData(element_v_.GetData(), n_dof, dim);
-      F_dot_.SetSize(n_dof, dim);
+      F_dot_.SetSize(dim, dim);
     }
 
     void CurrentElementSolutionCopy(const mfem::Vector& all_x,
@@ -357,7 +354,8 @@ public:
 
               double& with_respect_to = *solution_data++;
               const double orig_wrt = with_respect_to;
-              const double diff_step = std::abs(orig_wrt) * 1.0e-8;
+              const double diff_step =
+                  (orig_wrt != 0.0) ? std::abs(orig_wrt) * 1.0e-8 : 1.0e-8;
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;

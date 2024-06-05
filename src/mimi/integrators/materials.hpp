@@ -1619,7 +1619,6 @@ public:
 
       // no accumulation
     }
-
     // returning s + p * I
     mfem::Add(s, I_, p, sigma);
   }
