@@ -26,8 +26,8 @@ protected:
   const double* mass_A_ = nullptr;
   int mass_n_nonzeros_ = -1;
 
-  mutable mfem::Vector temp_x;
-  mutable mfem::Vector temp_v;
+  mutable mfem::Vector temp_x_;
+  mutable mfem::Vector temp_v_;
 
 public:
   using Base_::Base_;
@@ -96,8 +96,10 @@ public:
     }
 
     if (contact_) {
-      contact_->AddMult(x, z);
+      contact_->AddMult(x, z); // we have flipped the sign at integrator
     }
+
+    z.Neg(); // flips sign inplace
 
     // substract rhs linear forms
     if (rhs_) {
@@ -108,8 +110,6 @@ public:
     if (rhs_vector_) {
       z += *rhs_vector_;
     }
-
-    z.Neg(); // flips sign inplace
 
     mass_inv_.Mult(z, d2x_dt2);
   }
@@ -133,33 +133,32 @@ public:
     mfem::Vector zero;
     MimiBase_::newton_solver_->Mult(zero, d2x_dt2);
 
-    if (!newton_solver_->GetConverged()) {
-      mimi::utils::PrintWarning(
-          "operators::NonlinearSolid - newton solver did not converge");
-    }
+    // if (!newton_solver_->GetConverged()) {
+    //   mimi::utils::PrintWarning(
+    //       "operators::NonlinearViscoSolid - newton solver did not converge");
+    // }
   }
 
   /// computes residual y = E(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
   /// this is used by newton solver
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
+    temp_x_.SetSize(x_->Size());
+    add(*x_, fac0_, d2x_dt2, temp_x_);
 
-    temp_x.SetSize(x_->Size());
-    add(*x_, fac0_, d2x_dt2, temp_x);
-
-    temp_v.SetSize(v_->Size());
-    add(*v_, fac1_, d2x_dt2, temp_v);
+    temp_v_.SetSize(v_->Size());
+    add(*v_, fac1_, d2x_dt2, temp_v_);
 
     mass_->Mult(d2x_dt2, y);
 
-    nonlinear_visco_stiffness_->AddMult(temp_x, temp_v, y);
+    nonlinear_visco_stiffness_->AddMult(temp_x_, temp_v_, y);
 
     if (viscosity_) {
-      viscosity_->AddMult(temp_v, y);
+      viscosity_->AddMult(temp_v_, y);
     }
 
     if (contact_) {
-      contact_->AddMult(temp_x, y);
+      contact_->AddMult(temp_x_, y);
     }
 
     // substract rhs linear forms
@@ -178,12 +177,12 @@ public:
   virtual mfem::Operator& GetGradient(const mfem::Vector& d2x_dt2) const {
     MIMI_FUNC()
 
-    temp_x.SetSize(d2x_dt2.Size());
-    add(*x_, fac0_, d2x_dt2, temp_x);
+    temp_x_.SetSize(d2x_dt2.Size());
+    add(*x_, fac0_, d2x_dt2, temp_x_);
 
     // if we just assemble grad during residual, we can remove this
-    temp_v.SetSize(v_->Size());
-    add(*v_, fac1_, d2x_dt2, temp_v);
+    temp_v_.SetSize(v_->Size());
+    add(*v_, fac1_, d2x_dt2, temp_v_);
 
     // NOTE, if all the values are sorted, we can do nthread local to global
     // update
@@ -196,7 +195,7 @@ public:
     jacobian_->Add(
         fac0_,
         *dynamic_cast<mfem::SparseMatrix*>(
-            &nonlinear_visco_stiffness_->GetGradient(temp_x, temp_v)));
+            &nonlinear_visco_stiffness_->GetGradient(temp_x_, temp_v_)));
 
     // 3. viscosity
     if (viscosity_) {
@@ -207,7 +206,7 @@ public:
     if (contact_) {
       jacobian_->Add(
           fac0_,
-          *dynamic_cast<mfem::SparseMatrix*>(&contact_->GetGradient(temp_x)));
+          *dynamic_cast<mfem::SparseMatrix*>(&contact_->GetGradient(temp_x_)));
     }
 
     return *jacobian_;
@@ -217,17 +216,36 @@ public:
                                           const int nthread,
                                           mfem::Vector& y) const {
 
-    temp_x.SetSize(d2x_dt2.Size());
-    add(*x_, fac0_, d2x_dt2, temp_x);
-    temp_v.SetSize(v_->Size());
-    add(*v_, fac1_, d2x_dt2, temp_v);
+    MIMI_FUNC()
+
+    temp_x_.SetSize(d2x_dt2.Size());
+    add(*x_, fac0_, d2x_dt2, temp_x_);
+    temp_v_.SetSize(v_->Size());
+    add(*v_, fac1_, d2x_dt2, temp_v_);
 
     // do usual residual operation
     mass_->Mult(d2x_dt2, y); // this initializes y to zero
+
+    // now nonlin part
+    // 1. initalize grad with mass
+    std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
+    nonlinear_visco_stiffness_
+        ->AddMultGrad(temp_x_, temp_v_, nthread, fac0_, y, *jacobian_);
+
     if (viscosity_) {
-      add(*v_, fac1_, d2x_dt2, temp_v);
-      viscosity_->AddMult(temp_v, y);
+      viscosity_->AddMult(temp_v_, y);
     }
+
+    // contact -> both grad and residual
+    if (contact_) {
+      contact_->AddMultGrad(temp_x_, nthread, fac0_, y, *jacobian_);
+    }
+
+    // 3. viscosity
+    if (viscosity_) {
+      jacobian_->Add(fac1_, viscosity_->SpMat());
+    }
+
     // substract rhs linear forms
     if (rhs_) {
       y.Add(-1.0, *rhs_);
@@ -235,22 +253,6 @@ public:
     // this is usually just for fsi
     if (rhs_vector_) {
       y.Add(-1.0, *rhs_vector_);
-    }
-
-    // now nonlin part
-    // 1. initalize grad with mass
-    std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
-    nonlinear_visco_stiffness_
-        ->AddMultGrad(temp_x, temp_v, nthread, fac0_, y, *jacobian_);
-
-    // contact -> both grad and residual
-    if (contact_) {
-      contact_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
-    }
-
-    // 3. viscosity
-    if (viscosity_) {
-      jacobian_->Add(fac1_, viscosity_->SpMat());
     }
 
     return jacobian_;

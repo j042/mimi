@@ -12,7 +12,7 @@ nl = mimi.PyNonlinearViscoSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
-nl.subdivide(4)
+nl.subdivide(3)
 
 # create material
 mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()

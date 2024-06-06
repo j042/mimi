@@ -78,6 +78,8 @@ public:
                            const double grad_factor,
                            mfem::Vector& residual,
                            mfem::SparseMatrix& grad) const {
+    MIMI_FUNC()
+
     for (auto& domain_integ : domain_nfvi_) {
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;

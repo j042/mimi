@@ -115,23 +115,22 @@ public:
     }
 
     if (contact_) {
-      contact_->AddMult(x, z);
+      contact_->AddMult(x, z); // we have flipped the sign at integrator
     }
 
     z.Neg(); // flips sign inplace
 
-    mass_inv_.Mult(z, d2x_dt2);
-
-    // TODO - Flo, I think I am missing rhs_ here?
     // substract rhs linear forms
     if (rhs_) {
-      z.Add(-1.0, *rhs_);
+      z += *rhs_;
     }
 
     // this is usually just for fsi
     if (rhs_vector_) {
-      z.Add(-1.0, *rhs_vector_);
+      z += *rhs_vector_;
     }
+
+    mass_inv_.Mult(z, d2x_dt2);
   }
 
   /// @brief used by 2nd order implicit time stepper (ode solver)
@@ -153,10 +152,10 @@ public:
     mfem::Vector zero;
     MimiBase_::newton_solver_->Mult(zero, d2x_dt2);
 
-    if (!newton_solver_->GetConverged()) {
-      mimi::utils::PrintWarning(
-          "operators::NonlinearSolid - newton solver did not converge");
-    }
+    // if (!newton_solver_->GetConverged()) {
+    //   mimi::utils::PrintWarning(
+    //       "operators::NonlinearSolid - newton solver did not converge");
+    // }
   }
 
   /// computes residual y = E(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
@@ -171,42 +170,6 @@ public:
     mass_->Mult(d2x_dt2, y);
 
     nonlinear_stiffness_->AddMult(temp_x, y);
-
-    if (viscosity_) {
-      mfem::Vector temp_v(v_->Size());
-      add(*v_, fac1_, d2x_dt2, temp_v);
-      viscosity_->AddMult(temp_v, y);
-    }
-
-    if (contact_) {
-      contact_->AddMult(temp_x, y);
-    }
-
-    // substract rhs linear forms
-    if (rhs_) {
-      y.Add(-1.0, *rhs_);
-    }
-
-    // this is usually just for fsi
-    if (rhs_vector_) {
-      y.Add(-1.0, *rhs_vector_);
-    }
-  }
-
-  /// computes residual y = E(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
-  /// this is used by newton solver
-  virtual void Residual(const mfem::Vector& d2x_dt2,
-                        const int nthreads,
-                        mfem::Vector& y) const {
-    MIMI_FUNC()
-
-    mimi::utils::Data<double> mem(x_->Size());
-    mfem::Vector temp_x(mem.data(), x_->Size());
-    add(*x_, fac0_, d2x_dt2, temp_x);
-
-    mass_->Mult(d2x_dt2, y);
-
-    nonlinear_stiffness_->AddResidual(temp_x, nthreads, y);
 
     if (viscosity_) {
       mfem::Vector temp_v(v_->Size());
@@ -291,14 +254,6 @@ public:
       viscosity_->AddMult(temp_v, y);
     }
 
-    if (rhs_) {
-      y.Add(-1.0, *rhs_);
-    }
-    // this is usually just for fsi
-    if (rhs_vector_) {
-      y.Add(-1.0, *rhs_vector_);
-    }
-
     // now nonlin part
     // 1. initalize grad with mass
     std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
@@ -312,6 +267,14 @@ public:
     // 3. viscosity
     if (viscosity_) {
       jacobian_->Add(fac1_, viscosity_->SpMat());
+    }
+
+    if (rhs_) {
+      y.Add(-1.0, *rhs_);
+    }
+    // this is usually just for fsi
+    if (rhs_vector_) {
+      y.Add(-1.0, *rhs_vector_);
     }
 
     return jacobian_;

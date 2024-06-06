@@ -268,8 +268,7 @@ public:
 
               double& with_respect_to = *solution_data++;
               const double orig_wrt = with_respect_to;
-              const double diff_step =
-                  (orig_wrt != 0.0) ? std::abs(orig_wrt) * 1.0e-8 : 1.0e-8;
+              const double diff_step = std::abs(orig_wrt) * 1.0e-8;
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;
@@ -354,8 +353,7 @@ public:
 
               double& with_respect_to = *solution_data++;
               const double orig_wrt = with_respect_to;
-              const double diff_step =
-                  (orig_wrt != 0.0) ? std::abs(orig_wrt) * 1.0e-8 : 1.0e-8;
+              const double diff_step = std::abs(orig_wrt) * 1.0e-8;
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;
