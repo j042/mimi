@@ -513,7 +513,7 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
     PlasticStress<true>(state, tmp, tmp.stress_ /* unused */);
   }
@@ -683,7 +683,7 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
 
     PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder*/);
@@ -993,8 +993,9 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
+
     PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
   }
 };
@@ -1166,7 +1167,7 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
 
     PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
