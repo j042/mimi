@@ -6,9 +6,9 @@ PENALTY_FACTOR = 0.5e12
 N_THREADS = 4
 DT = 0.1e-4
 
-PENALTY_FACTOR = 0.5e11
-N_THREADS = 1
-DT = 0.5e-4
+PENALTY_FACTOR = 0.1e8
+N_THREADS = 4
+DT = 1e-4
 
 INTERACTIVE_SHOW = False
 
@@ -29,13 +29,16 @@ def show(i):
     global plt
     spline.cps = x[to_s]
     plt = splinepy.show(
-        [str(i), tool, spline], vedoplot=plt, interactive=INTERACTIVE_SHOW
+        [str(i), tool, spline],
+        vedoplot=plt,
+        interactive=INTERACTIVE_SHOW,
+        close=False,
     )
 
 
-# tool = splinepy.Bezier([2], [[-5e-4, 4e-3], [2e-3, 3e-3] , [4.5e-3, 4e-3]])
-# tool.cps += [0, 0.0005]
-tool = splinepy.Bezier([1], [[-2e-3, 4e-3], [6e-3, 4e-3]])
+tool = splinepy.Bezier([2], [[-5e-4, 4e-3], [2e-3, 3e-3], [4.5e-3, 4e-3]])
+tool.cps += [0, 0.0005]
+# tool = splinepy.Bezier([1], [[-2e-3, 4e-3], [6e-3, 4e-3]])
 # tool = splinepy.Bezier([1], [[-1e-2, 4.1e-3], [14e-3, 4.1e-3]])
 
 nl = mimi.PyNonlinearViscoSolid()
@@ -74,7 +77,7 @@ scene.plant_kd_tree(1001, 4)
 scene.coefficient = PENALTY_FACTOR
 
 bc = mimi.BoundaryConditions()
-bc.initial.dirichlet(0, 1)  # .dirichlet(0, 0)
+bc.initial.dirichlet(0, 1).dirichlet(0, 0)
 bc.current.contact(1, scene)
 
 nl.boundary_condition = bc
@@ -92,7 +95,7 @@ show(-1)
 for i in range(5000):
     move(tool)
     # nl.step_time2()
-    nl.fixed_point_alm_solve2(10, 2, 10, 0, 1e-14, 1e-8, 1e-5, False)
+    nl.fixed_point_alm_solve2(20, 2, 15, 0, 1e-14, 1e-8, 1e-5, False)
     nl.advance_time2()
-    if i % 10 == 0:
+    if i % 5 == 0:
         show(i)

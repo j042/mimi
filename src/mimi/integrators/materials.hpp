@@ -1606,21 +1606,20 @@ public:
           (q
            - hardening_->Evaluate(eqps_old, eqps_rate, trial_T).GetValue()
                  / (3.0 * G_));
-      const double delta_eqps = mimi::solvers::ScalarSolve(residual,
-                                                           0.0,
-                                                           lower_bound,
-                                                           upper_bound,
-                                                           opts);
+      const double delta_eqps =
+          mimi::solvers::ScalarSolve(residual,
+                                     //  0.5 * (lower_bound + upper_bound),
+                                     0.0,
+                                     lower_bound,
+                                     upper_bound,
+                                     opts);
       // compute sqrt(3/2) * s / norm(s)
       // this is sqrt(3/2 s : s)
       // this term is use for both s and plastic strain
       // this is equivalent to
       // 3/2 / q * s = 3/2 * s * sqrt(2/3) / norm(s)
       N_p.Set(1.5 / q, s);
-
       s.Add(-2.0 * G_ * delta_eqps, N_p);
-
-      // no accumulation
     }
     // returning s + p * I
     mfem::Add(s, I_, p, sigma);
@@ -1697,12 +1696,30 @@ public:
       // this is equivalent to
       // 3/2 / q * s = 3/2 * s * sqrt(2/3) / norm(s)
       N_p.Set(1.5 / q, s);
-
       s.Add(-2.0 * G_ * delta_eqps, N_p);
 
       // accumulate
       accumulated_plastic_strain += delta_eqps;
-      plastic_strain.Add(delta_eqps, N_p);
+      mfem::DenseMatrix increment(dim_);
+      increment.Set(delta_eqps, N_p);
+      increment.Symmetrize();
+      // eigen decomp
+      mfem::Vector e_val(dim_);
+      mfem::DenseMatrix e_vec(dim_, dim_);
+      increment.CalcEigenvalues(e_val.GetData(), e_vec.GetData());
+      // apply log
+      for (int i{}; i < dim_; ++i) {
+        e_val[i] = std::exp(e_val[i]);
+      }
+      mfem::DenseMatrix& exp_symm = increment; // reuse Ce
+      mfem::MultADAt(e_vec, e_val, exp_symm);
+      mfem::DenseMatrix old_ps(plastic_strain);
+      mfem::Mult(exp_symm, old_ps, plastic_strain);
+
+      // plastic_strain.Add(delta_eqps, N_p);
+
+      // for logarithmic,
+
       // clip at melting temp + 1, just to make sure that in next
       // simulation, this will trigger contribution=0.0
       temperature = std::min(trial_T, melting_temperature_ + 1.0);

@@ -3,11 +3,17 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+#include "mimi/integrators/material_utils.hpp"
 #include "mimi/integrators/materials.hpp"
 
 namespace mimi::py {
 
 namespace py = pybind11;
+
+template<typename T>
+T* Ptr(const py::array_t<T>& arr) {
+  return static_cast<T*>(arr.request().ptr);
+}
 
 void init_py_material(py::module_& m) {
   /// material laws
@@ -178,6 +184,18 @@ void init_py_material(py::module_& m) {
     mfem::MultADAt(e_vecmat, e_valvec, adatmat);
     return py::make_tuple(e_val, e_vec, adat);
   });
+
+  m.def("log_strain",
+        [](const py::array_t<double>& F, const py::array_t<double>& state) {
+          py::array_t<double> out(F.size());
+          const int d0{(int) F.shape(0)}, d1{(int) F.shape(1)};
+          mfem::DenseMatrix F_mat, state_mat, out_mat;
+          F_mat.UseExternalData(Ptr(F), d0, d1);
+          state_mat.UseExternalData(Ptr(state), d0, d1);
+          out_mat.UseExternalData(Ptr(out), d0, d1);
+          mimi::integrators::LogarithmicStrain(F_mat, state_mat, out_mat);
+          return out;
+        });
 }
 
 } // namespace mimi::py

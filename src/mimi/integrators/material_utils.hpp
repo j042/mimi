@@ -114,8 +114,7 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& F,
 
   // CalcDeterminantPlusIMinusOne det(dudX + I) - 1 -> det(F) - 1
   // there's a way to preserve small J -> use the function
-  const double trace_Ee =
-      std::log1p(F.Det() - 1.); // is this really better than log for this?
+  const double trace_Ee = std::log1p(F.Det() - 1.);
   mfem::CalcInverse(plastic_strain, plastic_strain_inv);
   mfem::Mult(F, plastic_strain_inv, F_el);
   mfem::MultAtB(F_el, F_el, Ce);
@@ -128,6 +127,8 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& F,
   // apply log
   for (int i{}; i < dim; ++i) {
     e_val[i] = std::log(e_val[i]);
+    if (!std::isfinite(e_val[i]))
+      mimi::utils::PrintAndThrowError("eigen val not finite");
   }
   mfem::DenseMatrix& Ee = Ce; // reuse Ce
   mfem::MultADAt(e_vec, e_val, Ee);
@@ -138,6 +139,10 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& F,
   const double fac = trace_Ee / dim;
   for (int i{}; i < dim; ++i) {
     e_data[(dim + 1) * i] += fac;
+  }
+
+  if (!std::isfinite(trace_Ee)) {
+    mimi::utils::PrintAndThrowError("tractee not finite", F.Det());
   }
 }
 
