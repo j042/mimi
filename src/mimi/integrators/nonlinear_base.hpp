@@ -6,6 +6,7 @@
 
 #include <splinepy/py/py_spline.hpp>
 
+#include "mimi/utils/containers.hpp"
 #include "mimi/utils/precomputed.hpp"
 #include "mimi/utils/print.hpp"
 #include "mimi/utils/runtime_communication.hpp"
@@ -228,9 +229,9 @@ struct TemporaryData {
   // used in materials - materials will visit and initiate those in
   // PrepareTemporaryData
   mfem::DenseMatrix I_;
-  mfem::DenseMatrix alternative_stress_; // for conversion
-  Vector_<mfem::Vector> aux_vec_;        // for computation
-  Vector_<mfem::DenseMatrix> aux_mat_;   // for computation
+  mfem::DenseMatrix alternative_stress_;           // for conversion
+  mimi::utils::Vector<mfem::Vector> aux_vec_;      // for computation
+  mimi::utils::Vector<mfem::DenseMatrix> aux_mat_; // for computation
 
   /// this can be called once at Prepare()
   void SetDim(const int dim) {
@@ -249,7 +250,7 @@ struct TemporaryData {
   /// this should be called at the start of every element as NDof may change
   void Reset(const int n_dof) {
     MIMI_FUNC()
-    has_F_det_ = false;
+    has_det_F_ = false;
     has_F_inv_ = false;
 
     element_x_.SetSize(n_dof * dim_); // will be resized in getsubvector
@@ -277,15 +278,15 @@ struct TemporaryData {
     }
 
     det_F_ = F_.Det();
-    has_det_F = true;
+    has_det_F_ = true;
     return det_F_;
   }
 
   mfem::DenseMatrix& CurrentElementSolutionCopy(const mfem::Vector& current_all,
-                                                const ElementData& elem_data) {
+                                                const mfem::Array<int>& vdofs) {
     MIMI_FUNC()
 
-    current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
+    current_all.GetSubVector(vdofs, element_x_);
     return element_x_mat_;
   }
 };
@@ -307,7 +308,7 @@ struct TemporaryViscoData : TemporaryData {
 
   void CurrentElementSolutionCopy(const mfem::Vector& all_x,
                                   const mfem::Vector& all_v,
-                                  const ElementData& elem_data) {
+                                  const mfem::Array<int>& vdofs) {
     MIMI_FUNC()
 
     const double* all_x_data = all_x.GetData();
@@ -316,7 +317,7 @@ struct TemporaryViscoData : TemporaryData {
     double* elem_x_data = element_x_.GetData();
     double* elem_v_data = element_v_.GetData();
 
-    for (const int& vdof : *elem_data.v_dofs_) {
+    for (const int& vdof : vdofs) {
       *elem_x_data++ = all_x_data[vdof];
       *elem_v_data++ = all_v_data[vdof];
     }

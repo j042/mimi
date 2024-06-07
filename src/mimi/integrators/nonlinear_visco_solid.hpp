@@ -101,13 +101,13 @@ public:
         // in
         const ElementData& e = element_data_[i];
         // set shape for tmp data - first call will allocate
-        tmp.SetDof(e.n_dof_);
+        tmp.Reset(e.n_dof_);
         // variable name is misleading - this is just local residual
         // we use this container, as we already allocate this in tmp anyways
         tmp.local_residual_ = 0.0;
 
         // get current element solution as matrix
-        tmp.CurrentElementSolutionCopy(current_x, current_v, e);
+        tmp.CurrentElementSolutionCopy(current_x, current_v, *e.v_dofs_);
 
         // get element state view
         mfem::DenseMatrix& current_element_x = tmp.element_x_mat_;
@@ -149,10 +149,10 @@ public:
             // in
             ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.SetDof(e.n_dof_);
+            tmp.Reset(e.n_dof_);
 
             // get current element solution as matrix
-            tmp.CurrentElementSolutionCopy(current_x, current_v, e);
+            tmp.CurrentElementSolutionCopy(current_x, current_v, *e.v_dofs_);
 
             // get element state view
             mfem::DenseMatrix& current_element_x = tmp.element_x_mat_;
@@ -205,11 +205,11 @@ public:
             // in
             const ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.SetDof(e.n_dof_);
+            tmp.Reset(e.n_dof_);
             tmp.local_residual_ = 0.0;
 
             // get element state view
-            tmp.CurrentElementSolutionCopy(current_x, current_v, e);
+            tmp.CurrentElementSolutionCopy(current_x, current_v, *e.v_dofs_);
             mfem::DenseMatrix& current_element_x = tmp.element_x_mat_;
             mfem::DenseMatrix& current_element_v = tmp.element_v_mat_;
 
@@ -282,11 +282,11 @@ public:
             // in
             const ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.SetDof(e.n_dof_);
+            tmp.Reset(e.n_dof_);
             tmp.local_residual_ = 0.0;
 
             // get element state view
-            tmp.CurrentElementSolutionCopy(current_x, current_v, e);
+            tmp.CurrentElementSolutionCopy(current_x, current_v, *e.v_dofs_);
             mfem::DenseMatrix& current_element_x = tmp.element_x_mat_;
             mfem::DenseMatrix& current_element_v = tmp.element_v_mat_;
 

@@ -102,7 +102,7 @@ public:
     temporary_data_.resize(n_threads_);
     for (auto& td : temporary_data_) {
       td.SetDim(dim_);
-      material_->AllocateAuxMatrices(td);
+      material_->AllocateAux(td);
     }
   }
 
@@ -136,7 +136,7 @@ public:
                                             // visco_solid
         -1);
 
-    // setup material
+    // setup material 
     material_->Setup(dim_);
     // set flag for this integrator
     if (material_->CreateState()) {
@@ -265,12 +265,12 @@ public:
         // in
         const ElementData& e = element_data_[i];
         // set shape for tmp data - first call will allocate
-        tmp.SetDof(e.n_dof_);
+        tmp.Reset(e.n_dof_);
         tmp.local_residual_ = 0.0;
 
         // get current element solution as matrix
         mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_x, e);
+            tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
 
         // assemble residual
         QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);
@@ -296,11 +296,11 @@ public:
             // in
             ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.SetDof(e.n_dof_);
+            tmp.Reset(e.n_dof_);
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, e);
+                tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
 
             // accumulate
             AccumulateStatesAtQuads(current_element_x, e.quad_data_, tmp);
@@ -324,11 +324,11 @@ public:
             tmp.local_residual_ = 0.0;
 
             // set shape for tmp data - first call will allocate
-            tmp.SetDof(e.n_dof_);
+            tmp.Reset(e.n_dof_);
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, e);
+                tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
 
             // assemble residual
             QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);
@@ -392,12 +392,12 @@ public:
             // in
             const ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.SetDof(e.n_dof_);
+            tmp.Reset(e.n_dof_);
             tmp.local_residual_ = 0.0;
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, e);
+                tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
 
             // assemble residual
             QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);

@@ -26,10 +26,10 @@
 namespace mimi::integrators {
 
 template<typename T, typename IndexType>
-AddDiagonal(T* data, const T fac, const IndexType dim) {
+void AddDiagonal(T* data, const T fac, const IndexType dim) {
   MIMI_FUNC()
 
-  for (int i{}; i < dim; ++i) {
+  for (IndexType i{}; i < dim; ++i) {
     data[(dim + 1) * i] += fac;
   }
 }
@@ -112,21 +112,17 @@ inline void CalcDeterminantPlusIMinusOne(const mfem::DenseMatrix& A,
 /// @param plastic_strain
 /// @param elastic_strain
 
-template<typename TmpData>
+template<int mat0 = 3, int mat1 = 4, int vec0 = 0,typename TmpData>
 inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
                               TmpData& tmp,
                               mfem::DenseMatrix& elastic_strain) {
   MIMI_FUNC()
 
-  constexpr const int k_work1{3}; // We don't use 3 for L
-  constexpr const int k_work2{4};
-  constexpr const int k_eig_vec{0};
-
   const int dim = tmp.dim_;
 
   // name of this work matrix may change throughout this function
-  mfem::DenseMatrix& plastic_strain_inv = tmp.aux_mat_[k_work];
-  mfem::DenseMatrix& F_el = tmp.aux_mat_[F_el];
+  mfem::DenseMatrix& plastic_strain_inv = tmp.aux_mat_[mat0];
+  mfem::DenseMatrix& F_el = tmp.aux_mat_[mat1];
 
   // there's a way to preserve small J -> use/implement
   // CalcDeterminantPlusIMinusOne
@@ -144,7 +140,7 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
   mfem::MultAtB(F_el, F_el, Ce);
 
   // do optimism.TensorMath.log_sqrt_symm
-  mfem::Vector& eigen_values = tmp.aux_vec_[k_eig_vec];
+  mfem::Vector& eigen_values = tmp.aux_vec_[vec0];
   mfem::DenseMatrix& eigen_vectors = F_el;
   Ce.Symmetrize();
   Ce.CalcEigenvalues(eigen_values.GetData(), eigen_vectors.GetData());
