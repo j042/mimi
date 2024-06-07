@@ -63,8 +63,6 @@ public:
   double K_{-1.0};
   double G_{-1.0};
 
-  virtual void Prepare(const int dim, const int n_threads_) { MIMI_FUNC() }
-
   virtual std::string Name() const { return "MaterialBase"; }
 
   /// defining material properties #1
@@ -168,7 +166,7 @@ public:
     auto& i_conv = stress_conversions_[i_thread];
     mfem::DenseMatrix& P = i_conv[k_P];
 
-    EvaluatePK1(F, F_dot, i_thread, state, sigma);
+    EvaluatePK1(F, F_dot, i_thread, state, P);
 
     // 1 / det(F) * P * F^T
     // they don't have mfem::Mult_a_ABt();
