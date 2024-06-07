@@ -201,4 +201,126 @@ public:
   }
 };
 
+/// Currently, we don't split hpp and cpp, so we move nested structure to a
+/// mutual place, here.
+/// temporary containers required in element assembly. one for each thread
+struct TemporaryData {
+  int dim_;
+
+  // state variable
+  double det_F_{};
+  bool has_det_F_{false};
+  bool has_F_inv_{false};
+
+  // general assembly items
+  mfem::Vector element_x_;
+  mfem::DenseMatrix element_x_mat_;
+  mfem::DenseMatrix local_residual_;
+  mfem::DenseMatrix local_grad_;
+  mfem::DenseMatrix forward_residual_;
+
+  // used for materials
+  mfem::DenseMatrix stress_;
+  mfem::DenseMatrix F_;
+  mfem::DenseMatrix F_inv_;
+  mfem::DenseMatrix F_dot_; // for visco but put it here for easier visibility
+
+  // used in materials - materials will visit and initiate those in
+  // PrepareTemporaryData
+  mfem::DenseMatrix I_;
+  mfem::DenseMatrix alternative_stress_; // for conversion
+  Vector_<mfem::Vector> aux_vec_;        // for computation
+  Vector_<mfem::DenseMatrix> aux_mat_;   // for computation
+
+  /// this can be called once at Prepare()
+  void SetDim(const int dim) {
+    MIMI_FUNC()
+    dim_ = dim;
+
+    stress_.SetSize(dim, dim);
+    F_.SetSize(dim, dim);
+    F_inv_.SetSize(dim, dim);
+    F_dot_.SetSize(dim, dim);
+
+    I_.Diag(1., dim);
+    alternative_stress_.SetSize(dim, dim);
+  }
+
+  /// this should be called at the start of every element as NDof may change
+  void Reset(const int n_dof) {
+    MIMI_FUNC()
+    has_F_det_ = false;
+    has_F_inv_ = false;
+
+    element_x_.SetSize(n_dof * dim_); // will be resized in getsubvector
+    element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
+    forward_residual_.SetSize(n_dof, dim_);
+    local_residual_.SetSize(n_dof, dim_);
+    local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
+  }
+
+  mfem::DenseMatrix& FInv() {
+    MIMI_FUNC()
+    if (has_F_inv_) {
+      return F_inv_;
+    }
+    mfem::CalcInverse(F_, F_inv_);
+
+    has_F_inv_ = true;
+    return F_inv_;
+  }
+
+  double DetF() {
+    MIMI_FUNC()
+    if (has_det_F_) {
+      return det_F_;
+    }
+
+    det_F_ = F_.Det();
+    has_det_F = true;
+    return det_F_;
+  }
+
+  mfem::DenseMatrix& CurrentElementSolutionCopy(const mfem::Vector& current_all,
+                                                const ElementData& elem_data) {
+    MIMI_FUNC()
+
+    current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
+    return element_x_mat_;
+  }
+};
+
+struct TemporaryViscoData : TemporaryData {
+  using BaseTD_ = TemporaryData;
+
+  mfem::Vector element_v_;          // v
+  mfem::DenseMatrix element_v_mat_; // v as matrix
+
+  void Reset(const int n_dof) {
+    MIMI_FUNC()
+
+    BaseTD_::Reset(n_dof);
+
+    element_v_.SetSize(n_dof * dim_);
+    element_v_mat_.UseExternalData(element_v_.GetData(), n_dof, dim_);
+  }
+
+  void CurrentElementSolutionCopy(const mfem::Vector& all_x,
+                                  const mfem::Vector& all_v,
+                                  const ElementData& elem_data) {
+    MIMI_FUNC()
+
+    const double* all_x_data = all_x.GetData();
+    const double* all_v_data = all_v.GetData();
+
+    double* elem_x_data = element_x_.GetData();
+    double* elem_v_data = element_v_.GetData();
+
+    for (const int& vdof : *elem_data.v_dofs_) {
+      *elem_x_data++ = all_x_data[vdof];
+      *elem_v_data++ = all_v_data[vdof];
+    }
+  }
+};
+
 } // namespace mimi::integrators

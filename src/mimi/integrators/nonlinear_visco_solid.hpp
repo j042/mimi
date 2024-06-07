@@ -16,54 +16,6 @@ public:
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
 
-  struct TemporaryViscoData : Base_::TemporaryData {
-    using BaseTD_ = Base_::TemporaryData;
-    using BaseTD_::dim_;
-    using BaseTD_::element_x_;     // x
-    using BaseTD_::element_x_mat_; // x as matrix
-    using BaseTD_::F_;
-    using BaseTD_::F_inv_;
-    using BaseTD_::forward_residual_;
-    using BaseTD_::stress_;
-
-    mfem::Vector element_v_;          // v
-    mfem::DenseMatrix element_v_mat_; // v as matrix
-    mfem::DenseMatrix F_dot_;
-
-    void SetDim(const int dim) {
-      MIMI_FUNC()
-
-      BaseTD_::SetDim(dim);
-      F_dot_.SetSize(dim, dim);
-    }
-
-    void SetDof(const int n_dof) {
-      MIMI_FUNC()
-
-      BaseTD_::SetDof(n_dof);
-
-      element_v_.SetSize(n_dof * dim_);
-      element_v_mat_.UseExternalData(element_v_.GetData(), n_dof, dim_);
-    }
-
-    void CurrentElementSolutionCopy(const mfem::Vector& all_x,
-                                    const mfem::Vector& all_v,
-                                    const ElementData& elem_data) {
-      MIMI_FUNC()
-
-      const double* all_x_data = all_x.GetData();
-      const double* all_v_data = all_v.GetData();
-
-      double* elem_x_data = element_x_.GetData();
-      double* elem_v_data = element_v_.GetData();
-
-      for (const int& vdof : *elem_data.v_dofs_) {
-        *elem_x_data++ = all_x_data[vdof];
-        *elem_v_data++ = all_v_data[vdof];
-      }
-    }
-  };
-
 private:
   mutable Vector_<TemporaryViscoData> temporary_data_;
 
@@ -71,7 +23,7 @@ public:
   /// inherit ctor
   using Base_::Base_;
 
-  virtual void PrepareTemporaryData() {
+  virtual void PrepareTemporaryDataAndMaterial() {
     MIMI_FUNC()
 
     temporary_data_.resize(n_threads_);

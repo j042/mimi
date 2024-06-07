@@ -62,53 +62,6 @@ public:
     }
   };
 
-  /// temporary containers required in element assembly
-  /// mfem performs some fancy checks for allocating memories.
-  /// So we create one for each thread
-  struct TemporaryData {
-    int dim_;
-
-    mfem::Vector element_x_;
-    mfem::DenseMatrix element_x_mat_;
-    mfem::DenseMatrix stress_;
-    mfem::DenseMatrix F_;
-    mfem::DenseMatrix F_inv_;
-    mfem::DenseMatrix local_residual_;
-    mfem::DenseMatrix local_grad_;
-    mfem::DenseMatrix forward_residual_;
-
-    // // used in materials
-    // mfem::DenseMatrix I_;
-    // mfem::DenseMatrix alternative_stress_;
-    // Vector_<mfem::DenseMatrix> aux_mat_;
-
-    void SetDim(const int dim) {
-      MIMI_FUNC()
-      dim_ = dim;
-      stress_.SetSize(dim, dim);
-      F_.SetSize(dim, dim);
-      F_inv_.SetSize(dim, dim);
-    }
-
-    void SetDof(const int n_dof) {
-      MIMI_FUNC()
-      element_x_.SetSize(n_dof * dim_); // will be resized in getsubvector
-      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
-      forward_residual_.SetSize(n_dof, dim_);
-      local_residual_.SetSize(n_dof, dim_);
-      local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
-    }
-
-    mfem::DenseMatrix&
-    CurrentElementSolutionCopy(const mfem::Vector& current_all,
-                               const ElementData& elem_data) {
-      MIMI_FUNC()
-
-      current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
-      return element_x_mat_;
-    }
-  };
-
 protected:
   /// number of threads for this system
   int n_threads_;
@@ -141,12 +94,15 @@ public:
     return element_data_;
   }
 
-  virtual void PrepareTemporaryData() {
+  virtual void PrepareTemporaryDataAndMaterial() {
     MIMI_FUNC()
+
+    assert(material_);
 
     temporary_data_.resize(n_threads_);
     for (auto& td : temporary_data_) {
       td.SetDim(dim_);
+      material_->AllocateAuxMatrices(td);
     }
   }
 
@@ -166,16 +122,6 @@ public:
     // get dim
     dim_ = precomputed_->meshes_[0]->Dimension();
 
-    // setup material
-    material_->Setup(dim_, n_threads_);
-    // set flag for this integrator
-    if (material_->CreateState()) {
-      // not a nullptr -> has states
-      has_states_ = true;
-    } else {
-      has_states_ = false;
-    }
-
     // extract element geometry type
     geometry_type_ = precomputed_->elements_[0]->GetGeomType();
 
@@ -189,6 +135,17 @@ public:
         "nonlinear_solid_quadrature_order", // this is also used in
                                             // visco_solid
         -1);
+
+    // setup material
+    material_->Setup(dim_);
+    // set flag for this integrator
+    if (material_->CreateState()) {
+      // not a nullptr -> has states
+      has_states_ = true;
+    } else {
+      has_states_ = false;
+    }
+
     auto precompute_at_elements_and_quads =
         [&](const int el_begin, const int el_end, const int i_thread) {
           // thread's obj
@@ -259,7 +216,7 @@ public:
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
                             n_elements_,
                             n_threads_);
-    PrepareTemporaryData();
+    PrepareTemporaryDataAndMaterial();
   }
 
   /// Performs quad loop with element data and temporary data

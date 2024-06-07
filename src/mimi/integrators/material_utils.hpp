@@ -102,13 +102,14 @@ inline void CalcDeterminantPlusIMinusOne(const mfem::DenseMatrix& A,
 /// @param F
 /// @param plastic_strain
 /// @param elastic_strain
-inline void LogarithmicStrain(const mfem::DenseMatrix& F,
-                              const mfem::DenseMatrix& plastic_strain,
+
+template<typename TmpData>
+inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
+                              TmpData& tmp,
                               mfem::DenseMatrix& elastic_strain) {
   MIMI_FUNC()
 
-  const int dim = F.Height();
-  const double* F_data = F.GetData();
+  const int dim = tmp.dim_;
 
   mfem::DenseMatrix plastic_strain_inv(dim, dim), F_el(dim, dim), Ce(dim, dim);
 
