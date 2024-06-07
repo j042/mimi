@@ -139,18 +139,30 @@ public:
     // }
   }
 
+  void PrepareTemporaryVectors(const mfem::Vector& d2x_dt2) const {
+    MIMI_FUNC()
+    const int v_size = d2x_dt2.Size();
+    temp_x_.SetSize(v_size);
+    temp_v_.SetSize(v_size);
+    double* tx_d = temp_x_.GetData();
+    double* tv_d = temp_v_.GetData();
+    const double* x_d = x_->GetData();
+    const double* v_d = v_->GetData();
+    const double* d2x_d = d2x_dt2.GetData();
+    for (int i{}; i < v_size; ++i) {
+      tx_d[i] = x_d[i] + fac0_ * d2x_dt2[i];
+      tv_d[i] = v_d[i] + fac1_ * d2x_dt2[i];
+    }
+  }
+
   /// computes residual y = E(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
   /// this is used by newton solver
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
-    temp_x_.SetSize(x_->Size());
-    add(*x_, fac0_, d2x_dt2, temp_x_);
 
-    temp_v_.SetSize(v_->Size());
-    add(*v_, fac1_, d2x_dt2, temp_v_);
+    PrepareTemporaryVectors(d2x_dt2);
 
     mass_->Mult(d2x_dt2, y);
-
     nonlinear_visco_stiffness_->AddMult(temp_x_, temp_v_, y);
 
     if (viscosity_) {
@@ -177,12 +189,7 @@ public:
   virtual mfem::Operator& GetGradient(const mfem::Vector& d2x_dt2) const {
     MIMI_FUNC()
 
-    temp_x_.SetSize(d2x_dt2.Size());
-    add(*x_, fac0_, d2x_dt2, temp_x_);
-
-    // if we just assemble grad during residual, we can remove this
-    temp_v_.SetSize(v_->Size());
-    add(*v_, fac1_, d2x_dt2, temp_v_);
+    PrepareTemporaryVectors(d2x_dt2);
 
     // NOTE, if all the values are sorted, we can do nthread local to global
     // update
@@ -218,10 +225,7 @@ public:
 
     MIMI_FUNC()
 
-    temp_x_.SetSize(d2x_dt2.Size());
-    add(*x_, fac0_, d2x_dt2, temp_x_);
-    temp_v_.SetSize(v_->Size());
-    add(*v_, fac1_, d2x_dt2, temp_v_);
+    PrepareTemporaryVectors(d2x_dt2);
 
     // do usual residual operation
     mass_->Mult(d2x_dt2, y); // this initializes y to zero
@@ -232,10 +236,6 @@ public:
     nonlinear_visco_stiffness_
         ->AddMultGrad(temp_x_, temp_v_, nthread, fac0_, y, *jacobian_);
 
-    if (viscosity_) {
-      viscosity_->AddMult(temp_v_, y);
-    }
-
     // contact -> both grad and residual
     if (contact_) {
       contact_->AddMultGrad(temp_x_, nthread, fac0_, y, *jacobian_);
@@ -244,6 +244,7 @@ public:
     // 3. viscosity
     if (viscosity_) {
       jacobian_->Add(fac1_, viscosity_->SpMat());
+      viscosity_->AddMult(temp_v_, y);
     }
 
     // substract rhs linear forms

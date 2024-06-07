@@ -16,8 +16,9 @@ public:
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
 
-  struct TemporaryData : Base_::TemporaryData {
+  struct TemporaryViscoData : Base_::TemporaryData {
     using BaseTD_ = Base_::TemporaryData;
+    using BaseTD_::dim_;
     using BaseTD_::element_x_;     // x
     using BaseTD_::element_x_mat_; // x as matrix
     using BaseTD_::F_;
@@ -29,14 +30,20 @@ public:
     mfem::DenseMatrix element_v_mat_; // v as matrix
     mfem::DenseMatrix F_dot_;
 
-    void SetShape(const int n_dof, const int dim) {
+    void SetDim(const int dim) {
       MIMI_FUNC()
 
-      BaseTD_::SetShape(n_dof, dim);
-
-      element_v_.SetSize(n_dof * dim);
-      element_v_mat_.UseExternalData(element_v_.GetData(), n_dof, dim);
+      BaseTD_::SetDim(dim);
       F_dot_.SetSize(dim, dim);
+    }
+
+    void SetDof(const int n_dof) {
+      MIMI_FUNC()
+
+      BaseTD_::SetDof(n_dof);
+
+      element_v_.SetSize(n_dof * dim_);
+      element_v_mat_.UseExternalData(element_v_.GetData(), n_dof, dim_);
     }
 
     void CurrentElementSolutionCopy(const mfem::Vector& all_x,
@@ -57,8 +64,21 @@ public:
     }
   };
 
+private:
+  mutable Vector_<TemporaryViscoData> temporary_data_;
+
+public:
   /// inherit ctor
   using Base_::Base_;
+
+  virtual void PrepareTemporaryData() {
+    MIMI_FUNC()
+
+    temporary_data_.resize(n_threads_);
+    for (auto& td : temporary_data_) {
+      td.SetDim(dim_);
+    }
+  }
 
   /// This one needs / stores
   /// - basis(shape) function derivative (at reference)
@@ -76,7 +96,7 @@ public:
                 const mfem::DenseMatrix& v,
                 const int i_thread,
                 const Vector_<QuadData>& q_data,
-                TemporaryData& tmp,
+                TemporaryViscoData& tmp,
                 mfem::DenseMatrix& residual_matrix) const {
     MIMI_FUNC()
     for (const QuadData& q : q_data) {
@@ -102,7 +122,7 @@ public:
                                const mfem::DenseMatrix& v,
                                const int i_thread,
                                Vector_<QuadData>& q_data,
-                               TemporaryData& tmp) const {
+                               TemporaryViscoData& tmp) const {
     MIMI_FUNC()
 
     for (QuadData& q : q_data) {
@@ -128,12 +148,12 @@ public:
     auto assemble_element_residual_and_contribute = [&](const int begin,
                                                         const int end,
                                                         const int i_thread) {
-      TemporaryData tmp;
+      auto& tmp = temporary_data_[i_thread];
       for (int i{begin}; i < end; ++i) {
         // in
         const ElementData& e = element_data_[i];
         // set shape for tmp data - first call will allocate
-        tmp.SetShape(e.n_dof_, dim_);
+        tmp.SetDof(e.n_dof_);
         // variable name is misleading - this is just local residual
         // we use this container, as we already allocate this in tmp anyways
         tmp.forward_residual_ = 0.0;
@@ -176,12 +196,13 @@ public:
       return;
     auto accumulate_states =
         [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
+          auto& tmp = temporary_data_[i_thread];
+
           for (int i{begin}; i < end; ++i) {
             // in
             ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.SetShape(e.n_dof_, dim_);
+            tmp.SetDof(e.n_dof_);
 
             // get current element solution as matrix
             tmp.CurrentElementSolutionCopy(current_x, current_v, e);
@@ -233,7 +254,7 @@ public:
     // lambda for nthread assemble
     auto assemble_element_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
+          auto& tmp = temporary_data_[i_thread];
           mfem::DenseMatrix local_residual;
           mfem::DenseMatrix local_grad;
           for (int i{begin}; i < end; ++i) {
@@ -244,7 +265,7 @@ public:
             local_grad.SetSize(e.n_tdof_, e.n_tdof_);
 
             // set shape for tmp data - first call will allocate
-            tmp.SetShape(e.n_dof_, dim_);
+            tmp.SetDof(e.n_dof_);
 
             // get element state view
             tmp.CurrentElementSolutionCopy(current_x, current_v, e);
@@ -317,7 +338,7 @@ public:
     // lambda for nthread assemble
     auto assemble_element_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
+          auto& tmp = temporary_data_[i_thread];
           mfem::DenseMatrix local_residual;
           mfem::DenseMatrix local_grad;
           for (int i{begin}; i < end; ++i) {
@@ -329,7 +350,7 @@ public:
             local_residual = 0.0;
 
             // set shape for tmp data - first call will allocate
-            tmp.SetShape(e.n_dof_, dim_);
+            tmp.SetDof(e.n_dof_);
 
             // get element state view
             tmp.CurrentElementSolutionCopy(current_x, current_v, e);

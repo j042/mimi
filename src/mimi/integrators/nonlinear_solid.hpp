@@ -66,6 +66,8 @@ public:
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
   struct TemporaryData {
+    int dim_;
+
     mfem::Vector element_x_;
     mfem::DenseMatrix element_x_mat_;
     mfem::DenseMatrix stress_;
@@ -73,14 +75,19 @@ public:
     mfem::DenseMatrix F_inv_;
     mfem::DenseMatrix forward_residual_;
 
-    void SetShape(const int n_dof, const int dim) {
+    void SetDim(const int dim) {
       MIMI_FUNC()
-      element_x_.SetSize(n_dof * dim); // will be resized in getsubvector
-      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim);
+      dim_ = dim;
       stress_.SetSize(dim, dim);
       F_.SetSize(dim, dim);
       F_inv_.SetSize(dim, dim);
-      forward_residual_.SetSize(n_dof, dim);
+    }
+
+    void SetDof(const int n_dof) {
+      MIMI_FUNC()
+      element_x_.SetSize(n_dof * dim_); // will be resized in getsubvector
+      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
+      forward_residual_.SetSize(n_dof, dim_);
     }
 
     mfem::DenseMatrix&
@@ -107,6 +114,9 @@ protected:
   Vector_<std::unique_ptr<mfem::NURBSMeshRules>> patch_rules_;
   int patch_quadrature_order_;
 
+private:
+  mutable Vector_<TemporaryData> temporary_data_;
+
 public:
   NonlinearSolid(
       const std::string& name,
@@ -120,6 +130,15 @@ public:
   virtual Vector_<ElementData>& GetElementData() { return element_data_; }
   virtual const Vector_<ElementData>& GetElementData() const {
     return element_data_;
+  }
+
+  virtual void PrepareTemporaryData() {
+    MIMI_FUNC()
+
+    temporary_data_.resize(n_threads_);
+    for (auto& td : temporary_data_) {
+      td.SetDim(dim_);
+    }
   }
 
   /// This one needs / stores
@@ -231,6 +250,7 @@ public:
     mimi::utils::NThreadExe(precompute_at_elements_and_quads,
                             n_elements_,
                             n_threads_);
+    PrepareTemporaryData();
   }
 
   /// Performs quad loop with element data and temporary data
@@ -276,12 +296,12 @@ public:
     auto assemble_element_residual_and_contribute = [&](const int begin,
                                                         const int end,
                                                         const int i_thread) {
-      TemporaryData tmp;
+      auto& tmp = temporary_data_[i_thread];
       for (int i{begin}; i < end; ++i) {
         // in
         const ElementData& e = element_data_[i];
         // set shape for tmp data - first call will allocate
-        tmp.SetShape(e.n_dof_, dim_);
+        tmp.SetDof(e.n_dof_);
         // variable name is misleading - this is just local residual
         // we use this container, as we already allocate this in tmp anyways
         tmp.forward_residual_ = 0.0;
@@ -314,12 +334,12 @@ public:
     auto accumulate_states = [&](const int begin,
                                  const int end,
                                  const int i_thread) {
-      TemporaryData tmp;
+      auto& tmp = temporary_data_[i_thread];
       for (int i{begin}; i < end; ++i) {
         // in
         ElementData& e = element_data_[i];
         // set shape for tmp data - first call will allocate
-        tmp.SetShape(e.n_dof_, dim_);
+        tmp.SetDof(e.n_dof_);
 
         // get current element solution as matrix
         mfem::DenseMatrix& current_element_x =
@@ -340,21 +360,20 @@ public:
     // lambda for nthread assemble
     auto assemble_element_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
+          auto& tmp = temporary_data_[i_thread];
           mfem::Vector local_residual;
           mfem::DenseMatrix res_view;
           mfem::DenseMatrix local_grad;
           for (int i{begin}; i < end; ++i) {
             // in
             const ElementData& e = element_data_[i];
-            // e.residual_view_ = 0.0;
             local_residual.SetSize(e.n_tdof_);
             local_residual = 0.0;
             res_view.UseExternalData(local_residual.GetData(), e.n_dof_, dim_);
             local_grad.SetSize(e.n_tdof_, e.n_tdof_);
 
             // set shape for tmp data - first call will allocate
-            tmp.SetShape(e.n_dof_, dim_);
+            tmp.SetDof(e.n_dof_);
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
@@ -418,7 +437,8 @@ public:
     // lambda for nthread assemble
     auto assemble_element_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
+          auto& tmp = temporary_data_[i_thread];
+
           mfem::DenseMatrix local_residual;
           mfem::DenseMatrix local_grad;
           for (int i{begin}; i < end; ++i) {
@@ -431,7 +451,7 @@ public:
             // local_grad = 0.0;
 
             // set shape for tmp data - first call will allocate
-            tmp.SetShape(e.n_dof_, dim_);
+            tmp.SetDof(e.n_dof_);
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
