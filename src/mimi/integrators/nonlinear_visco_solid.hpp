@@ -156,7 +156,7 @@ public:
         tmp.SetDof(e.n_dof_);
         // variable name is misleading - this is just local residual
         // we use this container, as we already allocate this in tmp anyways
-        tmp.forward_residual_ = 0.0;
+        tmp.local_residual_ = 0.0;
 
         // get current element solution as matrix
         tmp.CurrentElementSolutionCopy(current_x, current_v, e);
@@ -171,11 +171,11 @@ public:
                  i_thread,
                  e.quad_data_,
                  tmp,
-                 tmp.forward_residual_);
+                 tmp.local_residual_);
 
         // push right away - seems to work quite well!
         const std::lock_guard<std::mutex> lock(residual_mutex);
-        residual.AddElementVector(*e.v_dofs_, tmp.forward_residual_.GetData());
+        residual.AddElementVector(*e.v_dofs_, tmp.local_residual_.GetData());
       }
     };
     mimi::utils::NThreadExe(assemble_element_residual_and_contribute,
@@ -255,17 +255,12 @@ public:
     auto assemble_element_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
           auto& tmp = temporary_data_[i_thread];
-          mfem::DenseMatrix local_residual;
-          mfem::DenseMatrix local_grad;
           for (int i{begin}; i < end; ++i) {
             // in
             const ElementData& e = element_data_[i];
-            local_residual.SetSize(e.n_dof_, dim_);
-            local_residual = 0.0;
-            local_grad.SetSize(e.n_tdof_, e.n_tdof_);
-
             // set shape for tmp data - first call will allocate
             tmp.SetDof(e.n_dof_);
+            tmp.local_residual_ = 0.0;
 
             // get element state view
             tmp.CurrentElementSolutionCopy(current_x, current_v, e);
@@ -278,11 +273,11 @@ public:
                      i_thread,
                      e.quad_data_,
                      tmp,
-                     local_residual);
+                     tmp.local_residual_);
 
-            double* grad_data = local_grad.GetData();
+            double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
-            const double* residual_data = local_residual.GetData();
+            const double* residual_data = tmp.local_residual_.GetData();
             const double* fd_forward_data = tmp.forward_residual_.GetData();
             for (int j{}; j < e.n_tdof_; ++j) {
               tmp.forward_residual_ = 0.0;
@@ -311,7 +306,7 @@ public:
             std::lock_guard<std::mutex> lock(residual_mutex);
             const auto& vdofs = *e.v_dofs_;
             double* A = grad.GetData();
-            const double* local_A = local_grad.GetData();
+            const double* local_A = tmp.local_grad_.GetData();
             const auto& A_ids = *precomputed_->domain_A_ids_[i];
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++;
@@ -339,18 +334,12 @@ public:
     auto assemble_element_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
           auto& tmp = temporary_data_[i_thread];
-          mfem::DenseMatrix local_residual;
-          mfem::DenseMatrix local_grad;
           for (int i{begin}; i < end; ++i) {
             // in
             const ElementData& e = element_data_[i];
-
-            local_residual.SetSize(e.n_dof_, dim_);
-            local_grad.SetSize(e.n_tdof_, e.n_tdof_);
-            local_residual = 0.0;
-
             // set shape for tmp data - first call will allocate
             tmp.SetDof(e.n_dof_);
+            tmp.local_residual_ = 0.0;
 
             // get element state view
             tmp.CurrentElementSolutionCopy(current_x, current_v, e);
@@ -363,11 +352,11 @@ public:
                      i_thread,
                      e.quad_data_,
                      tmp,
-                     local_residual);
+                     tmp.local_residual_);
 
-            double* grad_data = local_grad.GetData();
+            double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
-            const double* residual_data = local_residual.GetData();
+            const double* residual_data = tmp.local_residual_.GetData();
             const double* fd_forward_data = tmp.forward_residual_.GetData();
             for (int j{}; j < e.n_tdof_; ++j) {
               tmp.forward_residual_ = 0.0;
@@ -394,9 +383,9 @@ public:
             // push right away
             std::lock_guard<std::mutex> lock(residual_mutex);
             const auto& vdofs = *e.v_dofs_;
-            residual.AddElementVector(vdofs, local_residual.GetData());
+            residual.AddElementVector(vdofs, tmp.local_residual_.GetData());
             double* A = grad.GetData();
-            const double* local_A = local_grad.GetData();
+            const double* local_A = tmp.local_grad_.GetData();
             const auto& A_ids = *precomputed_->domain_A_ids_[i];
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++ * grad_factor;
