@@ -221,7 +221,6 @@ public:
 
   /// Performs quad loop with element data and temporary data
   void QuadLoop(const mfem::DenseMatrix& x,
-                const int i_thread,
                 const Vector_<QuadData>& q_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) const {
@@ -231,7 +230,7 @@ public:
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
 
       // currently we will just use PK1
-      material_->EvaluatePK1(tmp.F_, i_thread, q.material_state_, tmp.stress_);
+      material_->EvaluatePK1(q.material_state_, tmp, tmp.stress_);
       mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
                           q.dN_dX_,
                           tmp.stress_,
@@ -241,7 +240,6 @@ public:
 
   /// Performs quad loop with element data and temporary data
   void AccumulateStatesAtQuads(const mfem::DenseMatrix& x,
-                               const int i_thread,
                                Vector_<QuadData>& q_data,
                                TemporaryData& tmp) const {
     MIMI_FUNC()
@@ -250,7 +248,7 @@ public:
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
 
       // currently we will just use PK1
-      material_->Accumulate(tmp.F_, i_thread, q.material_state_);
+      material_->Accumulate(q.material_state_, tmp, tmp.stress_);
     }
   }
 
@@ -275,11 +273,7 @@ public:
             tmp.CurrentElementSolutionCopy(current_x, e);
 
         // assemble residual
-        QuadLoop(current_element_x,
-                 i_thread,
-                 e.quad_data_,
-                 tmp,
-                 tmp.local_residual_);
+        QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);
 
         // push right away - seems to work quite well!
         const std::lock_guard<std::mutex> lock(residual_mutex);
@@ -295,24 +289,23 @@ public:
     MIMI_FUNC()
     if (!has_states_)
       return;
-    auto accumulate_states = [&](const int begin,
-                                 const int end,
-                                 const int i_thread) {
-      auto& tmp = temporary_data_[i_thread];
-      for (int i{begin}; i < end; ++i) {
-        // in
-        ElementData& e = element_data_[i];
-        // set shape for tmp data - first call will allocate
-        tmp.SetDof(e.n_dof_);
+    auto accumulate_states =
+        [&](const int begin, const int end, const int i_thread) {
+          auto& tmp = temporary_data_[i_thread];
+          for (int i{begin}; i < end; ++i) {
+            // in
+            ElementData& e = element_data_[i];
+            // set shape for tmp data - first call will allocate
+            tmp.SetDof(e.n_dof_);
 
-        // get current element solution as matrix
-        mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_x, e);
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, e);
 
-        // accumulate
-        AccumulateStatesAtQuads(current_element_x, i_thread, e.quad_data_, tmp);
-      }
-    };
+            // accumulate
+            AccumulateStatesAtQuads(current_element_x, e.quad_data_, tmp);
+          }
+        };
     mimi::utils::NThreadExe(accumulate_states, n_elements_, n_threads_);
   }
 
@@ -338,11 +331,7 @@ public:
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
             // assemble residual
-            QuadLoop(current_element_x,
-                     i_thread,
-                     e.quad_data_,
-                     tmp,
-                     tmp.local_residual_);
+            QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);
 
             double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
@@ -360,7 +349,6 @@ public:
 
               with_respect_to = orig_wrt + diff_step;
               QuadLoop(current_element_x,
-                       i_thread,
                        e.quad_data_,
                        tmp,
                        tmp.forward_residual_);
@@ -412,11 +400,7 @@ public:
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
             // assemble residual
-            QuadLoop(current_element_x,
-                     i_thread,
-                     e.quad_data_,
-                     tmp,
-                     tmp.local_residual_);
+            QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);
 
             double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
@@ -434,7 +418,6 @@ public:
 
               with_respect_to = orig_wrt + diff_step;
               QuadLoop(current_element_x,
-                       i_thread,
                        e.quad_data_,
                        tmp,
                        tmp.forward_residual_);
