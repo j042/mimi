@@ -132,7 +132,11 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     // get current residual and grad - also one used for next iteration
     // the last assembled grad is wasted
     if (nl_oper_) {
-      Base_::grad = nl_oper_->ResidualAndGrad(x, -1, Base_::r);
+      if (it == max_iter - 1) {
+        Base_::oper->Mult(x, Base_::r);
+      } else {
+        Base_::grad = nl_oper_->ResidualAndGrad(x, -1, Base_::r);
+      }
     } else {
       Base_::oper->Mult(x, Base_::r);
       Base_::grad = &Base_::oper->GetGradient(x);
