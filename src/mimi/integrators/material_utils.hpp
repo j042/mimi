@@ -109,7 +109,6 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& F,
 
   const int dim = F.Height();
   const double* F_data = F.GetData();
-  const double* p_data = plastic_strain.GetData();
 
   mfem::DenseMatrix plastic_strain_inv(dim, dim), F_el(dim, dim), Ce(dim, dim);
 

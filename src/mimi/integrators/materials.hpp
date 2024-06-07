@@ -1568,7 +1568,7 @@ public:
 
     // precompute aux values
     // eps, p, s, eta, q, equivalent plastic strain rate
-    //ElasticStrain(F, plastic_strain, eps);
+    // ElasticStrain(F, plastic_strain, eps);
     LogarithmicStrain(F, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
@@ -1648,7 +1648,7 @@ public:
 
     // precompute aux values
     // eps, p, s, eta, q, equivalent plastic strain rate
-    //ElasticStrain(F, plastic_strain, eps);
+    // ElasticStrain(F, plastic_strain, eps);
     LogarithmicStrain(F, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
