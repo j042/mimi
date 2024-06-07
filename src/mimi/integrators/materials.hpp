@@ -1424,6 +1424,10 @@ public:
       mat.SetSize(dim_, dim_);
       mat = 0.;
     }
+
+    // for logarithmic this is I
+    state->matrices_[State::k_plastic_strain] = I_;
+
     // one scalar, also zero
     state->scalars_.resize(state->k_state_scalars, 0.);
 
@@ -1564,7 +1568,8 @@ public:
 
     // precompute aux values
     // eps, p, s, eta, q, equivalent plastic strain rate
-    ElasticStrain(F, plastic_strain, eps);
+    //ElasticStrain(F, plastic_strain, eps);
+    LogarithmicStrain(F, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
     const double q = sqrt_3_2_ * Norm(s); // trial mises
@@ -1643,7 +1648,8 @@ public:
 
     // precompute aux values
     // eps, p, s, eta, q, equivalent plastic strain rate
-    ElasticStrain(F, plastic_strain, eps);
+    //ElasticStrain(F, plastic_strain, eps);
+    LogarithmicStrain(F, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
     const double q = sqrt_3_2_ * Norm(s); // trial mises

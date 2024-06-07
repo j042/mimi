@@ -1,5 +1,6 @@
 #include <memory>
 
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
 #include "mimi/integrators/materials.hpp"
@@ -152,6 +153,31 @@ void init_py_material(py::module_& m) {
       .def_readwrite("specific_heat", &J2NonlinAdiabaticVisco::specific_heat_)
       .def_readwrite("initial_temperature",
                      &J2NonlinAdiabaticVisco::initial_temperature_);
+
+  m.def("eigen_and_adat", [](py::array_t<double>& arr) {
+    mfem::DenseMatrix mat(static_cast<double*>(arr.request().ptr),
+                          arr.shape(0),
+                          arr.shape(1));
+    py::array_t<double> e_val(arr.shape(0));
+    py::array_t<double> e_vec(arr.size());
+    py::array_t<double> adat(arr.size());
+    mfem::DenseMatrix adatmat, e_vecmat;
+    mfem::Vector e_valvec;
+    e_valvec.SetDataAndSize(static_cast<double*>(e_val.request().ptr),
+                            e_val.size());
+    adatmat.UseExternalData(static_cast<double*>(adat.request().ptr),
+                            arr.shape(0),
+                            arr.shape(1));
+    e_vecmat.UseExternalData(static_cast<double*>(e_vec.request().ptr),
+                             arr.shape(0),
+                             arr.shape(1));
+
+    mat.CalcEigenvalues(static_cast<double*>(e_val.request().ptr),
+                        static_cast<double*>(e_vec.request().ptr));
+
+    mfem::MultADAt(e_vecmat, e_valvec, adatmat);
+    return py::make_tuple(e_val, e_vec, adat);
+  });
 }
 
 } // namespace mimi::py

@@ -77,6 +77,11 @@ public:
     mfem::DenseMatrix local_grad_;
     mfem::DenseMatrix forward_residual_;
 
+    // // used in materials
+    // mfem::DenseMatrix I_;
+    // mfem::DenseMatrix alternative_stress_;
+    // Vector_<mfem::DenseMatrix> aux_mat_;
+
     void SetDim(const int dim) {
       MIMI_FUNC()
       dim_ = dim;
@@ -376,7 +381,11 @@ public:
                 tmp.CurrentElementSolutionCopy(current_x, e);
 
             // assemble residual
-            QuadLoop(current_element_x, i_thread, e.quad_data_, tmp, tmp.local_residual_);
+            QuadLoop(current_element_x,
+                     i_thread,
+                     e.quad_data_,
+                     tmp,
+                     tmp.local_residual_);
 
             double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
