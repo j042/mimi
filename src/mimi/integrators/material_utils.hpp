@@ -108,11 +108,7 @@ inline void CalcDeterminantPlusIMinusOne(const mfem::DenseMatrix& A,
 
 /// @brief taken from optimism (github.com/sandialabs/optimism) to see if this
 /// behaves better
-/// @param F
-/// @param plastic_strain
-/// @param elastic_strain
-
-template<int mat0 = 3, int mat1 = 4, int vec0 = 0,typename TmpData>
+template<int mat0 = 3, int mat1 = 4, int vec0 = 0, typename TmpData>
 inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
                               TmpData& tmp,
                               mfem::DenseMatrix& elastic_strain) {

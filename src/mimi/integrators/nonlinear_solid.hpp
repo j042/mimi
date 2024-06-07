@@ -136,7 +136,7 @@ public:
                                             // visco_solid
         -1);
 
-    // setup material 
+    // setup material
     material_->Setup(dim_);
     // set flag for this integrator
     if (material_->CreateState()) {
@@ -248,7 +248,7 @@ public:
       mfem::MultAtB(x, q.dN_dX_, tmp.F_);
 
       // currently we will just use PK1
-      material_->Accumulate(q.material_state_, tmp, tmp.stress_);
+      material_->Accumulate(q.material_state_, tmp);
     }
   }
 

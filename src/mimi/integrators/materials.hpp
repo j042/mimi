@@ -145,9 +145,7 @@ public:
   }
 
   /// state accumulating version
-  virtual void Accumulate(MaterialStatePtr_& state,
-                          TemporaryData& tmp,
-                          mfem::DenseMatrix& stress) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("Accumulate() not implemented for", Name());
@@ -365,11 +363,9 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state,
-                          TemporaryData& tmp,
-                          mfem::DenseMatrix& sigma) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
-    PlasticStress<true>(state, tmp, sigma);
+    PlasticStress<true>(state, tmp, tmp.stress_ /* unused */);
   }
 };
 
@@ -517,11 +513,9 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state,
-                          TemporaryData& tmp,
-                          mfem::DenseMatrix& sigma) {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) {
     MIMI_FUNC()
-    PlasticStress<true>(state, tmp, sigma);
+    PlasticStress<true>(state, tmp, tmp.stress_ /* unused */);
   }
 };
 
@@ -689,12 +683,10 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state,
-                          TemporaryData& tmp,
-                          mfem::DenseMatrix& sigma) {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) {
     MIMI_FUNC()
 
-    PlasticStress<true>(state, tmp, sigma);
+    PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder*/);
   }
 };
 
@@ -916,13 +908,11 @@ public:
                      mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
-    MIMI_FUNC()
-
     // get aux
     mfem::DenseMatrix& eps = tmp.aux_mat_[k_eps];
     mfem::DenseMatrix& s = tmp.aux_mat_[k_s];
     mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
-    mfem::DenseMatrix& L = tmp.aux_mat_[k_L];
+    // mfem::DenseMatrix& L = tmp.aux_mat_[k_L];
 
     // get states
     auto& plastic_strain = state->matrices_[State::k_plastic_strain];
@@ -1003,11 +993,9 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state,
-                          TemporaryData& tmp,
-                          mfem::DenseMatrix& sigma) {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) {
     MIMI_FUNC()
-    PlasticStress<true>(state, tmp, sigma);
+    PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
   }
 };
 
@@ -1178,12 +1166,10 @@ public:
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state,
-                          TemporaryData& tmp,
-                          mfem::DenseMatrix& sigma) {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) {
     MIMI_FUNC()
 
-    PlasticStress<true>(state, tmp, sigma);
+    PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
   }
 };
 

@@ -29,6 +29,7 @@ public:
     temporary_data_.resize(n_threads_);
     for (auto& td : temporary_data_) {
       td.SetDim(dim_);
+      material_->AllocateAux(td);
     }
   }
 
@@ -79,7 +80,7 @@ public:
       mfem::MultAtB(v, q.dN_dX_, tmp.F_dot_);
 
       // currently we will just use PK1
-      material_->Accumulate(q.material_state_, tmp, tmp.stress_);
+      material_->Accumulate(q.material_state_, tmp);
     }
   }
 
