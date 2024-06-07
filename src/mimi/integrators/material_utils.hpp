@@ -25,6 +25,15 @@
 
 namespace mimi::integrators {
 
+template<typename T, typename IndexType>
+AddDiagonal(T* data, const T fac, const IndexType dim) {
+  MIMI_FUNC()
+
+  for (int i{}; i < dim; ++i) {
+    data[(dim + 1) * i] += fac;
+  }
+}
+
 /// computes deviator.
 /// often used to compute stress deviator, so there's factor
 /// safe to use same matrix for A and dev_A
@@ -109,41 +118,43 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
                               mfem::DenseMatrix& elastic_strain) {
   MIMI_FUNC()
 
+  constexpr const int k_work1{3}; // We don't use 3 for L
+  constexpr const int k_work2{4};
+  constexpr const int k_eig_vec{0};
+
   const int dim = tmp.dim_;
 
-  mfem::DenseMatrix plastic_strain_inv(dim, dim), F_el(dim, dim), Ce(dim, dim);
+  // name of this work matrix may change throughout this function
+  mfem::DenseMatrix& plastic_strain_inv = tmp.aux_mat_[k_work];
+  mfem::DenseMatrix& F_el = tmp.aux_mat_[F_el];
 
-  // CalcDeterminantPlusIMinusOne det(dudX + I) - 1 -> det(F) - 1
-  // there's a way to preserve small J -> use the function
-  const double trace_Ee = std::log1p(F.Det() - 1.);
+  // there's a way to preserve small J -> use/implement
+  // CalcDeterminantPlusIMinusOne
+  const double trace_Ee = std::log1p(tmp.DetF() - 1.);
   mfem::CalcInverse(plastic_strain, plastic_strain_inv);
-  mfem::Mult(F, plastic_strain_inv, F_el);
+  mfem::Mult(tmp.F_, plastic_strain_inv, F_el);
+
+  mfem::DenseMatrix& Ce = plastic_strain_inv; // use work1 as Ce
   mfem::MultAtB(F_el, F_el, Ce);
-  // optimism.TensorMath.log_sqrt_symm
+
+  // do optimism.TensorMath.log_sqrt_symm
+  mfem::DenseMatrix& eigen_values = tmp.aux_vec_[k_eig_vec];
+  mfem::DenseMatrix& eigen_vectors = F_el;
   Ce.Symmetrize();
-  // eigen decomp
-  mfem::Vector e_val(dim);
-  mfem::DenseMatrix e_vec(dim, dim);
-  Ce.CalcEigenvalues(e_val.GetData(), e_vec.GetData());
+  Ce.CalcEigenvalues(eigen_values.GetData(), eigen_vectors.GetData());
   // apply log
   for (int i{}; i < dim; ++i) {
-    e_val[i] = std::log(e_val[i]);
-    if (!std::isfinite(e_val[i]))
-      mimi::utils::PrintAndThrowError("eigen val not finite");
+    eigen_values[i] = std::log(eigen_values[i]);
   }
   mfem::DenseMatrix& Ee = Ce; // reuse Ce
-  mfem::MultADAt(e_vec, e_val, Ee);
+  mfem::MultADAt(eigen_vectors, eigen_values, Ee);
   Ee *= 0.5;
 
   Dev(Ee, dim, 1.0, elastic_strain);
-  double* e_data = elastic_strain.GetData();
-  const double fac = trace_Ee / dim;
-  for (int i{}; i < dim; ++i) {
-    e_data[(dim + 1) * i] += fac;
-  }
+  AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
 
   if (!std::isfinite(trace_Ee)) {
-    mimi::utils::PrintAndThrowError("tractee not finite", F.Det());
+    mimi::utils::PrintAndThrowError("trace_Ee not finite", F.Det());
   }
 }
 

@@ -1041,8 +1041,10 @@ public:
     virtual void AllocateAux(TemporaryData& tmp) const {
       MIMI_FUNC()
 
-      tmp.aux_mat_.resize(4, mfem::DenseMatrix(dim_, dim_));
-      tmp.aux_vec_.resize(2, mfem::Vector(dim_));
+      // eps, s, N_p, a misc work array, eigen vectors/work2
+      tmp.aux_mat_.resize(5, mfem::DenseMatrix(dim_, dim_));
+      // eigen values
+      tmp.aux_vec_.resize(1, mfem::Vector(dim_));
     }
 
     virtual MaterialStatePtr_ CreateState() const {
@@ -1079,7 +1081,6 @@ public:
       mfem::DenseMatrix& eps = tmp.aux_mat_[k_eps];
       mfem::DenseMatrix& s = tmp.aux_mat_[k_s];
       mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
-      // mfem::DenseMatrix& L = tmp.aux_mat_[k_L];
 
       // get states
       auto& plastic_strain = state->matrices_[State::k_plastic_strain];
@@ -1089,7 +1090,7 @@ public:
       auto& eqps = state_->scalars_[State::k_eqps];
 
       // precompute aux values
-      LogarithmicStrain(tmp.F_, plastic_strain, eps);
+      LogarithmicStrain(tmp, plastic_strain, eps);
       const double p = K_ * eps.Trace();
       Dev(eps, dim_, 2.0 * G_, s);
       const double q = sqrt_3_2_ * Norm(s); // trial mises
