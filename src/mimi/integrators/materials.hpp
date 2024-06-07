@@ -1097,7 +1097,6 @@ public:
 
       // get eqps_rate and delta temperature
       double eqps_rate, temperature_rate;
-      // VelocityGradient(F, F_dot, L);
       PlasticStrainRateAndTemperatureRate(F_dot,
                                           // L,
                                           eps,
@@ -1134,43 +1133,47 @@ public:
                                                              lower_bound,
                                                              upper_bound,
                                                              opts);
-        // compute sqrt(3/2) * s / norm(s)
-        // this is sqrt(3/2 s : s)
-        // this term is use for both s and plastic strain
-        // this is equivalent to
-        // 3/2 / q * s = 3/2 * s * sqrt(2/3) / norm(s)
         N_p.Set(1.5 / q, s);
-        s.Add(-2.0 * G_ * delta_eqps, N_p);
-
-        // accumulate
-        accumulated_plastic_strain += delta_eqps;
-        mfem::DenseMatrix increment(dim_);
-        increment.Set(delta_eqps, N_p);
-        increment.Symmetrize();
-        // eigen decomp
-        mfem::Vector e_val(dim_);
-        mfem::DenseMatrix e_vec(dim_, dim_);
-        increment.CalcEigenvalues(e_val.GetData(), e_vec.GetData());
-        // apply log
-        for (int i{}; i < dim_; ++i) {
-          e_val[i] = std::exp(e_val[i]);
+        if constexpr (!accumulate) {
+          s.Add(-2.0 * G_ * delta_eqps, N_p);
         }
-        mfem::DenseMatrix& exp_symm = increment; // reuse Ce
-        mfem::MultADAt(e_vec, e_val, exp_symm);
-        mfem::DenseMatrix old_ps(plastic_strain);
-        mfem::Mult(exp_symm, old_ps, plastic_strain);
+        if constexpr (accumulate) {
+          // plastic_strain.Add(delta_eqps, N_p);
+          // for logarithmic, we do the following instead
+          accumulated_plastic_strain += delta_eqps;
 
-        // plastic_strain.Add(delta_eqps, N_p);
+          constexpr const int k_work1{3};
+          constexpr const int k_work2{4};
+          constexpr const int k_eig_vec{0};
 
-        // for logarithmic,
+          mfem::DenseMatrix& increment = tmp.aux_mat_[k_work1];
+          increment.Set(delta_eqps, N_p);
+          increment.Symmetrize();
 
-        // clip at melting temp + 1, just to make sure that in next
-        // simulation, this will trigger contribution=0.0
-        temperature = std::min(trial_T, melting_temperature_ + 1.0);
+          mfem::Vector& eigen_values = tmp.aux_vec_[k_eig_vec];
+          mfem::DenseMatrix& eigen_vectors = tmp.aux_mat_[k_work2];
+          increment.CalcEigenvalues(eigen_values.GetData(),
+                                    eigen_vectors.GetData());
+          // apply exp
+          for (int i{}; i < dim_; ++i) {
+            eigen_values[i] = std::exp(eigen_values[i]);
+          }
+          mfem::DenseMatrix& exp_symm = increment; // reuse
+          mfem::MultADAt(eigen_vectors, eigen_values, exp_symm);
+
+          mfem::DenseMatrix& old_plastic_strain = exp_symm; // reuse
+          old_plastic_strain = plastic_strain;
+          mfem::Mult(exp_symm, old_plastic_strain, plastic_strain);
+
+          // now, temp
+          temperature = std::min(trial_T, melting_temperature_ + 1.0);
+        }
       }
 
       // returning s + p * I
-      // mfem::Add(s, I_, p, sigma);
+      if constexpr (!accumulate) {
+        mfem::Add(s, I_, p, sigma);
+      }
     }
 
     virtual void EvaluateCauchy(const MaterialStatePtr_& state,
@@ -1178,184 +1181,15 @@ public:
                                 mfem::DenseMatrix& sigma) const {
       MIMI_FUNC()
 
-      // get aux
-      auto& i_aux = aux_matrices_[i_thread];
-      mfem::DenseMatrix& eps = i_aux[k_eps];
-      mfem::DenseMatrix& s = i_aux[k_s];
-      mfem::DenseMatrix& N_p = i_aux[k_N_p];
-      mfem::DenseMatrix& L = i_aux[k_L];
-
-      // get states
-      const mfem::DenseMatrix& plastic_strain =
-          state->matrices_[State::k_plastic_strain];
-      const double accumulated_plastic_strain =
-          state->scalars_[State::k_accumulated_plastic_strain];
-      const double temperature = state->scalars_[State::k_temperature];
-
-      // precompute aux values
-      // eps, p, s, eta, q, equivalent plastic strain rate
-      LogarithmicStrain(F, plastic_strain, eps);
-      const double p = K_ * eps.Trace();
-      Dev(eps, dim_, 2.0 * G_, s);
-      const double q = sqrt_3_2_ * Norm(s); // trial mises
-
-      // get eqps_rate and delta temperature
-      double eqps_rate, temperature_rate;
-      // VelocityGradient(F, F_dot, L);
-      PlasticStrainRateAndTemperatureRate(F_dot,
-                                          // L,
-                                          eps,
-                                          eqps_rate,
-                                          temperature_rate);
-
-      // admissibility
-      const double eqps_old = accumulated_plastic_strain;
-      const double trial_T =
-          temperature + temperature_rate * second_effective_dt_;
-      auto residual = [eqps_old, eqps_rate, q, trial_T, *this](
-                          auto delta_eqps) -> ADScalar_ {
-        return q - 3.0 * G_ * delta_eqps
-               - hardening_->Evaluate(eqps_old + delta_eqps,
-                                      eqps_rate,
-                                      trial_T);
-      };
-
-      const double tolerance = hardening_->SigmaY() * k_tol;
-
-      if (residual(0.0) > tolerance) {
-        /// return mapping
-        mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
-                                                .rtol = tolerance,
-                                                .max_iter = 100};
-
-        const double lower_bound = 0.0;
-        const double upper_bound =
-            (q
-             - hardening_->Evaluate(eqps_old, eqps_rate, trial_T).GetValue()
-                   / (3.0 * G_));
-        const double delta_eqps =
-            mimi::solvers::ScalarSolve(residual,
-                                       //  0.5 * (lower_bound + upper_bound),
-                                       0.0,
-                                       lower_bound,
-                                       upper_bound,
-                                       opts);
-        // compute sqrt(3/2) * s / norm(s)
-        // this is sqrt(3/2 s : s)
-        // this term is use for both s and plastic strain
-        // this is equivalent to
-        // 3/2 / q * s = 3/2 * s * sqrt(2/3) / norm(s)
-        N_p.Set(1.5 / q, s);
-        s.Add(-2.0 * G_ * delta_eqps, N_p);
-      }
-      // returning s + p * I
-      mfem::Add(s, I_, p, sigma);
+      PlasticStress<false>(state, tmp, sigma);
     }
 
-    virtual void Accumulate(const mfem::DenseMatrix& F,
-                            const mfem::DenseMatrix& F_dot,
-                            const int& i_thread,
-                            MaterialStatePtr_& state) {
+    virtual void Accumulate(MaterialStatePtr_& state,
+                            TemporaryData& tmp,
+                            mfem::DenseMatrix& sigma) {
       MIMI_FUNC()
 
-      // get aux
-      auto& i_aux = aux_matrices_[i_thread];
-      mfem::DenseMatrix& eps = i_aux[k_eps];
-      mfem::DenseMatrix& s = i_aux[k_s];
-      mfem::DenseMatrix& N_p = i_aux[k_N_p];
-      mfem::DenseMatrix& L = i_aux[k_L];
-
-      // get states
-      mfem::DenseMatrix& plastic_strain =
-          state->matrices_[State::k_plastic_strain];
-      double& accumulated_plastic_strain =
-          state->scalars_[State::k_accumulated_plastic_strain];
-      double& temperature = state->scalars_[State::k_temperature];
-
-      // precompute aux values
-      // eps, p, s, eta, q, equivalent plastic strain rate
-      // ElasticStrain(F, plastic_strain, eps);
-      LogarithmicStrain(F, plastic_strain, eps);
-      const double p = K_ * eps.Trace();
-      Dev(eps, dim_, 2.0 * G_, s);
-      const double q = sqrt_3_2_ * Norm(s); // trial mises
-
-      // get eqps_rate and delta temperature
-      double eqps_rate, temperature_rate;
-      // VelocityGradient(F, F_dot, L);
-      PlasticStrainRateAndTemperatureRate(F_dot,
-                                          // L,
-                                          eps,
-                                          eqps_rate,
-                                          temperature_rate);
-
-      // admissibility
-      const double eqps_old = accumulated_plastic_strain;
-      const double trial_T =
-          temperature + temperature_rate * second_effective_dt_;
-      auto residual = [eqps_old, eqps_rate, q, trial_T, *this](
-                          auto delta_eqps) -> ADScalar_ {
-        return q - 3.0 * G_ * delta_eqps
-               - hardening_->Evaluate(eqps_old + delta_eqps,
-                                      eqps_rate,
-                                      trial_T);
-      };
-
-      const double tolerance = hardening_->SigmaY() * k_tol;
-
-      if (residual(0.0) > tolerance) {
-        /// return mapping
-        mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
-                                                .rtol = tolerance,
-                                                .max_iter = 100};
-
-        const double lower_bound = 0.0;
-        const double upper_bound =
-            (q
-             - hardening_->Evaluate(eqps_old, eqps_rate, trial_T).GetValue()
-                   / (3.0 * G_));
-        const double delta_eqps = mimi::solvers::ScalarSolve(residual,
-                                                             0.0,
-                                                             lower_bound,
-                                                             upper_bound,
-                                                             opts);
-        // compute sqrt(3/2) * s / norm(s)
-        // this is sqrt(3/2 s : s)
-        // this term is use for both s and plastic strain
-        // this is equivalent to
-        // 3/2 / q * s = 3/2 * s * sqrt(2/3) / norm(s)
-        N_p.Set(1.5 / q, s);
-        s.Add(-2.0 * G_ * delta_eqps, N_p);
-
-        // accumulate
-        accumulated_plastic_strain += delta_eqps;
-        mfem::DenseMatrix increment(dim_);
-        increment.Set(delta_eqps, N_p);
-        increment.Symmetrize();
-        // eigen decomp
-        mfem::Vector e_val(dim_);
-        mfem::DenseMatrix e_vec(dim_, dim_);
-        increment.CalcEigenvalues(e_val.GetData(), e_vec.GetData());
-        // apply log
-        for (int i{}; i < dim_; ++i) {
-          e_val[i] = std::exp(e_val[i]);
-        }
-        mfem::DenseMatrix& exp_symm = increment; // reuse Ce
-        mfem::MultADAt(e_vec, e_val, exp_symm);
-        mfem::DenseMatrix old_ps(plastic_strain);
-        mfem::Mult(exp_symm, old_ps, plastic_strain);
-
-        // plastic_strain.Add(delta_eqps, N_p);
-
-        // for logarithmic,
-
-        // clip at melting temp + 1, just to make sure that in next
-        // simulation, this will trigger contribution=0.0
-        temperature = std::min(trial_T, melting_temperature_ + 1.0);
-      }
-
-      // returning s + p * I
-      // mfem::Add(s, I_, p, sigma);
+      PlasticStress<true>(state, tmp, sigma);
     }
   };
 

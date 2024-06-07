@@ -131,6 +131,12 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
   // there's a way to preserve small J -> use/implement
   // CalcDeterminantPlusIMinusOne
   const double trace_Ee = std::log1p(tmp.DetF() - 1.);
+  if (!std::isfinite(trace_Ee)) {
+    mimi::utils::PrintAndThrowError(
+        "trace_Ee not finite. F.Det() evaluates to:",
+        tmp.DetF());
+  }
+
   mfem::CalcInverse(plastic_strain, plastic_strain_inv);
   mfem::Mult(tmp.F_, plastic_strain_inv, F_el);
 
@@ -138,7 +144,7 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
   mfem::MultAtB(F_el, F_el, Ce);
 
   // do optimism.TensorMath.log_sqrt_symm
-  mfem::DenseMatrix& eigen_values = tmp.aux_vec_[k_eig_vec];
+  mfem::Vector& eigen_values = tmp.aux_vec_[k_eig_vec];
   mfem::DenseMatrix& eigen_vectors = F_el;
   Ce.Symmetrize();
   Ce.CalcEigenvalues(eigen_values.GetData(), eigen_vectors.GetData());
@@ -152,10 +158,6 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
 
   Dev(Ee, dim, 1.0, elastic_strain);
   AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
-
-  if (!std::isfinite(trace_Ee)) {
-    mimi::utils::PrintAndThrowError("trace_Ee not finite", F.Det());
-  }
 }
 
 /// Frobenius norm of a matrix
