@@ -1081,21 +1081,32 @@ public:
     Dev(eps, dim_, 2.0 * G_, s);
     const double q = sqrt_3_2_ * Norm(s); // trial mises
 
-    // get eqps_rate and delta temperature
-    double eqps_rate, temperature_rate;
-    PlasticStrainRateAndTemperatureRate(tmp.F_dot_,
-                                        eps,
-                                        eqps_rate,
-                                        temperature_rate);
+    // // get eqps_rate and delta temperature
+    // double eqps_rate, temperature_rate;
+    // PlasticStrainRateAndTemperatureRate(tmp.F_dot_,
+    //                                     eps,
+    //                                     eqps_rate,
+    //                                     temperature_rate);
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    const double trial_T =
-        temperature + temperature_rate * second_effective_dt_;
-    auto residual =
-        [eqps_old, eqps_rate, q, trial_T, *this](auto delta_eqps) -> ADScalar_ {
+    const double eqps_rate = EquivalentPlasticStrainRate(tmp.F_dot_);
+    // const double trial_T =
+    //     temperature + temperature_rate * second_effective_dt_;
+    // auto residual =
+    //     [eqps_old, eqps_rate, q, trial_T, *this](auto delta_eqps) ->
+    //     ADScalar_ {
+    //   return q - 3.0 * G_ * delta_eqps
+    //          - hardening_->Evaluate(eqps_old + delta_eqps, eqps_rate,
+    //          trial_T);
+    // };
+    auto residual = [eqps_old, eqps_rate, q, temperature, *this](
+                        auto delta_eqps) -> ADScalar_ {
+      // const double eqps_rate = delta_eqps / dt;
       return q - 3.0 * G_ * delta_eqps
-             - hardening_->Evaluate(eqps_old + delta_eqps, eqps_rate, trial_T);
+             - hardening_->Evaluate(eqps_old + delta_eqps,
+                                    eqps_rate,
+                                    temperature);
     };
 
     const double tolerance = hardening_->SigmaY() * k_tol;
@@ -1109,7 +1120,7 @@ public:
       const double lower_bound = 0.0;
       const double upper_bound =
           (q
-           - hardening_->Evaluate(eqps_old, eqps_rate, trial_T).GetValue()
+           - hardening_->Evaluate(eqps_old, eqps_rate, temperature).GetValue()
                  / (3.0 * G_));
       const double delta_eqps = mimi::solvers::ScalarSolve(residual,
                                                            0.0,
@@ -1149,7 +1160,15 @@ public:
         mfem::Mult(exp_symm, old_plastic_strain, plastic_strain);
 
         // now, temp
-        temperature = std::min(trial_T, melting_temperature_ + 1.0);
+        const double temp_rate = (heat_fraction_ * q * (delta_eqps / dt_)
+                                  / density_ * specific_heat_);
+        temperature =
+            std::min(temperature + temp_rate * dt_, melting_temperature_ + 1.0);
+        mimi::utils::PrintSynced(temp_rate,
+                                 q,
+                                 delta_eqps,
+                                 delta_eqps / dt_,
+                                 temperature);
       }
     }
 

@@ -6,9 +6,9 @@ PENALTY_FACTOR = 0.5e12
 N_THREADS = 4
 DT = 0.1e-4
 
-PENALTY_FACTOR = 0.1e8
+PENALTY_FACTOR = 1e1
 N_THREADS = 1
-DT = 1e-4
+DT = 1e-5
 
 INTERACTIVE_SHOW = False
 
@@ -46,7 +46,8 @@ nl.read_mesh("box.mesh")
 nl.elevate_degrees(1)
 nl.subdivide(3)
 
-mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
+mat = mimi.PyJ2LogStrainAdiabaticVisco()
+# mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
 mat.density = 7800
 mat.viscosity = 10
 mat.set_young_poisson(205e9, 0.29)
