@@ -4,7 +4,7 @@ import mimi
 
 PENALTY_FACTOR = 2e11
 N_THREADS = 4
-DT = 0.5e-4
+DT = 0.25e-4
 
 # PENALTY_FACTOR = 1e10
 # N_THREADS = 1
@@ -18,6 +18,11 @@ def to_K(cel):
 
 
 def move(spl):
+    if (i > 200 and i < 250) or (i > 500 and i < 550) or i > 1500:
+        spl.cps[:, 1] += 10e-3 * DT
+        scene.plant_kd_tree(1001, 4)
+        return
+
     spl.cps[:, 1] -= 20e-3 * DT
     scene.plant_kd_tree(1001, 4)
 
@@ -96,7 +101,7 @@ show(-1)
 for i in range(5000):
     move(tool)
     # nl.step_time2()
-    nl.fixed_point_alm_solve2(5, 2, 15, 0, 1e-8, 1e-4, 1e-5, False)
+    nl.fixed_point_alm_solve2(40, 2, 15, 0, 1e-8, 1e-4, 1e-5, False)
     nl.advance_time2()
     if i % 10 == 0:
         show(i)

@@ -931,6 +931,8 @@ public:
 
     mfem::DenseMatrix trial_plastic_strain_rate = mat_w0;
     trial_plastic_strain_rate.Set(1.5 / q * accumulated_plastic_strain, s);
+    trial_plastic_strain_rate += eps;
+    trial_plastic_strain_rate -= previous_eps;
     trial_plastic_strain_rate -= plastic_strain;
     trial_plastic_strain_rate *= 1. / dt_;
     const double eqps_rate =
