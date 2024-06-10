@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <memory>
 #include <unordered_map>
 
@@ -59,6 +60,11 @@ public:
   using Vector_ = mimi::utils::Vector<T>;
 
   int n_threads_{1};
+  int n_elements_{1};
+  int n_b_elements_{1};
+  int n_v_dofs_{1};
+  int n_dofs_{1};
+  int dim_{1};
 
   // duplicates to help thread safety
 
@@ -105,6 +111,11 @@ public:
   /// @brief size == n_elem, can share as long as each are separately accessed
   Vector_<std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>
       reference_to_target_boundary_trans_;
+
+  // compute direct access of sorted A
+  std::shared_ptr<mfem::SparseMatrix> sparsity_pattern_;
+  Vector_<std::shared_ptr<Vector_<int>>> domain_A_ids_;
+  Vector_<std::shared_ptr<Vector_<int>>> boundary_A_ids_;
 
   /// @brief
   std::unordered_map<std::string, Vector_<Vector_<double>>> scalars_;
@@ -163,6 +174,9 @@ public:
         reference_to_target_element_trans_;
     other->reference_to_target_boundary_trans_ =
         reference_to_target_boundary_trans_;
+    other->domain_A_ids_ = domain_A_ids_;
+    other->boundary_A_ids_ = boundary_A_ids_;
+    other->sparsity_pattern_ = sparsity_pattern_;
   }
 
   virtual void Setup(const mfem::FiniteElementSpace& fe_space,
@@ -175,9 +189,6 @@ public:
 
     // reset first
     Clear();
-
-    // save nthreads
-    n_threads_ = nthreads;
 
     // create for each threads
     for (int i{}; i < nthreads; ++i) {
@@ -203,6 +214,13 @@ public:
     const int n_elem = fe_space.GetNE();
     const int n_b_elem = fe_space.GetNBE();
     const int dim = fe_space.GetMesh()->Dimension();
+    // save values
+    n_threads_ = nthreads;
+    n_elements_ = n_elem;
+    n_b_elements_ = n_b_elem;
+    n_v_dofs_ = fe_space.GetMesh()->GetNodes()->Size();
+    dim_ = dim;
+    n_dofs_ = n_v_dofs_ / dim;
 
     // allocate vectors
     v_dofs_.resize(n_elem);
@@ -211,6 +229,8 @@ public:
     boundary_elements_.resize(n_b_elem);
     reference_to_target_element_trans_.resize(n_elem);
     reference_to_target_boundary_trans_.resize(n_b_elem);
+    domain_A_ids_.resize(n_elem);
+    boundary_A_ids_.resize(n_b_elem);
 
     auto process_elems =
         [&](const int begin, const int end, const int i_thread) {
@@ -256,7 +276,6 @@ public:
                                       const int i_thread) {
       auto& mesh = *meshes_[i_thread];
       auto& fes = *fe_spaces_[i_thread];
-
       for (int i{begin}; i < end; ++i) {
         // create element,
         auto& b_el = boundary_elements_[i];
@@ -296,8 +315,75 @@ public:
     };
 
     mimi::utils::NThreadExe(process_elems, n_elem, nthreads);
-
     mimi::utils::NThreadExe(process_boundary_elems, n_b_elem, nthreads);
+
+    // we do one serial assembly as bilinear would only allocate scalar fields
+    // (we need vector field)
+    sparsity_pattern_ =
+        std::make_shared<mfem::SparseMatrix>(fe_space.GetVSize());
+    mfem::SparseMatrix& sparse = *sparsity_pattern_;
+    // dummy sparsity pattern creation
+    mfem::DenseMatrix dum;
+    for (const auto& v_dof : v_dofs_) {
+      auto& vd = *v_dof;
+      dum.SetSize(vd.Size(), vd.Size());
+      dum = 1.0;
+      sparse.AddSubMatrix(vd, vd, dum, 0);
+    }
+
+    // finalize / sort -> get nice A
+    sparse.Finalize(0);
+    sparse.SortColumnIndices();
+
+    // fill in A
+    double* a = sparse.GetData();
+    const int a_size = sparse.NumNonZeroElems();
+    for (int i{}; i < a_size; ++i) {
+      a[i] = static_cast<double>(i);
+    }
+
+    mfem::DenseMatrix sub_mat;
+    for (int i{}; i < n_elem; ++i) {
+      const auto& vd = *v_dofs_[i];
+      const int vd_size = vd.Size();
+      const int mat_size = vd_size * vd_size;
+
+      auto& Aij_ptr = domain_A_ids_[i];
+      Aij_ptr = std::make_shared<mimi::utils::Vector<int>>();
+      auto& Aij = *Aij_ptr;
+      Aij.resize(mat_size);
+
+      sub_mat.SetSize(vd_size, vd_size);
+      sparse.GetSubMatrix(vd, vd, sub_mat);
+
+      const double* sm_data = sub_mat.GetData();
+      for (int j{}; j < mat_size; ++j) {
+        // WARNING mfem uses int, we use int, if this is a problem, we
+        // have a problem
+        Aij[j] = static_cast<int>(std::lround(sm_data[j]));
+      }
+    }
+
+    for (int i{}; i < n_b_elem; ++i) {
+      const auto& vd = *boundary_v_dofs_[i];
+      const int vd_size = vd.Size();
+      const int mat_size = vd_size * vd_size;
+
+      auto& Aij_ptr = boundary_A_ids_[i];
+      Aij_ptr = std::make_shared<mimi::utils::Vector<int>>();
+      auto& Aij = *Aij_ptr;
+      Aij.resize(mat_size);
+
+      sub_mat.SetSize(vd_size, vd_size);
+      sparse.GetSubMatrix(vd, vd, sub_mat);
+
+      const double* sm_data = sub_mat.GetData();
+      for (int j{}; j < mat_size; ++j) {
+        // WARNING mfem uses int, we use int, if this is a problem, we
+        // have a problem
+        Aij[j] = static_cast<int>(std::lround(sm_data[j]));
+      }
+    }
   }
 };
 

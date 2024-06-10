@@ -1,8 +1,11 @@
 #pragma once
 
+#include <memory>
+
 #include <mfem.hpp>
 
 #include "mimi/operators/linear_elasticity.hpp"
+#include "mimi/utils/containers.hpp"
 
 namespace mimi::operators {
 
@@ -33,30 +36,6 @@ public:
 
   virtual std::string Name() const { return "NonlinearSolid"; }
 
-  /// flag to inform grad assembly is relevant
-  virtual void AssembleGradOn() {
-    MIMI_FUNC()
-    nonlinear_stiffness_->AssembleGradOn();
-  }
-
-  /// flag to inform grad assembly is NOT relevant
-  virtual void AssembleGradOff() {
-    MIMI_FUNC()
-    nonlinear_stiffness_->AssembleGradOff();
-  }
-
-  /// freeze material states - no accumulation
-  virtual void FreezeStates() {
-    MIMI_FUNC()
-    nonlinear_stiffness_->FreezeStates();
-  }
-
-  /// track material states - accumulation
-  virtual void MeltStates() {
-    MIMI_FUNC()
-    nonlinear_stiffness_->MeltStates();
-  }
-
   virtual void SetParameters(double const& fac0,
                              double const& fac1,
                              const mfem::Vector* x,
@@ -83,7 +62,7 @@ public:
   virtual void Setup() {
     MIMI_FUNC()
 
-    // setup basics -> these fianlizes sparse matrices for bilinear forms
+    // setup basics -> these finalizes sparse matrices for bilinear forms
     Base_::SetupBilinearMassForm();
     Base_::SetupNonlinearContactForm();
     Base_::SetupBilinearViscosityForm();
@@ -136,14 +115,22 @@ public:
     }
 
     if (contact_) {
-      contact_->AddMult(x, z);
+      contact_->AddMult(x, z); // we have flipped the sign at integrator
     }
 
     z.Neg(); // flips sign inplace
 
-    mass_inv_.Mult(z, d2x_dt2);
+    // substract rhs linear forms
+    if (rhs_) {
+      z += *rhs_;
+    }
 
-    // TODO - Flo, I think I am missing rhs_ here?
+    // this is usually just for fsi
+    if (rhs_vector_) {
+      z += *rhs_vector_;
+    }
+
+    mass_inv_.Mult(z, d2x_dt2);
   }
 
   /// @brief used by 2nd order implicit time stepper (ode solver)
@@ -165,10 +152,10 @@ public:
     mfem::Vector zero;
     MimiBase_::newton_solver_->Mult(zero, d2x_dt2);
 
-    if (!newton_solver_->GetConverged()) {
-      mimi::utils::PrintWarning(
-          "operators::NonlinearSolid - newton solver did not converge");
-    }
+    // if (!newton_solver_->GetConverged()) {
+    //   mimi::utils::PrintWarning(
+    //       "operators::NonlinearSolid - newton solver did not converge");
+    // }
   }
 
   /// computes residual y = E(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
@@ -176,7 +163,8 @@ public:
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
 
-    mfem::Vector temp_x(x_->Size());
+    mimi::utils::Data<double> mem(x_->Size());
+    mfem::Vector temp_x(mem.data(), x_->Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
     mass_->Mult(d2x_dt2, y);
@@ -209,20 +197,30 @@ public:
   virtual mfem::Operator& GetGradient(const mfem::Vector& d2x_dt2) const {
     MIMI_FUNC()
 
-    mfem::Vector temp_x(d2x_dt2.Size());
+    mimi::utils::Data<double> mem(x_->Size());
+    mfem::Vector temp_x(mem.data(), x_->Size());
     add(*x_, fac0_, d2x_dt2, temp_x);
 
     // NOTE, if all the values are sorted, we can do nthread local to global
     // update
+    double* J_data = jacobian_->GetData();
+    const double* K_data = dynamic_cast<mfem::SparseMatrix*>(
+                               &nonlinear_stiffness_->GetGradient(temp_x))
+                               ->GetData();
 
-    // initalize
-    // 1. mass - just copy A
-    std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
+    // get mass and nonlin stiff at the same time
+    for (int i{}; i < mass_n_nonzeros_; ++i) {
+      J_data[i] = mass_A_[i] + (fac0_ * K_data[i]);
+    }
 
-    // 2. nonlinear stiffness
-    jacobian_->Add(fac0_,
-                   *dynamic_cast<mfem::SparseMatrix*>(
-                       &nonlinear_stiffness_->GetGradient(temp_x)));
+    // // initalize
+    // // 1. mass - just copy A
+    // std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
+
+    // // 2. nonlinear stiffness
+    // jacobian_->Add(fac0_,
+    //                *dynamic_cast<mfem::SparseMatrix*>(
+    //                    &nonlinear_stiffness_->GetGradient(temp_x)));
 
     // 3. viscosity
     if (viscosity_) {
@@ -237,6 +235,57 @@ public:
     }
 
     return *jacobian_;
+  }
+
+  virtual mfem::Operator* ResidualAndGrad(const mfem::Vector& d2x_dt2,
+                                          const int nthread,
+                                          mfem::Vector& y) const {
+    const int problem_size = x_->Size();
+    mimi::utils::Data<double> mem(problem_size);
+    mfem::Vector temp_x(mem.data(), problem_size);
+    add(*x_, fac0_, d2x_dt2, temp_x);
+
+    // do usual residual operation
+    mass_->Mult(d2x_dt2, y); // this initializes y to zero
+    if (viscosity_) {
+      mimi::utils::Data<double> mem_v(problem_size);
+      mfem::Vector temp_v(mem_v.data(), problem_size);
+      add(*v_, fac1_, d2x_dt2, temp_v);
+      viscosity_->AddMult(temp_v, y);
+    }
+
+    // now nonlin part
+    // 1. initalize grad with mass
+    std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
+    nonlinear_stiffness_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
+
+    // contact -> both grad and residual
+    if (contact_) {
+      contact_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
+    }
+
+    // 3. viscosity
+    if (viscosity_) {
+      jacobian_->Add(fac1_, viscosity_->SpMat());
+    }
+
+    if (rhs_) {
+      y.Add(-1.0, *rhs_);
+    }
+    // this is usually just for fsi
+    if (rhs_vector_) {
+      y.Add(-1.0, *rhs_vector_);
+    }
+
+    return jacobian_;
+  }
+
+  virtual void PostTimeAdvance(const mfem::Vector& x, const mfem::Vector& v) {
+    MIMI_FUNC()
+
+    nonlinear_stiffness_->PostTimeAdvance(x);
+    if (contact_)
+      contact_->PostTimeAdvance(x);
   }
 };
 

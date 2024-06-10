@@ -5,12 +5,38 @@
 
 #include <mfem.hpp>
 
+#include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
+
+// extern "C" void
+// dsyev_(char *JOBZ, char *UPLO, int *N, double *A, int *LDA, double *W,
+//        double *WORK, int *LWORK, int *INFO);
+
+// struct SymmetricMatrixEigenValue {
+// protected:
+//   bool overwrite_reference_;
+//   mfem::DenseMatrix* reference_;
+//   mfem::DenseMatrix reference_copy_;
+// public:
+
+// };
+
+// void Eigen(mfem::DenseMatrix& A, mfem::Vector& e_val, )
 
 namespace mimi::integrators {
 
+template<typename T, typename IndexType>
+void AddDiagonal(T* data, const T fac, const IndexType dim) {
+  MIMI_FUNC()
+
+  for (IndexType i{}; i < dim; ++i) {
+    data[(dim + 1) * i] += fac;
+  }
+}
+
 /// computes deviator.
 /// often used to compute stress deviator, so there's factor
+/// safe to use same matrix for A and dev_A
 inline void Dev(const mfem::DenseMatrix& A,
                 const int dim,
                 const double factor,
@@ -20,8 +46,8 @@ inline void Dev(const mfem::DenseMatrix& A,
   double* dev_A_data = dev_A.GetData();
 
   if (dim == 2) {
-    const double& A_0 = A_data[0];
-    const double& A_3 = A_data[3];
+    const double A_0 = A_data[0];
+    const double A_3 = A_data[3];
     const double tr_A_over_dim = (A_0 + A_3) / 2.0; // div(val, dim)
 
     dev_A_data[0] = (A_0 - tr_A_over_dim) * factor;
@@ -30,9 +56,9 @@ inline void Dev(const mfem::DenseMatrix& A,
     dev_A_data[3] = (A_3 - tr_A_over_dim) * factor;
     return;
   } else {
-    const double& A_0 = A_data[0];
-    const double& A_4 = A_data[4];
-    const double& A_8 = A_data[8];
+    const double A_0 = A_data[0];
+    const double A_4 = A_data[4];
+    const double A_8 = A_data[8];
     const double tr_A_over_dim = (A_0 + A_4 + A_8) / 3.0; // div(val, dim)
 
     dev_A_data[0] = (A_0 - tr_A_over_dim) * factor;
@@ -73,6 +99,58 @@ inline void ElasticStrain(const mfem::DenseMatrix& F,
   for (int i{}; i < dim * dim; ++i) {
     e_data[i] -= p_data[i];
   }
+}
+
+inline void CalcDeterminantPlusIMinusOne(const mfem::DenseMatrix& A,
+                                         mfem::DenseMatrix& B) {
+  MIMI_FUNC()
+}
+
+/// @brief taken from optimism (github.com/sandialabs/optimism) to see if this
+/// behaves better
+template<int mat0 = 3, int mat1 = 4, int vec0 = 0, typename TmpData>
+inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
+                              TmpData& tmp,
+                              mfem::DenseMatrix& elastic_strain) {
+  MIMI_FUNC()
+
+  const int dim = tmp.dim_;
+
+  // name of this work matrix may change throughout this function
+  mfem::DenseMatrix& plastic_strain_inv = tmp.aux_mat_[mat0];
+  mfem::DenseMatrix& F_el = tmp.aux_mat_[mat1];
+
+  // there's a way to preserve small J -> use/implement
+  // CalcDeterminantPlusIMinusOne
+  // const double trace_Ee = std::log1p(std::abs(tmp.DetF()) - 1.);
+  const double trace_Ee = std::log1p(tmp.DetF() - 1.);
+  if (!std::isfinite(trace_Ee)) {
+    mimi::utils::PrintAndThrowError(
+        "trace_Ee not finite. F.Det() evaluates to:",
+        tmp.DetF());
+  }
+
+  mfem::CalcInverse(plastic_strain, plastic_strain_inv);
+  mfem::Mult(tmp.F_, plastic_strain_inv, F_el);
+
+  mfem::DenseMatrix& Ce = plastic_strain_inv; // use work1 as Ce
+  mfem::MultAtB(F_el, F_el, Ce);
+
+  // do optimism.TensorMath.log_sqrt_symm
+  mfem::Vector& eigen_values = tmp.aux_vec_[vec0];
+  mfem::DenseMatrix& eigen_vectors = F_el;
+  Ce.Symmetrize();
+  Ce.CalcEigenvalues(eigen_values.GetData(), eigen_vectors.GetData());
+  // apply log
+  for (int i{}; i < dim; ++i) {
+    eigen_values[i] = std::log(eigen_values[i]);
+  }
+  mfem::DenseMatrix& Ee = Ce; // reuse Ce
+  mfem::MultADAt(eigen_vectors, eigen_values, Ee);
+  Ee *= 0.5;
+
+  Dev(Ee, dim, 1.0, elastic_strain);
+  AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
 }
 
 /// Frobenius norm of a matrix

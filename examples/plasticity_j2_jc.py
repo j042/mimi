@@ -38,13 +38,13 @@ s.cps[:] = s.cps[to_s]
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
-bc.initial.body_force(1, -100)
+bc.initial.body_force(1, -30)
 # bc.initial.traction(3, 1, -100)
 
 nl.boundary_condition = bc
 
-nl.setup(1)
-nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, True)
+nl.setup(4)
+nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, False, False)
 
 rhs = nl.linear_form_view2("rhs")
 print(rhs)

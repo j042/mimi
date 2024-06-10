@@ -14,8 +14,8 @@ le.read_mesh("tests/data/sqn.mesh")
 # set param
 
 # refine
-le.elevate_degrees(3)
-le.subdivide(3)
+le.elevate_degrees(1)
+le.subdivide(4)
 
 # mat
 mat = mimi.PyCompressibleOgdenNeoHookean()
@@ -47,14 +47,24 @@ curv.cps[:] += [0.0, 0.75]
 
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
-scene.plant_kd_tree(100000, 4)
-scene.coefficient = 0.5e11
+scene.plant_kd_tree(1001, 4)
+scene.coefficient = 1e12
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
 bc.current.contact(1, scene)
 le.boundary_condition = bc
 
+rc = mimi.PyRuntimeCommunication()
+# rc.set_int("contact_quadrature_order", 50)
+# rc.set_int("nonlinear_solid_quadrature_order", 3)
+rc.fname = "tout/n.npz"
+rc.append_should_save("contact_history", 1)
+rc.append_should_save("contact_forces", 1)
+rc.setup_real_history("area", 10000)
+rc.setup_real_history("force_x", 10000)
+rc.setup_real_history("force_y", 10000)
+le.runtime_communication = rc
 tic.toc()
 
 # setup needs to be called this assembles bilinear forms, linear forms
@@ -75,7 +85,7 @@ tic.summary(print_=True)
 # s.show_options["control_points"] = False
 # s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-# s.show_options["control_points"] = False
+s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
@@ -88,7 +98,7 @@ def move():
     else:
         curv.cps[:] -= [0.04, 0]
 
-    scene.plant_kd_tree(1000, 4)
+    scene.plant_kd_tree(1001, 4)
 
 
 def sol():
@@ -103,14 +113,13 @@ def c_sol():
 
 def adv():
     le.advance_time2()
-    le.fill_contact_lagrange(0)
 
 
 def show():
     s.cps[:] = x[to_s]
     gus.show(
         [
-            str(i) + " " + str(j) + " " + str(ab) + " " + str(ni.gap_norm()),
+            str(i),
             s,
             curv,
         ],
@@ -119,37 +128,16 @@ def show():
     )
 
 
-coe = 1e11
 # initialize a plotter
-plt = gus.show([s, curv], close=False)
+plt = gus.show([s, curv], interactive=False, close=False)
 n = le.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
-for i in range(1000):
+for i in range(200):
     move()
-    old = 1
-    b_old = 1
-    scene.coefficient = coe
-    for j in range(10):
-        sol()
-        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True)
-        rel, ab = le.newton_final_norms("nonlinear_solid")
-        bdr_norm = np.linalg.norm(n.boundary_residual())
-        print("augumenting", n.boundary_residual().sum())
-        print()
-        if ni.gap_norm() < 1e-4:
-            print(ni.gap_norm(), "exit!")
-            break
-    print("final solve!", n.boundary_residual().sum())
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 20, True)
-    le.update_contact_lagrange()
-    scene.coefficient = 0.0
-    c_sol()
-    rel, ab = le.newton_final_norms("nonlinear_solid")
-
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
-    scene.coefficient = coe
-    adv()
-    show()
+    le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
+    le.advance_time2()
+    tic.toc(f"{i}-step")
+#    show()
 
 
 tic.summary(print_=True)

@@ -27,14 +27,25 @@ public:
     mimi::utils::PrintInfo("No detailed info for", Name());
   }
 
+  virtual void SaveMimiDownCast2(mfem::SecondOrderTimeDependentOperator* oper) {
+    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(oper);
+    if (!mimi_operator_) {
+      mimi::utils::PrintAndThrowError(
+          "Failed to cast mfem::SecondOrderTimeDependentOperator to "
+          "mimi::operators::OperatorBase.");
+    }
+  }
+
   virtual void
   StepTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("StepTime2 is not implemented for", Name());
   }
 
-  virtual void
-  FixedPointSolve2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
+  virtual void FixedPointSolve2(const mfem::Vector& x,
+                                const mfem::Vector& dxdt,
+                                double& t,
+                                double& dt) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("FixedPointSolve2 is not implemented for",
                                     Name());
@@ -65,7 +76,8 @@ public:
 
 class GeneralizedAlpha2 : public mfem::GeneralizedAlpha2Solver, public OdeBase {
 protected:
-  double fac0_, fac1_, fac2_, fac3_, fac4_, fac5_;
+  double fac0_, fac1_, fac2_, fac3_, fac4_, fac5_, fac1_inv_, fac5_inv_;
+  bool fixed_point_predict_alpha_level_{true};
 
 public:
   using Base_ = mfem::GeneralizedAlpha2Solver;
@@ -73,22 +85,24 @@ public:
   GeneralizedAlpha2() = default;
 
   GeneralizedAlpha2(mfem::SecondOrderTimeDependentOperator& oper,
-                    double rho_inf = 0.5)
-      : Base_(rho_inf) {
+                    double rho_inf = 0.25)
+      : Base_(rho_inf),
+        fixed_point_predict_alpha_level_{true} {
 
     Base_::Init(oper);
     ComputeFactors();
-    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
-    assert(mimi_operator_);
+    SaveMimiDownCast2(&oper);
   }
 
   virtual void ComputeFactors() {
     fac0_ = (0.5 - (beta / alpha_m));
     fac1_ = alpha_f;
+    fac1_inv_ = 1. / fac1_;
     fac2_ = alpha_f * (1.0 - (gamma / alpha_m));
     fac3_ = beta * alpha_f / alpha_m;
     fac4_ = gamma * alpha_f / alpha_m;
     fac5_ = alpha_m;
+    fac5_inv_ = 1. / fac5_;
   }
 
   virtual std::string Name() const { return "GeneralizedAlpha2"; }
@@ -106,9 +120,12 @@ public:
 
     mimi_operator_->dt_ = dt;
     Base_::Step(x, dxdt, t, dt);
+    mimi_operator_->PostTimeAdvance(x, dxdt);
   }
-  virtual void
-  FixedPointSolve2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
+  virtual void FixedPointSolve2(const mfem::Vector& x,
+                                const mfem::Vector& dxdt,
+                                double& t,
+                                double& dt) {
     MIMI_FUNC()
 
     // In the first pass compute d2xdt2 directy from operator.
@@ -117,20 +134,17 @@ public:
       nstate = 1;
     }
 
-    // std::cout << "\n";
-    // std::cout << x[0] << "\n";
-    // std::cout << x[2] << "\n";
-    // std::cout << x[4] << "\n";
-    // std::cout << x[6] << "\n";
-    // std::cout << "\n";
-    for (const int& d_id : *dirichlet_dofs_) {
-      d2xdt2[d_id] = 0.0;
-    }
+    // for (const int& d_id : *dirichlet_dofs_) {
+    //   d2xdt2[d_id] = 0.0;
+    // }
 
     // Predict alpha levels
-    add(dxdt, fac0_ * dt, d2xdt2, va);
-    add(x, fac1_ * dt, va, xa);
-    add(dxdt, fac2_ * dt, d2xdt2, va);
+    if (fixed_point_predict_alpha_level_) {
+      add(dxdt, fac0_ * dt, d2xdt2, va);
+      add(x, fac1_ * dt, va, xa);
+      add(dxdt, fac2_ * dt, d2xdt2, va);
+      fixed_point_predict_alpha_level_ = false;
+    }
 
     // Solve alpha levels
     mimi_operator_->dt_ = dt;
@@ -143,58 +157,106 @@ public:
                                   double& t,
                                   double& dt) {
     MIMI_FUNC()
+    if (fixed_point_predict_alpha_level_) {
+      mimi::utils::PrintAndThrowError(
+          "FixedPointAdvance2() should be called after FixedPointSolve2()");
+    }
 
-    // xa and va are always freshly overwritten in fixedpointsolve,
-    // but would duplicate in AdvanceTime2, so assign a temp vector
-    mfem::Vector tmp_xa(x.Size());
-    mfem::Vector tmp_va(dxdt.Size());
+    // // xa and va are always freshly overwritten in fixedpointsolve,
+    // // but would duplicate in AdvanceTime2, so assign a temp vector
+    // fixed_point_tmp_xa_.SetSize(x.Size());
+    // fixed_point_tmp_va_.SetSize(dxdt.Size());
 
-    // Correct alpha levels
-    // xa.Add(fac3_ * dt * dt, aa); // <- do this
-    add(xa, fac3_ * dt * dt, Base_::aa, tmp_xa);
-    // va.Add(fac4_ * dt, aa); // <- do this
-    add(va, fac4_ * dt, Base_::aa, tmp_va);
+    const double fac3dtdt = fac3_ * dt * dt;
+    const double fac4dt = fac4_ * dt;
+    // // Correct alpha levels
+    // // xa.Add(fac3_ * dt * dt, aa); // <- do this
+    // add(xa, fac3dtdt, Base_::aa, fixed_point_tmp_xa_);
+    // // va.Add(fac4_ * dt, aa); // <- do this
+    // add(va, fac4dt, Base_::aa, fixed_point_tmp_va_);
 
-    // extrapolate using temp vectors
-    x *= 1.0 - 1.0 / fac1_;
-    x.Add(1.0 / fac1_, tmp_xa);
+    // // extrapolate using temp vectors
+    // x *= 1.0 - 1.0 / fac1_;
+    // x.Add(1.0 / fac1_, fixed_point_tmp_xa_);
 
-    dxdt *= 1.0 - 1.0 / fac1_;
-    dxdt.Add(1.0 / fac1_, tmp_va);
+    // dxdt *= 1.0 - 1.0 / fac1_;
+    // dxdt.Add(1.0 / fac1_, fixed_point_tmp_va_);
+
+    const double prev_fac = 1. - fac1_inv_;
+    double* x_ptr = x.GetData();
+    double* v_ptr = dxdt.GetData();
+    const double* xa_ptr = xa.GetData();
+    const double* va_ptr = va.GetData();
+    const double* aa_ptr = aa.GetData();
+    for (int i{}; i < x.Size(); ++i) {
+      const double aa_val = aa_ptr[i];
+      x_ptr[i] =
+          (x_ptr[i] * prev_fac) + (fac1_inv_ * (xa_ptr[i] + fac3dtdt * aa_val));
+      v_ptr[i] =
+          (v_ptr[i] * prev_fac) + (fac1_inv_ * (va_ptr[i] + fac4dt * aa_val));
+    }
   }
 
   virtual void
   AdvanceTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
 
-    // Correct alpha levels
-    xa.Add(fac3_ * dt * dt, aa);
-    va.Add(fac4_ * dt, aa);
+    // // Correct alpha levels
+    // xa.Add(fac3_ * dt * dt, aa);
+    // va.Add(fac4_ * dt, aa);
 
-    // Extrapolate
-    x *= 1.0 - 1.0 / fac1_;
-    x.Add(1.0 / fac1_, xa);
+    // // Extrapolate
+    // x *= 1.0 - 1.0 / fac1_;
+    // x.Add(1.0 / fac1_, xa);
 
-    dxdt *= 1.0 - 1.0 / fac1_;
-    dxdt.Add(1.0 / fac1_, va);
+    // dxdt *= 1.0 - 1.0 / fac1_;
+    // dxdt.Add(1.0 / fac1_, va);
 
-    d2xdt2 *= 1.0 - 1.0 / fac5_;
-    d2xdt2.Add(1.0 / fac5_, aa);
+    // d2xdt2 *= 1.0 - 1.0 / fac5_;
+    // d2xdt2.Add(1.0 / fac5_, aa);
+
+    // do what's above in one loop
+    const double prev_fac = 1. - fac1_inv_;
+    const double fac3dtdt = fac3_ * dt * dt;
+    const double fac4dt = fac4_ * dt;
+    double* x_p = x.GetData();
+    double* v_p = dxdt.GetData();
+    double* a_p = d2xdt2.GetData();
+    double* xa_p = xa.GetData();
+    double* va_p = va.GetData();
+    const double* aa_p = aa.GetData();
+    for (int i{}; i < x.Size(); ++i) {
+      const double aa_val = aa_p[i];
+      // corect alpha values
+      xa_p[i] += fac3dtdt * aa_val;
+      va_p[i] += fac4dt * aa_val;
+      // extrapolate
+      x_p[i] = (x_p[i] * prev_fac) + (fac1_inv_ * xa_p[i]);
+      v_p[i] = (v_p[i] * prev_fac) + (fac1_inv_ * va_p[i]);
+      a_p[i] = (a_p[i] * prev_fac) + (fac5_inv_ * aa_val);
+    }
 
     t += dt;
+
+    // now xa and va should be changing
+    fixed_point_predict_alpha_level_ = true;
+
+    // accumulate!
+    mimi_operator_->PostTimeAdvance(x, dxdt);
   }
 };
 
 /// The classical midpoint method.
-class AverageAccelerationSolver : public GeneralizedAlpha2 {
+class AverageAcceleration : public GeneralizedAlpha2 {
 public:
-  AverageAccelerationSolver(mfem::SecondOrderTimeDependentOperator& oper) {
+  AverageAcceleration(mfem::SecondOrderTimeDependentOperator& oper) {
     alpha_m = 0.5;
     alpha_f = 0.5;
     beta = 0.25;
     gamma = 0.5;
-    ComputeFactors();
     Init(oper);
+    ComputeFactors();
+    SaveMimiDownCast2(&oper);
   }
   virtual std::string Name() const { return "AverageAcceleration"; }
 };
@@ -205,10 +267,11 @@ public:
 /// H.M. Hilber, T.J.R. Hughes and R.L. Taylor 1977
 /// https://doi.org/10.1002/eqe.4290050306
 /// alpha in [2/3,1] --> Defined differently than in paper.
-class HHTAlphaSolver : public GeneralizedAlpha2 {
+class HHTAlpha : public GeneralizedAlpha2 {
 public:
-  HHTAlphaSolver(mfem::SecondOrderTimeDependentOperator& oper,
-                 double alpha = 1.0) {
+  using Base_ = GeneralizedAlpha2;
+
+  HHTAlpha(mfem::SecondOrderTimeDependentOperator& oper, double alpha = 1.) {
     alpha = (alpha > 1.0) ? 1.0 : alpha;
     alpha = (alpha < 2.0 / 3.0) ? 2.0 / 3.0 : alpha;
 
@@ -217,8 +280,9 @@ public:
     beta = (2 - alpha) * (2 - alpha) / 4;
     gamma = 0.5 + alpha_m - alpha_f;
 
-    ComputeFactors();
     Init(oper);
+    ComputeFactors();
+    SaveMimiDownCast2(&oper);
   }
   virtual std::string Name() const { return "HHTAlpha"; }
 };
@@ -228,10 +292,9 @@ public:
 /// W.L. Wood, M. Bossak and O.C. Zienkiewicz 1980
 /// https://doi.org/10.1002/nme.1620151011
 /// rho_inf in [0,1]
-class WBZAlphaSolver : public GeneralizedAlpha2 {
+class WBZAlpha : public GeneralizedAlpha2 {
 public:
-  WBZAlphaSolver(mfem::SecondOrderTimeDependentOperator& oper,
-                 double rho_inf = 1.0) {
+  WBZAlpha(mfem::SecondOrderTimeDependentOperator& oper, double rho_inf = 1.0) {
     rho_inf = (rho_inf > 1.0) ? 1.0 : rho_inf;
     rho_inf = (rho_inf < 0.0) ? 0.0 : rho_inf;
 
@@ -239,9 +302,8 @@ public:
     alpha_m = 2.0 / (1.0 + rho_inf);
     beta = 0.25 * pow(1.0 + alpha_m - alpha_f, 2);
     gamma = 0.5 + alpha_m - alpha_f;
-
-    ComputeFactors();
     Init(oper);
+    ComputeFactors();
   }
   virtual std::string Name() const { return "WBZAlpha"; }
 };
@@ -251,7 +313,7 @@ public:
 /// The classical newmark method.
 /// Newmark, N. M. (1959) A method of computation for structural dynamics.
 /// Journal of Engineering Mechanics, ASCE, 85 (EM3) 67-94.
-class NewmarkSolver : public mfem::SecondOrderODESolver, public OdeBase {
+class Newmark : public mfem::SecondOrderODESolver, public OdeBase {
 protected:
   mfem::Vector d2xdt2, xn, vn;
   double beta_, gamma_;
@@ -259,17 +321,15 @@ protected:
   bool first;
 
 public:
-  NewmarkSolver(mfem::SecondOrderTimeDependentOperator& oper,
-                double beta = 0.25,
-                double gamma = 0.5) {
+  Newmark(mfem::SecondOrderTimeDependentOperator& oper,
+          double beta = 0.25,
+          double gamma = 0.5) {
 
     Init(oper);
     beta_ = beta;
     gamma_ = gamma;
     ComputeFactors();
-
-    mimi_operator_ = dynamic_cast<mimi::operators::OperatorBase*>(&oper);
-    assert(mimi_operator_);
+    SaveMimiDownCast2(&oper);
   }
 
   virtual void ComputeFactors() {
@@ -333,6 +393,7 @@ public:
     x.Add(fac3_ * dt * dt, d2xdt2);
     dxdt.Add(fac4_ * dt, d2xdt2);
     t += dt;
+    mimi_operator_->PostTimeAdvance(x, dxdt);
   }
 
   virtual std::string Name() const { return "Newmark"; }
@@ -350,10 +411,13 @@ public:
 
     mimi_operator_->dt_ = dt;
     Step(x, dxdt, t, dt);
+    mimi_operator_->PostTimeAdvance(x, dxdt);
   }
 
-  virtual void
-  FixedPointSolve2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
+  virtual void FixedPointSolve2(const mfem::Vector& x,
+                                const mfem::Vector& dxdt,
+                                double& t,
+                                double& dt) {
     MIMI_FUNC()
 
     // In the first pass compute d2xdt2 directly from operator.
@@ -390,28 +454,29 @@ public:
     add(vn, fac4_ * dt, d2xdt2, dxdt);
 
     t += dt;
+    mimi_operator_->PostTimeAdvance(x, dxdt);
   }
 };
 
-class LinearAccelerationSolver : public NewmarkSolver {
+class LinearAcceleration : public Newmark {
 public:
-  LinearAccelerationSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 1.0 / 6.0, 0.5) {}
+  LinearAcceleration(mfem::SecondOrderTimeDependentOperator& oper)
+      : Newmark(oper, 1.0 / 6.0, 0.5) {}
 
   virtual std::string Name() const { return "LinearAcceleration"; }
 };
 
-class CentralDifferenceSolver : public NewmarkSolver {
+class CentralDifference : public Newmark {
 public:
-  CentralDifferenceSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 0.0, 0.5) {}
+  CentralDifference(mfem::SecondOrderTimeDependentOperator& oper)
+      : Newmark(oper, 0.0, 0.5) {}
   virtual std::string Name() const { return "CentralDifference"; }
 };
 
-class FoxGoodwinSolver : public NewmarkSolver {
+class FoxGoodwin : public Newmark {
 public:
-  FoxGoodwinSolver(mfem::SecondOrderTimeDependentOperator& oper)
-      : NewmarkSolver(oper, 1.0 / 12.0, 0.5) {}
+  FoxGoodwin(mfem::SecondOrderTimeDependentOperator& oper)
+      : Newmark(oper, 1.0 / 12.0, 0.5) {}
   virtual std::string Name() const { return "FoxGoodwin"; }
 };
 

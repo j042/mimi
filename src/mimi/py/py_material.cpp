@@ -1,12 +1,19 @@
 #include <memory>
 
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+#include "mimi/integrators/material_utils.hpp"
 #include "mimi/integrators/materials.hpp"
 
 namespace mimi::py {
 
 namespace py = pybind11;
+
+template<typename T>
+T* Ptr(const py::array_t<T>& arr) {
+  return static_cast<T*>(arr.request().ptr);
+}
 
 void init_py_material(py::module_& m) {
   /// material laws
@@ -17,6 +24,8 @@ void init_py_material(py::module_& m) {
   using J2NonlinHi = mimi::integrators::J2NonlinearIsotropicHardening;
   using J2NonlinVisco = mimi::integrators::J2NonlinearVisco;
   using J2NonlinAdiabaticVisco = mimi::integrators::J2AdiabaticVisco;
+  using J2NonlinAdiabaticViscoLog =
+      mimi::integrators::J2AdiabaticViscoLogStrain;
 
   /// hardening laws
   using HardeningBase = mimi::integrators::HardeningBase;
@@ -39,7 +48,6 @@ void init_py_material(py::module_& m) {
       .def("name", &MaterialBase::Name)
       .def_readwrite("density", &MaterialBase::density_)
       .def_readwrite("viscosity", &MaterialBase::viscosity_)
-      .def("uses_cauchy", &MaterialBase::UsesCauchy)
       .def("set_young_poisson", &MaterialBase::SetYoungPoisson)
       .def("set_lame", &MaterialBase::SetLame);
 
@@ -152,6 +160,55 @@ void init_py_material(py::module_& m) {
       .def_readwrite("specific_heat", &J2NonlinAdiabaticVisco::specific_heat_)
       .def_readwrite("initial_temperature",
                      &J2NonlinAdiabaticVisco::initial_temperature_);
+
+  py::class_<J2NonlinAdiabaticViscoLog,
+             std::shared_ptr<J2NonlinAdiabaticViscoLog>,
+             J2NonlinAdiabaticVisco>
+      j2_av_log(m, "PyJ2LogStrainAdiabaticVisco");
+  j2_av_log.def(py::init<>());
+
+  m.def("eigen_and_adat", [](py::array_t<double>& arr) {
+    mfem::DenseMatrix mat(static_cast<double*>(arr.request().ptr),
+                          arr.shape(0),
+                          arr.shape(1));
+    py::array_t<double> e_val(arr.shape(0));
+    py::array_t<double> e_vec(arr.size());
+    py::array_t<double> adat(arr.size());
+    mfem::DenseMatrix adatmat, e_vecmat;
+    mfem::Vector e_valvec;
+    e_valvec.SetDataAndSize(static_cast<double*>(e_val.request().ptr),
+                            e_val.size());
+    adatmat.UseExternalData(static_cast<double*>(adat.request().ptr),
+                            arr.shape(0),
+                            arr.shape(1));
+    e_vecmat.UseExternalData(static_cast<double*>(e_vec.request().ptr),
+                             arr.shape(0),
+                             arr.shape(1));
+
+    mat.CalcEigenvalues(static_cast<double*>(e_val.request().ptr),
+                        static_cast<double*>(e_vec.request().ptr));
+
+    mfem::MultADAt(e_vecmat, e_valvec, adatmat);
+    return py::make_tuple(e_val, e_vec, adat);
+  });
+
+  m.def(
+      "log_strain",
+      [](const py::array_t<double>& F, const py::array_t<double>& state) {
+        py::array_t<double> out(F.size());
+        const int d0{(int) F.shape(0)}, d1{(int) F.shape(1)};
+        mimi::integrators::TemporaryData tmp;
+        tmp.aux_mat_.assign(2, mfem::DenseMatrix(d0, d0));
+        tmp.aux_vec_.assign(1, mfem::Vector(d0));
+        mfem::DenseMatrix& state_mat = tmp.stress_; // use any matrix
+        mfem::DenseMatrix& out_mat = tmp.F_dot_;
+        tmp.SetDim(d0);
+        tmp.F_.UseExternalData(Ptr(F), d0, d1);
+        state_mat.UseExternalData(Ptr(state), d0, d1);
+        out_mat.UseExternalData(Ptr(out), d0, d1);
+        mimi::integrators::LogarithmicStrain<0, 1, 0>(state_mat, tmp, out_mat);
+        return out;
+      });
 }
 
 } // namespace mimi::py

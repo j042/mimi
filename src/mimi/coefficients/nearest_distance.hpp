@@ -26,13 +26,11 @@ public:
   /// @brief nearest distance query
   struct Query {
     mimi::utils::Data<double> query_;
-    // mimi::utils::Data<double> initial_guess_;
     int max_iterations_ = -1;
 
-    void SetSize(const int& dim) {
-      query_.Reallocate(dim);
-      // initial_guess_.Reallocate(para_dim);
-    }
+    int Dim() const { return query_.size(); }
+
+    void SetSize(const int& dim) { query_.Reallocate(dim); }
 
     template<typename Stream>
     void Print(Stream& out) const {
@@ -104,6 +102,8 @@ public:
       out << "]\n";
       out << "Normal norm: " << normal_norm_ << "\n";
     }
+
+    int Dim() const { return dim_; }
 
     /// given spline's para_dim and dim, allocates result's size.
     /// set give biggest acceptable size.

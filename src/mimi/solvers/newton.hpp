@@ -20,12 +20,12 @@ public:
 
   using Base_::Base_;
 
-  // extra freeze option
-  // if freeze == false, considered as melt
-  bool freeze_{false};
-
   /// pointer to nl oper to
   mimi::operators::NonlinearSolid* nl_oper_{nullptr};
+
+  /// Mult is not thread safe, due to some mutable variables. so let's use this
+  /// vector within Mult()
+  mutable mfem::Vector line_search_temp_x_;
 
   /// @brief implements scaling factor using line search adapted from
   /// https://github.com/LLNL/ExaConstit/blob/exaconstit-dev/src/mechanics_solver.cpp

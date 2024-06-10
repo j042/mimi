@@ -11,9 +11,8 @@ void init_py_nonlinear_base_integrator(py::module_& m) {
   py::class_<NonlinearBase, std::shared_ptr<NonlinearBase>> klasse(
       m,
       "PyNonlinearIntegratorBase");
-  // klasse.def(py::init<>())
   klasse.def("name", &NonlinearBase::Name)
-      .def("gap_norm", &NonlinearBase::GapNorm)
+      .def("gap_norm", &NonlinearBase::LastGapNorm)
       .def("temperature",
            [](NonlinearBase& nlb,
               const py::array_t<double>& x,
@@ -23,7 +22,7 @@ void init_py_nonlinear_base_integrator(py::module_& m) {
              mfem::Vector t_vec(static_cast<double*>(temperature.request().ptr),
                                 temperature.size());
 
-             nlb.Temperature(x_vec, t_vec);
+             nlb.Temperature(t_vec);
            })
       .def("accumulated_plastic_strain",
            [](NonlinearBase& nlb,

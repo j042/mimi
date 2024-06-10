@@ -5,7 +5,9 @@
 
 #include <mfem.hpp>
 
+#include "mimi/integrators/material_hardening.hpp"
 #include "mimi/integrators/material_utils.hpp"
+#include "mimi/integrators/nonlinear_base.hpp"
 #include "mimi/solvers/newton.hpp"
 #include "mimi/utils/ad.hpp"
 #include "mimi/utils/containers.hpp"
@@ -21,10 +23,6 @@ struct MaterialState {
   Vector_<mfem::DenseMatrix> matrices_;
   Vector_<mfem::Vector> vectors_;
   Vector_<double> scalars_;
-
-  /// flag to notify non-accumulation
-  /// use during in FD and line search
-  bool freeze_{false};
 };
 
 /// Material base.
@@ -40,22 +38,6 @@ public:
 
 protected:
   int dim_;
-  int n_threads_;
-
-  /// I want to be thread-safe. Don't touch me after Setup
-  mfem::DenseMatrix I_;
-
-  /// those tmp/aux containers needs to be initialized in Setup
-  /// for thread safe use.
-  Vector_<Vector_<mfem::DenseMatrix>> aux_matrices_;
-  Vector_<Vector_<mfem::Vector>> aux_vectors_;
-
-  /// this is to help switch from PK1 to sigma and vice versa
-  Vector_<Vector_<mfem::DenseMatrix>> stress_conversions_;
-
-  static constexpr const int k_P{0};
-  static constexpr const int k_sigma{1};
-  static constexpr const int k_F_inv{2};
 
 public:
   double density_{-1.0};
@@ -66,8 +48,6 @@ public:
   double poisson_{-1.0};
   double K_{-1.0};
   double G_{-1.0};
-
-  virtual void Prepare(const int dim, const int n_threads_) { MIMI_FUNC() }
 
   virtual std::string Name() const { return "MaterialBase"; }
 
@@ -94,17 +74,10 @@ public:
   /// self setup. will be called once.
   /// unless you want to do it your self, call this one.
   /// before you extend Setup.
-  virtual void Setup(const int dim, const int n_threads) {
+  virtual void Setup(const int dim) {
     MIMI_FUNC()
 
     dim_ = dim;
-    n_threads_ = n_threads;
-
-    stress_conversions_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
-
-    I_.Diag(1., dim);
 
     mimi::utils::PrintInfo(Name(),
                            "Material Paramters:",
@@ -122,15 +95,14 @@ public:
                            K_);
   }
 
+  virtual void AllocateAux(TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("AllocateAux not implemented for", Name());
+  }
+
   /// answers if this material is suitable for visco-solids.
   virtual bool IsRateDependent() const { return false; }
-
-  /// gives hint to integrator, which stress is implemented we need
-  virtual bool UsesCauchy() const {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("Please override UsesCauchy() function");
-    return false;
-  }
 
   /// each material that needs states can implement this.
   /// else, just nullptr
@@ -142,90 +114,42 @@ public:
   /// @param F
   /// @param state
   /// @param sigma
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
-                              MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+  virtual void EvaluateCauchy(const MaterialStatePtr_& state,
+                              TemporaryData& tmp,
+                              mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
-
-    // setup aux
-    auto& i_conv = stress_conversions_[i_thread];
-    mfem::DenseMatrix& P = i_conv[k_P];
 
     // get P
-    EvaluatePK1(F, i_thread, state, P);
+    EvaluatePK1(state, tmp, tmp.alternative_stress_);
 
     // 1 / det(F) * P * F^T
     // they don't have mfem::Mult_a_ABt();
-    mfem::MultABt(P, F, sigma);
-    sigma *= 1. / F.Det();
-  }
-
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const mfem::DenseMatrix& F_dot,
-                              const int& i_thread,
-                              MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
-    MIMI_FUNC()
-
-    // setup aux
-    auto& i_conv = stress_conversions_[i_thread];
-    mfem::DenseMatrix& P = i_conv[k_P];
-
-    EvaluatePK1(F, F_dot, i_thread, state, sigma);
-
-    // 1 / det(F) * P * F^T
-    // they don't have mfem::Mult_a_ABt();
-    mfem::MultABt(P, F, sigma);
-    sigma *= 1. / F.Det();
+    mfem::MultABt(tmp.alternative_stress_, tmp.F_, sigma);
+    sigma *= 1. / tmp.DetF();
   }
 
   /// @brief unless implemented, this will try to call evaluate sigma and
   /// transform if none of stress is implemented, you will be stuck in a
   /// neverending loop current implementation is not so memory efficient
-  virtual void EvaluatePK1(const mfem::DenseMatrix& F,
-                           const int& i_thread,
-                           MaterialStatePtr_& state,
-                           mfem::DenseMatrix& P) {
+  virtual void EvaluatePK1(const MaterialStatePtr_& state,
+                           TemporaryData& tmp,
+                           mfem::DenseMatrix& P) const {
     MIMI_FUNC()
 
-    // setup aux
-    auto& i_conv = stress_conversions_[i_thread];
-    mfem::DenseMatrix& F_inv = i_conv[k_F_inv];
-    mfem::DenseMatrix& sigma = i_conv[k_sigma];
-
     // get sigma
-    EvaluateCauchy(F, i_thread, state, sigma);
+    EvaluateCauchy(state, tmp, tmp.alternative_stress_);
 
     // P = det(F) * sigma * F^-T
-    mfem::CalcInverse(F, F_inv);
-    mfem::MultABt(sigma, F_inv, P);
-    P *= F.Det();
+    mfem::MultABt(tmp.alternative_stress_, tmp.FInv(), P);
+    P *= tmp.DetF();
   }
 
-  virtual void EvaluatePK1(const mfem::DenseMatrix& F,
-                           const mfem::DenseMatrix& F_dot,
-                           const int& i_thread,
-                           MaterialStatePtr_& state,
-                           mfem::DenseMatrix& P) {
+  /// state accumulating version
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
 
-    // setup aux
-    auto& i_conv = stress_conversions_[i_thread];
-    mfem::DenseMatrix& F_inv = i_conv[k_F_inv];
-    mfem::DenseMatrix& sigma = i_conv[k_sigma];
-
-    // get sigma
-    EvaluateCauchy(F, F_dot, i_thread, state, sigma);
-
-    // P = det(F) * sigma * F^-T
-    mfem::CalcInverse(F, F_inv);
-    mfem::MultABt(sigma, F_inv, P);
-    P *= F.Det();
+    mimi::utils::PrintAndThrowError("Accumulate() not implemented for", Name());
   }
-
-  ///
-  virtual void EvaluateGrad() const { MIMI_FUNC() }
 };
 
 class StVenantKirchhoff : public MaterialBase {
@@ -242,47 +166,33 @@ protected:
 public:
   virtual std::string Name() const { return "StVenantKirchhoff"; }
 
-  /// gives hint to integrator, which stress is implemented we need
-  virtual bool UsesCauchy() const {
-    MIMI_FUNC()
-    return false;
-  }
-
-  virtual void Setup(const int dim, const int nthread) {
+  virtual void AllocateAux(TemporaryData& tmp) const {
     MIMI_FUNC()
 
-    /// base setup for conversions and dim, nthread
-    Base_::Setup(dim, nthread);
-
-    /// make space for C F S
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+    tmp.aux_mat_.resize(3, mfem::DenseMatrix(dim_, dim_));
   }
 
-  virtual void EvaluatePK1(const mfem::DenseMatrix& F,
-                           const int& i_thread,
-                           MaterialStatePtr_&,
-                           mfem::DenseMatrix& P) {
+  virtual void EvaluatePK1(const MaterialStatePtr_& state,
+                           TemporaryData& tmp,
+                           mfem::DenseMatrix& P) const {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& C = i_aux[k_C];
-    mfem::DenseMatrix& E = i_aux[k_E];
-    mfem::DenseMatrix& S = i_aux[k_S];
+    mfem::DenseMatrix& C = tmp.aux_mat_[k_C];
+    mfem::DenseMatrix& E = tmp.aux_mat_[k_E];
+    mfem::DenseMatrix& S = tmp.aux_mat_[k_S];
 
     // C
-    mfem::MultAtB(F, F, C);
+    mfem::MultAtB(tmp.F_, tmp.F_, C);
 
     // E
-    mfem::Add(.5, C, -.5, I_, E);
+    mfem::Add(.5, C, -.5, tmp.I_, E);
 
     // S
-    mfem::Add(lambda_ * E.Trace(), I_, 2 * mu_, E, S);
+    mfem::Add(lambda_ * E.Trace(), tmp.I_, 2 * mu_, E, S);
 
     // P
-    mfem::Mult(F, S, P);
+    mfem::Mult(tmp.F_, S, P);
   }
 };
 
@@ -301,39 +211,25 @@ protected:
 public:
   virtual std::string Name() const { return "CompressibleOdgenNeoHookean"; }
 
-  /// gives hint to integrator, which stress is implemented we need
-  virtual bool UsesCauchy() const {
-    MIMI_FUNC()
-    return true;
-  }
-
-  virtual void Setup(const int dim, const int nthread) {
+  virtual void AllocateAux(TemporaryData& tmp) const {
     MIMI_FUNC()
 
-    /// base setup for conversions and dim, nthread
-    Base_::Setup(dim, nthread);
-
-    /// make space for C F S
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(1, mfem::DenseMatrix(dim_)));
+    tmp.aux_mat_.resize(1, mfem::DenseMatrix(dim_, dim_));
   }
 
   /// mu / det(F) * (B - I) + lambda * (det(F) - 1) I
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
-                              MaterialStatePtr_&,
-                              mfem::DenseMatrix& sigma) {
+  virtual void EvaluateCauchy(const MaterialStatePtr_& state,
+                              TemporaryData& tmp,
+                              mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& B = i_aux[k_B];
+    mfem::DenseMatrix& B = tmp.aux_mat_[k_B];
 
     // precompute aux values
-    const double det_F = F.Det();
+    const double det_F = tmp.DetF();
     const double mu_over_det_F = mu_ / det_F;
-    mfem::MultABt(F, F, B); // left green
+    mfem::MultABt(tmp.F_, tmp.F_, B); // left green
 
     // flattening the eq above,
     // mu / det(F) B - mu / det(F) I + lambda * (det(F) - 1) I
@@ -341,7 +237,7 @@ public:
     mfem::Add(mu_over_det_F,
               B,
               -mu_over_det_F + lambda_ * (det_F - 1.),
-              I_,
+              tmp.I_,
               sigma);
   }
 };
@@ -367,7 +263,6 @@ public:
     /// matrix indices
     static constexpr const int k_plastic_strain{0};
     static constexpr const int k_beta{1};
-
     /// scalar indices
     static constexpr const int k_accumulated_plastic_strain{0};
   };
@@ -389,22 +284,10 @@ protected:
 public:
   virtual std::string Name() const { return "J2"; }
 
-  /// gives hint to integrator, which stress is implemented we need
-  virtual bool UsesCauchy() const {
-    MIMI_FUNC()
-    return false;
-  }
-
-  virtual void Setup(const int dim, const int nthread) {
+  virtual void AllocateAux(TemporaryData& tmp) const {
     MIMI_FUNC()
 
-    /// base setup for conversions and dim, nthread
-    Base_::Setup(dim, nthread);
-
-    /// make space for du_dX
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+    tmp.aux_mat_.resize(3, mfem::DenseMatrix(dim_, dim_));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -420,30 +303,28 @@ public:
     // one scalar, also zero
     state->scalars_.resize(state->k_state_scalars, 0.);
     return state;
-  };
+  }
 
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
-                              MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
-    MIMI_FUNC()
-
+  template<bool accumulate>
+  void PlasticStress(std::conditional_t<accumulate,
+                                        MaterialStatePtr_,
+                                        const MaterialStatePtr_>& state,
+                     TemporaryData& tmp,
+                     mfem::DenseMatrix& sigma) const {
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& eta = i_aux[k_eta];
+    mfem::DenseMatrix& eps = tmp.aux_mat_[k_eps];
+    mfem::DenseMatrix& s = tmp.aux_mat_[k_s];
+    mfem::DenseMatrix& eta = tmp.aux_mat_[k_eta];
 
     // get states
-    mfem::DenseMatrix& beta = state->matrices_[State::k_beta];
-    mfem::DenseMatrix& plastic_strain =
-        state->matrices_[State::k_plastic_strain];
-    double& accumulated_plastic_strain =
+    auto& beta = state->matrices_[State::k_beta];
+    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& accumulated_plastic_strain =
         state->scalars_[State::k_accumulated_plastic_strain];
 
     // precompute aux values
     // eps, p, s, eta, q, phi
-    ElasticStrain(F, plastic_strain, eps);
+    ElasticStrain(tmp.F_, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
     mfem::Add(s, beta, -1., eta);
@@ -456,15 +337,13 @@ public:
       // 7.207
       const double plastic_strain_inc =
           phi / (3. * G_ + kinematic_hardening_ + isotropic_hardening_);
-
       // normalize eta in-place as we don't need it anymore
       eta *= 1. / eta_norm;
-
-      // return mapping
-      s.Add(-sqrt_6_ * G_ * plastic_strain_inc, eta);
-
-      // this part should only be done at stepping.
-      if (!state->freeze_) {
+      if constexpr (!accumulate) {
+        // return mapping
+        s.Add(-sqrt_6_ * G_ * plastic_strain_inc, eta);
+      }
+      if constexpr (accumulate) { // this part should only be done at stepping.
         accumulated_plastic_strain += plastic_strain_inc;
         plastic_strain.Add(sqrt_3_2_ * plastic_strain_inc, eta);
         beta.Add(sqrt_2_3_ * kinematic_hardening_ * plastic_strain_inc, eta);
@@ -472,114 +351,22 @@ public:
     }
 
     // returning s + p * I
-    mfem::Add(s, I_, p, sigma);
-  }
-};
-
-struct HardeningBase {
-  using ADScalar_ = mimi::utils::ADScalar<double, 1>;
-
-  virtual std::string Name() const { return "HardeningBase"; }
-
-  virtual bool IsRateDependent() const { return false; }
-  virtual bool IsTemperatureDependent() const { return false; }
-  virtual void Validate() const { MIMI_FUNC() }
-
-  virtual ADScalar_
-  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("HardeningBase::Evaluate not overriden");
-    return {};
-  }
-
-  virtual ADScalar_
-  Evaluate(const ADScalar_& accumulated_plastic_strain,
-           const double& equivalent_plastic_strain_rate) const {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError(
-        "HardeningBase::Evaluate (rate-dependent) not overriden");
-    return {};
-  }
-
-  virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
-                             const double& equivalent_plastic_strain_rate,
-                             const double& temperature) const {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError(
-        "HardeningBase::Evaluate (thermo-rate-dependent) not overriden");
-    return {};
-  }
-
-  virtual double SigmaY() const {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("HardeningBase::SigmaY not overriden");
-    return -1.0;
-  }
-};
-
-struct PowerLawHardening : public HardeningBase {
-  using Base_ = HardeningBase;
-  using ADScalar_ = Base_::ADScalar_;
-
-  double sigma_y_;
-  double n_;
-  double eps0_;
-
-  virtual std::string Name() const { return "PowerLawHardening"; }
-
-  virtual ADScalar_
-  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
-    MIMI_FUNC()
-
-    return sigma_y_ * pow(1.0 + accumulated_plastic_strain / eps0_, 1.0 / n_);
-  }
-
-  virtual double SigmaY() const { return sigma_y_; }
-};
-
-struct VoceHardening : public HardeningBase {
-  using Base_ = HardeningBase;
-  using ADScalar_ = Base_::ADScalar_;
-
-  double sigma_y_;
-  double sigma_sat_;
-  double strain_constant_;
-
-  virtual std::string Name() const { return "VoceHardening"; }
-
-  virtual ADScalar_
-  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
-    MIMI_FUNC()
-
-    return sigma_sat_
-           - (sigma_sat_ - sigma_y_)
-                 * exp(-accumulated_plastic_strain / strain_constant_);
-  }
-
-  virtual double SigmaY() const { return sigma_y_; }
-};
-
-struct JohnsonCookHardening : public HardeningBase {
-  using Base_ = HardeningBase;
-  using ADScalar_ = Base_::ADScalar_;
-
-  double A_;
-  double B_;
-  double n_;
-
-  virtual std::string Name() const { return "JohnsonCookHardening"; }
-
-  virtual ADScalar_
-  Evaluate(const ADScalar_& accumulated_plastic_strain) const {
-    MIMI_FUNC()
-    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
-      return ADScalar_(A_);
+    if constexpr (!accumulate) {
+      mfem::Add(s, tmp.I_, p, sigma);
     }
-
-    return A_ + B_ * pow(accumulated_plastic_strain, n_);
   }
 
-  virtual double SigmaY() const { return A_; }
+  virtual void EvaluateCauchy(const MaterialStatePtr_& state,
+                              TemporaryData& tmp,
+                              mfem::DenseMatrix& sigma) const {
+    MIMI_FUNC()
+    PlasticStress<false>(state, tmp, sigma);
+  }
+
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+    MIMI_FUNC()
+    PlasticStress<true>(state, tmp, tmp.stress_ /* unused */);
+  }
 };
 
 /// @brief Computational Methods for plasticity p260, box 7.5
@@ -615,8 +402,6 @@ public:
 protected:
   /// some constants
   const double sqrt_3_2_ = std::sqrt(3.0 / 2.0);
-
-  /// lookup index for matrix
   /// elastic strain
   static constexpr const int k_eps{0};
   /// stress deviator
@@ -627,22 +412,10 @@ protected:
 public:
   virtual std::string Name() const { return "J2NonlinearIsotropicHardening"; }
 
-  /// gives hint to integrator, which stress is implemented we need
-  virtual bool UsesCauchy() const {
-    MIMI_FUNC()
-    return false;
-  }
-
-  virtual void Setup(const int dim, const int nthread) {
+  virtual void AllocateAux(TemporaryData& tmp) const {
     MIMI_FUNC()
 
-    /// base setup for conversions and dim, nthread
-    Base_::Setup(dim, nthread);
-
-    /// make space for du_dX
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+    tmp.aux_mat_.resize(3, mfem::DenseMatrix(dim_, dim_));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -660,27 +433,26 @@ public:
     return state;
   };
 
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
-                              MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+  template<bool accumulate>
+  void PlasticStress(std::conditional_t<accumulate,
+                                        MaterialStatePtr_,
+                                        const MaterialStatePtr_>& state,
+                     TemporaryData& tmp,
+                     mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
-    // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    mfem::DenseMatrix& eps = tmp.aux_mat_[k_eps];
+    mfem::DenseMatrix& s = tmp.aux_mat_[k_s];
+    mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
 
-    // get states
-    mfem::DenseMatrix& plastic_strain =
-        state->matrices_[State::k_plastic_strain];
-    double& accumulated_plastic_strain =
+    // get states - will get corresponding const-ness
+    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& accumulated_plastic_strain =
         state->scalars_[State::k_accumulated_plastic_strain];
 
     // precompute aux values
     // eps, p, s, eta, q, phi
-    ElasticStrain(F, plastic_strain, eps);
+    ElasticStrain(tmp.F_, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
     const double q = sqrt_3_2_ * Norm(s);
@@ -717,153 +489,33 @@ public:
       // here it goes
       N_p.Set(1.5 / q, s);
 
-      s.Add(-2.0 * G_ * delta_eqps, N_p);
-      if (!state->freeze_) {
+      if constexpr (!accumulate) {
+        s.Add(-2.0 * G_ * delta_eqps, N_p);
+      }
+
+      // no accumulation here
+      if constexpr (accumulate) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
       }
     }
 
     // returning s + p * I
-    mfem::Add(s, I_, p, sigma);
-  }
-};
-
-struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
-  using Base_ = JohnsonCookHardening;
-  using ADScalar_ = Base_::ADScalar_;
-
-  using Base_::A_;
-  using Base_::B_;
-  using Base_::n_;
-  double C_;
-  // several ways to call this
-  // Jannis calls this reference strain rate
-  // wikipedia call this:
-  double effective_plastic_strain_rate_;
-
-  /// @brief  this is a long name for a hardening model
-  /// @return
-  virtual std::string Name() const {
-    return "JohnsonCookRateDependentHardening";
+    if constexpr (!accumulate) {
+      mfem::Add(s, tmp.I_, p, sigma);
+    }
   }
 
-  virtual bool IsRateDependent() const { return true; }
-
-  virtual ADScalar_
-  Evaluate(const ADScalar_& accumulated_plastic_strain,
-           const double& equivalent_plastic_strain_rate) const {
+  virtual void EvaluateCauchy(const MaterialStatePtr_& state,
+                              TemporaryData& tmp,
+                              mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
-
-    double visco_contribution{1.0};
-    // we only want to avoid 0.0 as it leads to domain error (nan)
-    // this won't be negative, so no need to check that
-    // with 1E-323, log returns -743.75.
-    // if (equivalent_plastic_strain_rate != 0.0) {
-    //   visco_contribution += C_
-    //                         * std::log(equivalent_plastic_strain_rate
-    //                                    / effective_plastic_strain_rate_);
-    //   // however, we don't want this to be smaller than 0.0?
-    //   if (visco_contribution <= 0.0) {
-    //     mimi::utils::PrintWarning(
-    //         "visco_contribution negative, setting it to 1e-10.");
-    //     visco_contribution = 1e-10;
-    //   }
-    // }
-    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
-      visco_contribution += C_
-                            * std::log(equivalent_plastic_strain_rate
-                                       / effective_plastic_strain_rate_);
-    }
-
-    return Base_::Evaluate(accumulated_plastic_strain) * visco_contribution;
-  }
-};
-
-struct JohnsonCookConstantTemperatureHardening
-    : public JohnsonCookRateDependentHardening {
-  using Base_ = JohnsonCookRateDependentHardening;
-  using ADScalar_ = Base_::ADScalar_;
-
-  using Base_::A_;
-  using Base_::B_;
-  using Base_::C_;
-  using Base_::effective_plastic_strain_rate_;
-  using Base_::n_;
-
-  // temperature related
-  double reference_temperature_;
-  double melting_temperature_;
-  double m_;
-  double temperature_; // this will stay constant
-
-  // temperature contribution
-  mutable double temperature_contribution_;
-
-  /// @brief  this is a long name for a hardening model
-  /// @return
-  virtual std::string Name() const {
-    return "JohnsonCookConstantTemperatureHardening";
+    PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual bool IsRateDependent() const { return true; }
-
-  virtual bool IsTemperatureDependent() const { return false; }
-
-  virtual void Validate() const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
-
-    if (reference_temperature_ > melting_temperature_) {
-      mimi::utils::PrintAndThrowError(
-          "reference temperature,",
-          reference_temperature_,
-          ",can't be bigger than melting temperature,",
-          melting_temperature_,
-          ".");
-    }
-
-    // compute frequently used value
-    temperature_contribution_ =
-        1.0
-        - std::pow((temperature_ - reference_temperature_)
-                       / (melting_temperature_ - reference_temperature_),
-                   m_);
-
-    mimi::utils::PrintInfo(Name(),
-                           "Temp:",
-                           temperature_,
-                           "Ref Temp:",
-                           reference_temperature_,
-                           "Melting Temp:",
-                           melting_temperature_,
-                           "Contribution:",
-                           temperature_contribution_);
-
-    if (temperature_contribution_ <= 0.0) {
-      mimi::utils::PrintAndThrowError("Invalid temperature contribution",
-                                      temperature_contribution_);
-    }
-  }
-
-  virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
-                             const double& equivalent_plastic_strain_rate,
-                             const double& temperature) const {
-    MIMI_FUNC()
-
-    // get visco contribution
-    double visco_contribution{1.0};
-    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
-      visco_contribution += C_
-                            * std::log(equivalent_plastic_strain_rate
-                                       / effective_plastic_strain_rate_);
-    }
-
-    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
-      return ADScalar_(A_) * visco_contribution * temperature_contribution_;
-    }
-
-    return (A_ + B_ * pow(accumulated_plastic_strain, n_)) * visco_contribution
-           * temperature_contribution_;
+    PlasticStress<true>(state, tmp, tmp.stress_ /* unused */);
   }
 };
 
@@ -898,7 +550,6 @@ public:
 protected:
   /// some constants
   const double sqrt_3_2_ = std::sqrt(3.0 / 2.0);
-
   /// lookup index for matrix
   /// elastic strain
   static constexpr const int k_eps{0};
@@ -913,17 +564,11 @@ public:
   /// answers if this material is suitable for visco-solids.
   virtual bool IsRateDependent() const { return true; }
 
-  /// gives hint to integrator, which stress is implemented we need
-  virtual bool UsesCauchy() const {
-    MIMI_FUNC()
-    return false;
-  }
-
-  virtual void Setup(const int dim, const int nthread) {
+  virtual void Setup(const int dim) {
     MIMI_FUNC()
 
     /// base setup for conversions and dim, nthread
-    Base_::Setup(dim, nthread);
+    Base_::Setup(dim);
 
     // check if this is an appropriate hardening.
     if (hardening_) {
@@ -935,11 +580,12 @@ public:
     } else {
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
+  }
 
-    /// make space for du_dX
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(3, mfem::DenseMatrix(dim_)));
+  virtual void AllocateAux(TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    tmp.aux_mat_.resize(3, mfem::DenseMatrix(dim_, dim_));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -955,45 +601,35 @@ public:
     // one scalar, also zero
     state->scalars_.resize(state->k_state_scalars, 0.);
     return state;
-  };
-
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
-                              MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
-    MIMI_FUNC()
-
-    mimi::utils::PrintAndThrowError("Invalid call for ", Name());
   }
 
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const mfem::DenseMatrix& F_dot,
-                              const int& i_thread,
-                              MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+  template<bool accumulate>
+  void PlasticStress(std::conditional_t<accumulate,
+                                        MaterialStatePtr_,
+                                        const MaterialStatePtr_>& state,
+                     TemporaryData& tmp,
+                     mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
+    mfem::DenseMatrix& eps = tmp.aux_mat_[k_eps];
+    mfem::DenseMatrix& s = tmp.aux_mat_[k_s];
+    mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
 
     // get states
-    mfem::DenseMatrix& plastic_strain =
-        state->matrices_[State::k_plastic_strain];
-    double& accumulated_plastic_strain =
+    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& accumulated_plastic_strain =
         state->scalars_[State::k_accumulated_plastic_strain];
 
     // precompute aux values
     // eps, p, s, eta, q, equivalent plastic strain rate
-    ElasticStrain(F, plastic_strain, eps);
+    ElasticStrain(tmp.F_, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
     const double q = sqrt_3_2_ * Norm(s); // trial mises
 
     // TODO consider using `EquivalentPlasticStrainRate2D`?
-    const double eqps_rate = EquivalentPlasticStrainRate(F_dot);
+    const double eqps_rate = EquivalentPlasticStrainRate(tmp.F_dot_);
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
@@ -1021,104 +657,36 @@ public:
                                                            lower_bound,
                                                            upper_bound,
                                                            opts);
-      // compute sqrt(3/2) * s / norm(s)
-      // this is sqrt(3/2 s : s)
-      // this term is use for both s and plastic strain
-      // this is equivalent to
-      // 3/2 / q * s = 3/2 * s * sqrt(2/3) / norm(s)
       N_p.Set(1.5 / q, s);
 
-      s.Add(-2.0 * G_ * delta_eqps, N_p);
-      if (!state->freeze_) {
+      if constexpr (!accumulate) {
+        s.Add(-2.0 * G_ * delta_eqps, N_p);
+      }
+
+      if constexpr (accumulate) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
       }
     }
 
     // returning s + p * I
-    mfem::Add(s, I_, p, sigma);
-  }
-};
-
-struct JohnsonCookAdiabaticRateDependentHardening
-    : public JohnsonCookRateDependentHardening {
-  using Base_ = JohnsonCookRateDependentHardening;
-  using ADScalar_ = Base_::ADScalar_;
-
-  using Base_::A_;
-  using Base_::B_;
-  using Base_::C_;
-  using Base_::effective_plastic_strain_rate_;
-  using Base_::n_;
-
-  // temperature related
-  double reference_temperature_;
-  double melting_temperature_;
-  double m_;
-
-  // frequently used value.
-  // we compute this in validate
-  // TODO - restructure to be somewhere that suits better
-  mutable double inv_Tm_minus_Tr_;
-
-  /// @brief  this is a long name for a hardening model
-  /// @return
-  virtual std::string Name() const {
-    return "JohnsonCookAdiabaticRateDependentHardening";
+    if constexpr (!accumulate) {
+      mfem::Add(s, tmp.I_, p, sigma);
+    }
   }
 
-  virtual bool IsRateDependent() const { return true; }
-
-  virtual bool IsTemperatureDependent() const { return true; }
-
-  virtual void Validate() const {
+  virtual void EvaluateCauchy(const MaterialStatePtr_& state,
+                              TemporaryData& tmp,
+                              mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
-    if (reference_temperature_ > melting_temperature_) {
-      mimi::utils::PrintAndThrowError(
-          "reference temperature,",
-          reference_temperature_,
-          ",can't be bigger than melting temperature,",
-          melting_temperature_,
-          ".");
-    }
-
-    // compute frequently used value
-    inv_Tm_minus_Tr_ = 1. / (melting_temperature_ - reference_temperature_);
+    PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
-                             const double& equivalent_plastic_strain_rate,
-                             const double& temperature) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
     MIMI_FUNC()
 
-    // get visco contribution
-    double visco_contribution{1.0};
-    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
-      visco_contribution += C_
-                            * std::log(equivalent_plastic_strain_rate
-                                       / effective_plastic_strain_rate_);
-    }
-
-    // then thermo
-    double thermo_contribution{1.0};
-    if (temperature < reference_temperature_) {
-      //   nothing
-    } // melted: yield stress is zero
-    else if (temperature > melting_temperature_) {
-      thermo_contribution = 0.0;
-    } else {
-      thermo_contribution -=
-          std::pow((temperature - reference_temperature_) * inv_Tm_minus_Tr_,
-                   m_);
-    }
-
-    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
-      return ADScalar_(A_) * visco_contribution * thermo_contribution;
-    }
-
-    return (A_ + B_ * pow(accumulated_plastic_strain, n_)) * visco_contribution
-           * thermo_contribution;
+    PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder*/);
   }
 };
 
@@ -1143,8 +711,7 @@ public:
   double heat_fraction_{0.9};        // 0.9 is apparently abaqus' default
   double specific_heat_;             // for now, constant
   double initial_temperature_{20.0}; //
-
-  double melting_temperature_{}; // taken from hardening
+  double melting_temperature_{};     // takes from hardening - TODO - change
 
   static constexpr const double k_tol{1.e-10};
 
@@ -1169,7 +736,7 @@ protected:
   static constexpr const int k_s{1};
   /// N_p
   static constexpr const int k_N_p{2};
-
+  /// optional velocity gradient
   static constexpr const int k_L{3};
 
 public:
@@ -1178,17 +745,11 @@ public:
   /// answers if this material is suitable for visco-solids.
   virtual bool IsRateDependent() const { return true; }
 
-  /// gives hint to integrator, which stress is implemented we need
-  virtual bool UsesCauchy() const {
-    MIMI_FUNC()
-    return false;
-  }
-
-  virtual void Setup(const int dim, const int nthread) {
+  virtual void Setup(const int dim) {
     MIMI_FUNC()
 
     /// base setup for conversions and dim, nthread
-    Base_::Setup(dim, nthread);
+    Base_::Setup(dim);
 
     // check if this is an appropriate hardening.
     if (hardening_) {
@@ -1207,17 +768,18 @@ public:
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
 
-    /// make space for du_dX
-    aux_matrices_.resize(
-        n_threads_,
-        Vector_<mfem::DenseMatrix>(4, mfem::DenseMatrix(dim_)));
-
     // temporary solution to getting melt t.
     // TODO do better
     melting_temperature_ =
         std::dynamic_pointer_cast<JohnsonCookAdiabaticRateDependentHardening>(
             hardening_)
             ->melting_temperature_;
+  }
+
+  virtual void AllocateAux(TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    tmp.aux_mat_.resize(4, mfem::DenseMatrix(dim_, dim_));
   }
 
   virtual MaterialStatePtr_ CreateState() const {
@@ -1237,15 +799,6 @@ public:
     state->scalars_[State::k_temperature] = initial_temperature_;
     return state;
   };
-
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const int& i_thread,
-                              MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
-    MIMI_FUNC()
-
-    mimi::utils::PrintAndThrowError("Invalid call for ", Name());
-  }
 
   /// hard coded version of plastic strain rate and temperature computation
   void PlasticStrainRateAndTemperatureRate(const mfem::DenseMatrix& F_dot,
@@ -1307,8 +860,6 @@ public:
       sig3 -= sig_trace_over_dim;
 
       const double work = (ed0 * sig0 + ed1 * sig1 + ed1 * sig2 + ed3 * sig3);
-      // mimi::utils::PrintInfo(sig0, sig1, sig2, sig3, ed0, ed1, ed3, work);
-      // std::cout << "work " << work << "\n";
       if (work < 0.0) {
         temperature_rate = 0.0;
       } else {
@@ -1349,39 +900,35 @@ public:
     }
   }
 
-  virtual void EvaluateCauchy(const mfem::DenseMatrix& F,
-                              const mfem::DenseMatrix& F_dot,
-                              const int& i_thread,
-                              MaterialStatePtr_& state,
-                              mfem::DenseMatrix& sigma) {
+  template<bool accumulate>
+  void PlasticStress(std::conditional_t<accumulate,
+                                        MaterialStatePtr_,
+                                        const MaterialStatePtr_>& state,
+                     TemporaryData& tmp,
+                     mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
     // get aux
-    auto& i_aux = aux_matrices_[i_thread];
-    mfem::DenseMatrix& eps = i_aux[k_eps];
-    mfem::DenseMatrix& s = i_aux[k_s];
-    mfem::DenseMatrix& N_p = i_aux[k_N_p];
-    mfem::DenseMatrix& L = i_aux[k_L];
+    mfem::DenseMatrix& eps = tmp.aux_mat_[k_eps];
+    mfem::DenseMatrix& s = tmp.aux_mat_[k_s];
+    mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
+    // mfem::DenseMatrix& L = tmp.aux_mat_[k_L];
 
     // get states
-    mfem::DenseMatrix& plastic_strain =
-        state->matrices_[State::k_plastic_strain];
-    double& accumulated_plastic_strain =
+    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& accumulated_plastic_strain =
         state->scalars_[State::k_accumulated_plastic_strain];
-    double& temperature = state->scalars_[State::k_temperature];
+    auto& temperature = state->scalars_[State::k_temperature];
 
     // precompute aux values
     // eps, p, s, eta, q, equivalent plastic strain rate
-    ElasticStrain(F, plastic_strain, eps);
+    ElasticStrain(tmp.F_, plastic_strain, eps);
     const double p = K_ * eps.Trace();
     Dev(eps, dim_, 2.0 * G_, s);
     const double q = sqrt_3_2_ * Norm(s); // trial mises
-
     // get eqps_rate and delta temperature
     double eqps_rate, temperature_rate;
-    // VelocityGradient(F, F_dot, L);
-    PlasticStrainRateAndTemperatureRate(F_dot,
-                                        // L,
+    PlasticStrainRateAndTemperatureRate(tmp.F_dot_,
                                         eps,
                                         eqps_rate,
                                         temperature_rate);
@@ -1414,26 +961,222 @@ public:
                                                            lower_bound,
                                                            upper_bound,
                                                            opts);
-      // compute sqrt(3/2) * s / norm(s)
-      // this is sqrt(3/2 s : s)
-      // this term is use for both s and plastic strain
-      // this is equivalent to
-      // 3/2 / q * s = 3/2 * s * sqrt(2/3) / norm(s)
       N_p.Set(1.5 / q, s);
-
-      s.Add(-2.0 * G_ * delta_eqps, N_p);
-      if (!state->freeze_) {
+      if constexpr (!accumulate) {
+        s.Add(-2.0 * G_ * delta_eqps, N_p);
+      }
+      if constexpr (accumulate) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
-
-        // clip at melting temp + 1, just to make sure that in next simulation,
-        // this will trigger contribution=0.0
+        // clip at melting temp + 1, just to make sure that in next
+        // simulation, this will trigger contribution=0.0
         temperature = std::min(trial_T, melting_temperature_ + 1.0);
       }
     }
 
     // returning s + p * I
-    mfem::Add(s, I_, p, sigma);
+    if constexpr (!accumulate) {
+      mfem::Add(s, tmp.I_, p, sigma);
+    }
+  }
+
+  virtual void EvaluateCauchy(const MaterialStatePtr_& state,
+                              TemporaryData& tmp,
+                              mfem::DenseMatrix& sigma) const {
+    MIMI_FUNC()
+
+    PlasticStress<false>(state, tmp, sigma);
+  }
+
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
+  }
+};
+
+/// @brief Implementations for finite strain based on implementations in
+/// https://github.com/sandialabs/optimism
+/// most of the setup is identical to adiabatic visco
+class J2AdiabaticViscoLogStrain : public J2AdiabaticVisco {
+public:
+  using Base_ = MaterialBase;
+  using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
+  using HardeningPtr_ = std::shared_ptr<HardeningBase>;
+  using ADScalar_ = typename HardeningBase::ADScalar_;
+
+  struct State : public MaterialState {
+    static constexpr const int k_state_matrices{1};
+    static constexpr const int k_state_scalars{3};
+    /// matrix indices
+    static constexpr const int k_plastic_strain{0};
+    /// scalar indices
+    static constexpr const int k_accumulated_plastic_strain{0};
+    static constexpr const int k_temperature{1};
+    static constexpr const int k_eqps{
+        2}; // try previous step's eqps to compute eqps_dot
+  };
+
+  virtual std::string Name() const { return "J2AdiabaticViscoLogStrain"; }
+
+  virtual void AllocateAux(TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    // eps, s, N_p, a misc work array, eigen vectors/work2
+    tmp.aux_mat_.resize(5, mfem::DenseMatrix(dim_, dim_));
+    // eigen values
+    tmp.aux_vec_.resize(1, mfem::Vector(dim_));
+  }
+
+  virtual MaterialStatePtr_ CreateState() const {
+    MIMI_FUNC()
+
+    std::shared_ptr<State> state = std::make_shared<State>();
+    // create 2 matrices with the size of dim x dim and zero initialize
+    state->matrices_.resize(state->k_state_matrices);
+    for (mfem::DenseMatrix& mat : state->matrices_) {
+      mat.SetSize(dim_, dim_);
+      mat = 0.;
+    }
+
+    // for logarithmic this is I
+    state->matrices_[State::k_plastic_strain].Diag(1., dim_);
+
+    // one scalar, also zero
+    state->scalars_.resize(state->k_state_scalars, 0.);
+
+    // set initial temp
+    state->scalars_[State::k_temperature] = initial_temperature_;
+    return state;
+  }
+
+  template<bool accumulate>
+  void PlasticStress(std::conditional_t<accumulate,
+                                        MaterialStatePtr_,
+                                        const MaterialStatePtr_>& state,
+                     TemporaryData& tmp,
+                     mfem::DenseMatrix& sigma) const {
+    MIMI_FUNC()
+
+    // get aux
+    mfem::DenseMatrix& eps = tmp.aux_mat_[k_eps];
+    mfem::DenseMatrix& s = tmp.aux_mat_[k_s];
+    mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
+
+    // get states
+    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& accumulated_plastic_strain =
+        state->scalars_[State::k_accumulated_plastic_strain];
+    auto& temperature = state->scalars_[State::k_temperature];
+    auto& eqps = state->scalars_[State::k_eqps];
+
+    // precompute aux values
+    LogarithmicStrain(plastic_strain, tmp, eps);
+    const double p = K_ * eps.Trace();
+    Dev(eps, dim_, 2.0 * G_, s);
+    const double q = sqrt_3_2_ * Norm(s); // trial mises
+    // get eqps_rate and delta temperature
+    double eqps_rate, temperature_rate;
+    PlasticStrainRateAndTemperatureRate(tmp.F_dot_,
+                                        eps,
+                                        eqps_rate,
+                                        temperature_rate);
+
+    // admissibility
+    const double eqps_old = accumulated_plastic_strain;
+    // const double eqps_rate = EquivalentPlasticStrainRate(tmp.F_dot_);
+    const double trial_T =
+        temperature + temperature_rate * second_effective_dt_;
+    auto residual =
+        [eqps_old, eqps_rate, q, trial_T, *this](auto delta_eqps) -> ADScalar_ {
+      return q - 3.0 * G_ * delta_eqps
+             - hardening_->Evaluate(eqps_old + delta_eqps, eqps_rate, trial_T);
+    };
+    const double tolerance = hardening_->SigmaY() * k_tol;
+
+    if (residual(0.0) > tolerance) {
+      /// return mapping
+      mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
+                                              .rtol = tolerance,
+                                              .max_iter = 100};
+
+      const double lower_bound = 0.0;
+      const double upper_bound =
+          (q
+           - hardening_->Evaluate(eqps_old, eqps_rate, trial_T).GetValue()
+                 / (3.0 * G_));
+      const double delta_eqps = mimi::solvers::ScalarSolve(residual,
+                                                           0.0,
+                                                           lower_bound,
+                                                           upper_bound,
+                                                           opts);
+      N_p.Set(1.5 / q, s);
+      if constexpr (!accumulate) {
+        s.Add(-2.0 * G_ * delta_eqps, N_p);
+      }
+      if constexpr (accumulate) {
+        // plastic_strain.Add(delta_eqps, N_p);
+        // for logarithmic, we do the following instead
+        accumulated_plastic_strain += delta_eqps;
+
+        constexpr const int k_work0{3};
+        constexpr const int k_work1{4};
+        constexpr const int k_eig_vec{0};
+
+        mfem::DenseMatrix& work0 = tmp.aux_mat_[k_work0];
+        mfem::DenseMatrix& work1 = tmp.aux_mat_[k_work1];
+
+        mfem::DenseMatrix& increment = work0;
+        increment.Set(delta_eqps, N_p);
+        increment.Symmetrize();
+
+        mfem::Vector& eigen_values = tmp.aux_vec_[k_eig_vec];
+        mfem::DenseMatrix& eigen_vectors = work1;
+        increment.CalcEigenvalues(eigen_values.GetData(),
+                                  eigen_vectors.GetData());
+        // apply exp
+        for (int i{}; i < dim_; ++i) {
+          eigen_values[i] = std::exp(eigen_values[i]);
+        }
+        mfem::DenseMatrix& exp_symm = work0; // reuse
+        mfem::MultADAt(eigen_vectors, eigen_values, exp_symm);
+
+        mfem::DenseMatrix& old_plastic_strain = work1; // reuse
+        old_plastic_strain = plastic_strain;
+        mfem::Mult(exp_symm, old_plastic_strain, plastic_strain);
+
+        // now, temp
+        const double temp_rate = (heat_fraction_ * q * (delta_eqps / dt_)
+                                  / density_ * specific_heat_);
+        temperature = std::min(trial_T, melting_temperature_ + 1.0);
+        // mimi::utils::PrintSynced(temp_rate,
+        //                          q,
+        //                          delta_eqps,
+        //                          delta_eqps / dt_,
+        //                          temperature);
+      }
+    }
+
+    // returning s + p * I
+    if constexpr (!accumulate) {
+      mfem::Add(s, tmp.I_, p / tmp.DetF(), sigma);
+      // mfem::Add(s, tmp.I_, p, sigma);
+      // sigma *= 1. / tmp.DetF();
+    }
+  }
+
+  virtual void EvaluateCauchy(const MaterialStatePtr_& state,
+                              TemporaryData& tmp,
+                              mfem::DenseMatrix& sigma) const {
+    MIMI_FUNC()
+
+    PlasticStress<false>(state, tmp, sigma);
+  }
+
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
   }
 };
 

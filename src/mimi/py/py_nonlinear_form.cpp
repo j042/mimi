@@ -20,19 +20,20 @@ void init_py_nonlinear_form(py::module_& m) {
             // create return array
             py::array_t<double> residual(nlf.Height());
 
-            // create mfem vector view
-            mfem::Vector res_vector(
-                static_cast<double*>(residual.request().ptr),
-                nlf.Height());
-            // initialize 0.0
-            res_vector = 0.0;
+            // we don't save residuals anymore
+            // // create mfem vector view
+            // mfem::Vector res_vector(
+            //     static_cast<double*>(residual.request().ptr),
+            //     nlf.Height());
+            // // initialize 0.0
+            // res_vector = 0.0;
 
-            // 1. loop boundary integrals
-            // 2. loop saved boundary residuals and add
-            // see NLF::Mult()
-            for (const auto& boundary_integ : nlf.boundary_face_nfi_) {
-              boundary_integ->AddToGlobalBoundaryResidual(res_vector);
-            }
+            // // 1. loop boundary integrals
+            // // 2. loop saved boundary residuals and add
+            // // see NLF::Mult()
+            // for (const auto& boundary_integ : nlf.boundary_face_nfi_) {
+            //   boundary_integ->AddToGlobalBoundaryResidual(res_vector);
+            // }
 
             return residual;
           },

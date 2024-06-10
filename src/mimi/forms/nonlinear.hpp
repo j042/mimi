@@ -25,45 +25,15 @@ public:
   double first_effective_dt_{0.0};  // this is for x
   double second_effective_dt_{0.0}; // this is for x_dot (=v).
 
-  virtual void AssembleGradOn() {
-    MIMI_FUNC()
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->assemble_grad_ = true;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->assemble_grad_ = true;
-    }
-  }
-
-  virtual void AssembleGradOff() {
-    MIMI_FUNC()
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->assemble_grad_ = false;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->assemble_grad_ = false;
-    }
-  }
-
-  virtual void FreezeStates() {
+  virtual void PostTimeAdvance(const mfem::Vector& x) {
     MIMI_FUNC()
 
+    // currently, we don't do boundaries
     for (auto& dnfi : domain_nfi_) {
-      dnfi->frozen_state_ = true;
+      dnfi->DomainPostTimeAdvance(x);
     }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->frozen_state_ = true;
-    }
-  }
-
-  virtual void MeltStates() {
-    MIMI_FUNC()
-
-    for (auto& dnfi : domain_nfi_) {
-      dnfi->frozen_state_ = false;
-    }
-    for (auto& bnfi : boundary_face_nfi_) {
-      bnfi->frozen_state_ = false;
+    for (auto& bfnfi : boundary_face_nfi_) {
+      bfnfi->BoundaryPostTimeAdvance(x);
     }
   }
 
@@ -90,15 +60,7 @@ public:
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
-      domain_integ->AssembleDomainResidual(current_x);
-
-      // add to global
-      const auto& el_vecs = *domain_integ->element_vectors_;
-      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
-
-      for (int i{}; i < el_vecs.size(); ++i) {
-        residual.AddElementVector(*el_vdofs[i], el_vecs[i]);
-      }
+      domain_integ->AddDomainResidual(current_x, -1, residual);
     }
 
     // boundary
@@ -106,8 +68,7 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AssembleBoundaryResidual(current_x);
-      boundary_integ->AddToGlobalBoundaryResidual(residual);
+      boundary_integ->AddBoundaryResidual(current_x, -1, residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -116,11 +77,67 @@ public:
     }
   }
 
+  virtual void AddMultGrad(const mfem::Vector& current_x,
+                           const int nthread,
+                           const double grad_factor,
+                           mfem::Vector& residual,
+                           mfem::SparseMatrix& grad) const {
+    MIMI_FUNC()
+
+    for (auto& domain_integ : domain_nfi_) {
+      domain_integ->dt_ = dt_;
+      domain_integ->first_effective_dt_ = first_effective_dt_;
+      domain_integ->second_effective_dt_ = second_effective_dt_;
+      domain_integ->AddDomainResidualAndGrad(current_x,
+                                             nthread,
+                                             grad_factor,
+                                             residual,
+                                             grad);
+    }
+
+    // boundary
+    for (auto& boundary_integ : boundary_face_nfi_) {
+      boundary_integ->dt_ = dt_;
+      boundary_integ->first_effective_dt_ = first_effective_dt_;
+      boundary_integ->second_effective_dt_ = second_effective_dt_;
+      boundary_integ->AddBoundaryResidualAndGrad(current_x,
+                                                 nthread,
+                                                 grad_factor,
+                                                 residual,
+                                                 grad);
+    }
+
+    // set true dofs - if we have time, we could use nthread this.
+    for (const auto& tdof : Base_::ess_tdof_list) {
+      residual[tdof] = 0.0;
+      grad.EliminateRowCol(tdof);
+    }
+  }
+
   virtual mfem::Operator& GetGradient(const mfem::Vector& current_x) const {
     MIMI_FUNC();
 
     if (Grad == NULL) {
-      Base_::Grad = new mfem::SparseMatrix(Base_::fes->GetVSize());
+      // this is an adhoc solution to get sparsity pattern
+      // we know one of nl integrator should have precomputed, so access matrix
+      // from that
+      mfem::SparseMatrix* sparsity_pattern;
+      if (domain_nfi_.size() > 0) {
+        sparsity_pattern =
+            domain_nfi_[0]->precomputed_->sparsity_pattern_.get();
+      } else if (boundary_face_nfi_.size() > 0) {
+        sparsity_pattern =
+            boundary_face_nfi_[0]->precomputed_->sparsity_pattern_.get();
+      } else {
+        mimi::utils::PrintAndThrowError(
+            "No sparsity pattern from precomputed.");
+      }
+      if (!sparsity_pattern) {
+        mimi::utils::PrintAndThrowError("Invalid sparsity pattern saved");
+      }
+
+      Base_::Grad = new mfem::SparseMatrix(*sparsity_pattern); // deep copy
+      *Base_::Grad = 0.0;
     } else {
       *Base_::Grad = 0.0;
     }
@@ -131,16 +148,7 @@ public:
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
-      domain_integ->AssembleDomainGrad(current_x);
-
-      // add to global
-      const auto& el_mats = *domain_integ->element_matrices_;
-      const auto& el_vdofs = domain_integ->precomputed_->v_dofs_;
-
-      for (int i{}; i < el_mats.size(); ++i) {
-        const auto& vdofs = *el_vdofs[i];
-        Base_::Grad->AddSubMatrix(vdofs, vdofs, el_mats[i], 0 /* skip_zeros */);
-      }
+      domain_integ->AddDomainGrad(current_x, -1, *Base_::Grad);
     }
 
     // boundary
@@ -148,8 +156,7 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AssembleBoundaryGrad(current_x);
-      boundary_integ->AddToGlobalBoundaryGrad(*Base_::Grad);
+      boundary_integ->AddBoundaryGrad(current_x, -1, *Base_::Grad);
     }
 
     if (!Base_::Grad->Finalized()) {
