@@ -52,9 +52,7 @@ public:
                 mfem::DenseMatrix& residual_matrix) const {
     MIMI_FUNC()
     for (const QuadData& q : q_data) {
-      // get dx_dX = x * dN_dX
-      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
-      mfem::MultAtB(v, q.dN_dX_, tmp.F_dot_);
+      tmp.ComputeFAndFDot(x, v, q.dN_dX_);
 
       // currently we will just use PK1
       material_->EvaluatePK1(q.material_state_,
@@ -75,9 +73,7 @@ public:
     MIMI_FUNC()
 
     for (QuadData& q : q_data) {
-      // get dx_dX = x * dN_dX
-      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
-      mfem::MultAtB(v, q.dN_dX_, tmp.F_dot_);
+      tmp.ComputeFAndFDot(x, v, q.dN_dX_);
 
       // currently we will just use PK1
       material_->Accumulate(q.material_state_, tmp);
@@ -102,7 +98,7 @@ public:
         // in
         const ElementData& e = element_data_[i];
         // set shape for tmp data - first call will allocate
-        tmp.Reset(e.n_dof_);
+        tmp.SetDof(e.n_dof_);
         // variable name is misleading - this is just local residual
         // we use this container, as we already allocate this in tmp anyways
         tmp.local_residual_ = 0.0;
@@ -150,7 +146,7 @@ public:
             // in
             ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.Reset(e.n_dof_);
+            tmp.SetDof(e.n_dof_);
 
             // get current element solution as matrix
             tmp.CurrentElementSolutionCopy(current_x, current_v, *e.v_dofs_);
@@ -206,7 +202,7 @@ public:
             // in
             const ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.Reset(e.n_dof_);
+            tmp.SetDof(e.n_dof_);
             tmp.local_residual_ = 0.0;
 
             // get element state view
@@ -283,7 +279,7 @@ public:
             // in
             const ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.Reset(e.n_dof_);
+            tmp.SetDof(e.n_dof_);
             tmp.local_residual_ = 0.0;
 
             // get element state view

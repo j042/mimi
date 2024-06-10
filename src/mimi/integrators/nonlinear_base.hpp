@@ -205,6 +205,8 @@ public:
 /// Currently, we don't split hpp and cpp, so we move nested structure to a
 /// mutual place, here.
 /// temporary containers required in element assembly. one for each thread
+/// Stores values required for material, quad point and element data,
+/// temporarily
 struct TemporaryData {
   int dim_;
 
@@ -236,6 +238,9 @@ struct TemporaryData {
   /// this can be called once at Prepare()
   void SetDim(const int dim) {
     MIMI_FUNC()
+    has_det_F_ = false;
+    has_F_inv_ = false;
+
     dim_ = dim;
 
     stress_.SetSize(dim, dim);
@@ -248,16 +253,23 @@ struct TemporaryData {
   }
 
   /// this should be called at the start of every element as NDof may change
-  void Reset(const int n_dof) {
+  void SetDof(const int n_dof) {
     MIMI_FUNC()
-    has_det_F_ = false;
-    has_F_inv_ = false;
 
     element_x_.SetSize(n_dof * dim_); // will be resized in getsubvector
     element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
     forward_residual_.SetSize(n_dof, dim_);
     local_residual_.SetSize(n_dof, dim_);
     local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
+  }
+
+  // computes F and resets flags
+  void ComputeF(const mfem::DenseMatrix& x, const mfem::DenseMatrix& dNdX) {
+    MIMI_FUNC()
+    has_det_F_ = false;
+    has_F_inv_ = false;
+
+    mfem::MultAtB(x, dNdX, F_);
   }
 
   mfem::DenseMatrix& FInv() {
@@ -297,13 +309,53 @@ struct TemporaryViscoData : TemporaryData {
   mfem::Vector element_v_;          // v
   mfem::DenseMatrix element_v_mat_; // v as matrix
 
-  using BaseTD_::FInv;
   using BaseTD_::DetF;
+  using BaseTD_::FInv;
 
-  void Reset(const int n_dof) {
+  // computes F and resets flags
+  void ComputeFAndFDot(const mfem::DenseMatrix& x,
+                       const mfem::DenseMatrix& v,
+                       const mfem::DenseMatrix& dNdX) {
+    MIMI_FUNC()
+    has_det_F_ = false;
+    has_F_inv_ = false;
+
+    // MultAtBAndA1tB:
+    // MultAtB together for 2 As. adapted from mfem::MultAtB
+
+    // loop size
+    const int ah = x.Height();
+    const int aw = x.Width();
+    const int bw = dNdX.Width();
+    // A and B's data
+    const double* x_d_begin = x.Data();
+    const double* v_d_begin = v.Data();
+    const double* dndx_d = dNdX.Data();
+    // output
+    double* f_d = F_.Data();
+    double* fd_d = F_dot_.Data();
+    for (int j{}; j < bw; ++j) {
+      const double* x_d = x_d_begin;
+      const double* v_d = v_d_begin;
+      for (int i{}; i < aw; ++i) {
+        double f_ij{}, fd_ij{};
+        for (int k{}; k < ah; ++k) {
+          f_ij += x_d[k] * dndx_d[k];
+          fd_ij += v_d[k] * dndx_d[k];
+        }
+        *(f_d++) = f_ij;
+        *(fd_d++) = fd_ij;
+        x_d += ah;
+        v_d += ah;
+      }
+      dndx_d += ah;
+    }
+  }
+
+  void SetDof(const int n_dof) {
     MIMI_FUNC()
 
-    BaseTD_::Reset(n_dof);
+    BaseTD_::SetDof(n_dof);
 
     element_v_.SetSize(n_dof * dim_);
     element_v_mat_.UseExternalData(element_v_.GetData(), n_dof, dim_);

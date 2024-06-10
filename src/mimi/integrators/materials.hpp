@@ -1146,12 +1146,12 @@ public:
         const double temp_rate = (heat_fraction_ * q * (delta_eqps / dt_)
                                   / density_ * specific_heat_);
         temperature =
-            std::min(temperature + temp_rate * dt_, melting_temperature_ + 1.0);
-        mimi::utils::PrintSynced(temp_rate,
-                                 q,
-                                 delta_eqps,
-                                 delta_eqps / dt_,
-                                 temperature);
+            std::min(trial_T, melting_temperature_ + 1.0);
+        // mimi::utils::PrintSynced(temp_rate,
+        //                          q,
+        //                          delta_eqps,
+        //                          delta_eqps / dt_,
+        //                          temperature);
       }
     }
 

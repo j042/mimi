@@ -227,7 +227,8 @@ public:
     MIMI_FUNC()
     for (const QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
-      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
+      // does mfem::MultAtB(x, q.dN_dX_, tmp.F_) and resets internal flags
+      tmp.ComputeF(x, q.dN_dX_);
 
       // currently we will just use PK1
       material_->EvaluatePK1(q.material_state_, tmp, tmp.stress_);
@@ -245,7 +246,7 @@ public:
     MIMI_FUNC()
     for (QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
-      mfem::MultAtB(x, q.dN_dX_, tmp.F_);
+      tmp.ComputeF(x, q.dN_dX_);
 
       // currently we will just use PK1
       material_->Accumulate(q.material_state_, tmp);
@@ -265,7 +266,7 @@ public:
         // in
         const ElementData& e = element_data_[i];
         // set shape for tmp data - first call will allocate
-        tmp.Reset(e.n_dof_);
+        tmp.SetDof(e.n_dof_);
         tmp.local_residual_ = 0.0;
 
         // get current element solution as matrix
@@ -296,7 +297,7 @@ public:
             // in
             ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.Reset(e.n_dof_);
+            tmp.SetDof(e.n_dof_);
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
@@ -324,7 +325,7 @@ public:
             tmp.local_residual_ = 0.0;
 
             // set shape for tmp data - first call will allocate
-            tmp.Reset(e.n_dof_);
+            tmp.SetDof(e.n_dof_);
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
@@ -392,7 +393,7 @@ public:
             // in
             const ElementData& e = element_data_[i];
             // set shape for tmp data - first call will allocate
-            tmp.Reset(e.n_dof_);
+            tmp.SetDof(e.n_dof_);
             tmp.local_residual_ = 0.0;
 
             // get current element solution as matrix
