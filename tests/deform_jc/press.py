@@ -2,13 +2,13 @@ import splinepy
 
 import mimi
 
-PENALTY_FACTOR = 0.5e12
+PENALTY_FACTOR = 2e11
 N_THREADS = 4
-DT = 0.1e-4
+DT = 0.5e-4
 
-PENALTY_FACTOR = 1e10
-N_THREADS = 1
-DT = 1e-6
+# PENALTY_FACTOR = 1e10
+# N_THREADS = 1
+# DT = 1e-6
 
 INTERACTIVE_SHOW = False
 
@@ -46,8 +46,8 @@ nl.read_mesh("box.mesh")
 nl.elevate_degrees(1)
 nl.subdivide(3)
 
-mat = mimi.PyJ2LogStrainAdiabaticVisco()
-# mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
+# mat = mimi.PyJ2LogStrainAdiabaticVisco()
+mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
 mat.density = 7800
 mat.viscosity = 10
 mat.set_young_poisson(205e9, 0.29)
@@ -96,7 +96,7 @@ show(-1)
 for i in range(5000):
     move(tool)
     # nl.step_time2()
-    nl.fixed_point_alm_solve2(20, 2, 15, 0, 1e-14, 1e-8, 1e-5, False)
+    nl.fixed_point_alm_solve2(5, 2, 15, 0, 1e-8, 1e-4, 1e-5, False)
     nl.advance_time2()
-    if i % 5 == 0:
+    if i % 10 == 0:
         show(i)
