@@ -297,6 +297,9 @@ struct TemporaryViscoData : TemporaryData {
   mfem::Vector element_v_;          // v
   mfem::DenseMatrix element_v_mat_; // v as matrix
 
+  using BaseTD_::FInv;
+  using BaseTD_::DetF;
+
   void Reset(const int n_dof) {
     MIMI_FUNC()
 
