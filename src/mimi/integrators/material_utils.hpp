@@ -122,6 +122,7 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
 
   // there's a way to preserve small J -> use/implement
   // CalcDeterminantPlusIMinusOne
+  // const double trace_Ee = std::log1p(std::abs(tmp.DetF()) - 1.);
   const double trace_Ee = std::log1p(tmp.DetF() - 1.);
   if (!std::isfinite(trace_Ee)) {
     mimi::utils::PrintAndThrowError(

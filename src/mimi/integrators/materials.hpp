@@ -1119,34 +1119,36 @@ public:
         // for logarithmic, we do the following instead
         accumulated_plastic_strain += delta_eqps;
 
-        constexpr const int k_work1{3};
-        constexpr const int k_work2{4};
+        constexpr const int k_work0{3};
+        constexpr const int k_work1{4};
         constexpr const int k_eig_vec{0};
 
-        mfem::DenseMatrix& increment = tmp.aux_mat_[k_work1];
+        mfem::DenseMatrix& work0 = tmp.aux_mat_[k_work0];
+        mfem::DenseMatrix& work1 = tmp.aux_mat_[k_work1];
+
+        mfem::DenseMatrix& increment = work0;
         increment.Set(delta_eqps, N_p);
         increment.Symmetrize();
 
         mfem::Vector& eigen_values = tmp.aux_vec_[k_eig_vec];
-        mfem::DenseMatrix& eigen_vectors = tmp.aux_mat_[k_work2];
+        mfem::DenseMatrix& eigen_vectors = work1;
         increment.CalcEigenvalues(eigen_values.GetData(),
                                   eigen_vectors.GetData());
         // apply exp
         for (int i{}; i < dim_; ++i) {
           eigen_values[i] = std::exp(eigen_values[i]);
         }
-        mfem::DenseMatrix& exp_symm = increment; // reuse
+        mfem::DenseMatrix& exp_symm = work0; // reuse
         mfem::MultADAt(eigen_vectors, eigen_values, exp_symm);
 
-        mfem::DenseMatrix& old_plastic_strain = exp_symm; // reuse
+        mfem::DenseMatrix& old_plastic_strain = work1; // reuse
         old_plastic_strain = plastic_strain;
         mfem::Mult(exp_symm, old_plastic_strain, plastic_strain);
 
         // now, temp
         const double temp_rate = (heat_fraction_ * q * (delta_eqps / dt_)
                                   / density_ * specific_heat_);
-        temperature =
-            std::min(trial_T, melting_temperature_ + 1.0);
+        temperature = std::min(trial_T, melting_temperature_ + 1.0);
         // mimi::utils::PrintSynced(temp_rate,
         //                          q,
         //                          delta_eqps,
@@ -1157,7 +1159,9 @@ public:
 
     // returning s + p * I
     if constexpr (!accumulate) {
-      mfem::Add(s, tmp.I_, p, sigma);
+      mfem::Add(s, tmp.I_, p / tmp.DetF(), sigma);
+      // mfem::Add(s, tmp.I_, p, sigma);
+      // sigma *= 1. / tmp.DetF();
     }
   }
 
