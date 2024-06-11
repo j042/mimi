@@ -9,8 +9,6 @@ sp.settings.NTHREADS = 2
 le = mimi.PyNonlinearViscoSolid()
 le.read_mesh("tests/data/sqn.mesh")
 
-# set param
-
 # refine
 le.elevate_degrees(1)
 le.subdivide(4)
@@ -54,7 +52,6 @@ curv = sp.Bezier(
     ],
 )
 curv.cps[:] += [0.0, 0.75]
-
 
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
@@ -145,8 +142,6 @@ plt = gus.show(
 n = le.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
 for i in range(2000):
-    #    if i < 820:
-    #        move()
     bc()
     old = 1
     b_old = 1

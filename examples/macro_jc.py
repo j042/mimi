@@ -73,7 +73,6 @@ def sol():
 
 def c_sol():
     nl.fixed_point_solve2()
-    # print(ni.gap_norm())
 
 
 def adv():

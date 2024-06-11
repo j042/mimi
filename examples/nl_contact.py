@@ -11,15 +11,12 @@ tic = gus.utils.tictoc.Tic()
 le = mimi.PyNonlinearSolid()
 le.read_mesh("tests/data/square-nurbs.mesh")
 
-# set param
-
 # refine
 le.elevate_degrees(1)
 le.subdivide(3)
 
 # mat
 mat = mimi.PyCompressibleOgdenNeoHookean()
-# mat = mimi.PyJ2()
 mat.density = 7e4
 mat.viscosity = -1
 mat.set_young_poisson(1e10, 0.3)
@@ -27,6 +24,7 @@ mat.set_young_poisson(1e10, 0.3)
 # mat.kinematic_hardening = 0
 # mat.sigma_y = 1e4
 le.set_material(mat)
+
 # create splinepy partner
 s = sp.NURBS(**le.nurbs())
 to_m, to_s = sp.io.mfem.dof_mapping(s)
@@ -71,8 +69,6 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
-# s.show_options["control_points"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
 s.show_options["control_points"] = False
 curv.show_options["control_points"] = False

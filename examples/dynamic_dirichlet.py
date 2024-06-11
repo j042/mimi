@@ -52,7 +52,6 @@ nl.time_step_size = 0.01
 
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = 50
 s.cps[:] = x[to_s]
 

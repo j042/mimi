@@ -7,7 +7,6 @@ sp.settings.NTHREADS = 2
 
 tool = sp.Bezier([2], [[2.5, 2], [1.22, -0.5], [3, 0.5]])
 tool.cps[:] += [0.05, 0.3]
-# tool.cps = tool.cps[::-1]
 # create solid
 nl = mimi.PyNonlinearViscoSolid()
 
@@ -84,7 +83,6 @@ def sol():
 
 def c_sol():
     nl.fixed_point_solve2()
-    # print(ni.gap_norm())
 
 
 def adv():

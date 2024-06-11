@@ -16,17 +16,9 @@ nl.subdivide(3)
 
 # create material
 mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
-# mat = mimi.PyJ2LogStrainAdiabaticVisco()
-mat = mimi.PyJ2AdiabaticViscoLarge()
 mat.density = 1
-
-
 mat.viscosity = -1
 
-# define material properties (young's modulus, poisson's ratio)
-# mat.set_young_poisson(210000, 0.3)
-
-# instead, one can also use lame's parameter lambda and mu
 # define material properties (lamda, mu)
 mat.set_lame((790000 - (79000 * 2 / 3)) * 10, 790000)
 
@@ -54,8 +46,7 @@ s.cps[:] = s.cps[to_s]
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
-bc.initial.body_force(1, -11)
-# bc.initial.traction(3, 1, -50)
+bc.initial.body_force(1, -7)
 
 nl.boundary_condition = bc
 
@@ -63,7 +54,6 @@ nl.setup(1)
 nl.configure_newton("nonlinear_solid", 1e-7, 1e-9, 20, False)
 
 rhs = nl.linear_form_view2("rhs")
-print(rhs)
 
 nl.time_step_size = 0.005
 x_ref = nl.solution_view("displacement", "x_ref").reshape(-1, nl.mesh_dim())
@@ -71,11 +61,10 @@ x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 v = nl.solution_view("displacement", "x_dot").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
 s.show_options["control_points"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = 50
 s.cps[:] = x[to_s]
 
-plt = gus.show(s, interactive=False, close=False)
+plt = gus.show(s, close=False)
 for i in range(10000):
     if True:
         s.cps[:] = x[to_s]
@@ -85,16 +74,8 @@ for i in range(10000):
             close=False,
             interactive=False,
         )
-    # remove body force
-    # if i == 75:
-    #    rhs[:] *= -1.0
-    if i == 300:
-        rhs[:] = 0.0
 
     nl.step_time2()
     print(i, np.linalg.norm(x - x_ref))
-    # print(x[:4])
-    # print(v[:4])
-    # time.sleep(.5)
 
 gus.show(s, vedoplot=plt, interactive=True)

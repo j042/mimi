@@ -28,7 +28,6 @@ to_m = np.array(to_m)
 to_s = np.array(to_s)
 s.cps[:] = s.cps[to_s]
 
-print("fine")
 outlineo = {
     "degrees": [2, 1],
     "control_points": [
@@ -123,13 +122,11 @@ outline = sp.BSpline(**outlineo)  # this one will have negative jac
 o, u = outline.extract.boundaries([2, 3])
 u.cps[:] = u.cps[::-1].copy()
 u = u.copy()
-# u.show(control_points=True)
 u.cps[24] -= 1
 o.cps[0] += [-5, 0]
 
 mi = s.multi_index
 b3 = to_s[mi[-1, :]]
-
 
 ns = 500
 path = outline.extract.spline(1, [0.01, 0.99]).sample([ns, 2])
@@ -137,8 +134,6 @@ up = path[:ns]
 down = path[ns:]
 mid = np.linspace(down, up, len(b3))[1:-1]
 
-
-print("fine")
 # set bc
 scene0 = mimi.PyNearestDistanceToSplines()
 scene0.add_spline(o)

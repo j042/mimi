@@ -19,10 +19,6 @@ mat.viscosity = 10
 # define material properties (young's modulus, poisson's ratio)
 mat.set_young_poisson(210000, 0.3)
 
-# instead, one can also use lame's parameter lambda and mu
-# define material properties (lamda, mu)
-# mat.set_lame(26333, 79000)
-
 mat.isotropic_hardening = 0
 mat.kinematic_hardening = 0
 mat.sigma_y = 165 * 3 ** (0.5)
@@ -42,8 +38,8 @@ nl.boundary_condition = bc
 
 nl.setup(4)
 nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, False)
+
 rhs = nl.linear_form_view2("rhs")
-print(rhs)
 
 nl.time_step_size = 0.01
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())

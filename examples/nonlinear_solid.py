@@ -20,11 +20,6 @@ mat.viscosity = -1
 
 # define material properties (young's modulus, poisson's ratio)
 mat.set_young_poisson(2100, 0.3)
-
-# instead, one can also use lame's parameter lambda and mu
-# define material properties (lamda, mu)
-# mat.set_lame(26333, 79000)
-
 nl.set_material(mat)
 
 # create splinepy nurbs to show
@@ -41,13 +36,10 @@ nl.boundary_condition = bc
 nl.setup(2)
 nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 10, False)
 
-rhs = nl.linear_form_view2("rhs")
-
 nl.time_step_size = 0.05
 
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = 50
 s.cps[:] = x[to_s]
 

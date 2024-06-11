@@ -11,8 +11,6 @@ tic = gus.utils.tictoc.Tic()
 le = mimi.PyNonlinearViscoSolid()
 le.read_mesh("tests/data/sqn.mesh")
 
-# set param
-
 # refine
 le.elevate_degrees(1)
 le.subdivide(3)
@@ -83,8 +81,6 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
-# s.show_options["control_points"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 50]
 s.show_options["control_points"] = False
 curv.show_options["control_points"] = False

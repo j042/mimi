@@ -36,9 +36,6 @@ le.setup(4)
 tic.toc()
 tic.summary(print_=True)
 
-# cpp we have a linear form registered as rhs, so we can look it up
-rhs = le.linear_form_view2("rhs")
-
 # set step size
 le.time_step_size = 0.01
 
@@ -47,7 +44,6 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 # set visualization options
 s.show_options["control_point_ids"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = 50
 s.cps[:] = x[to_s]
 
