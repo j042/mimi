@@ -9,7 +9,7 @@ tool = sp.Bezier([2], [[2.5, 2], [1.22, -0.5], [3, 0.5]])
 tool.cps[:] += [0.05, 0.3]
 
 # create solid
-nl = mimi.PyNonlinearSolid()
+nl = mimi.NonlinearSolid()
 
 # read mesh
 nl.read_mesh("tests/data/macro.mesh")
@@ -20,14 +20,14 @@ nl.subdivide(3)
 n_threads = 4
 # we don't refine here
 # create material
-mat = mimi.PyCompressibleOgdenNeoHookean()
+mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 7800
 mat.viscosity = -1  # maybe some higher value?
 mat.set_young_poisson(205.0e9, 0.29)
 nl.set_material(mat)
 
 # create contact scene
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(tool)
 scene.plant_kd_tree(10001, 4)
 scene.coefficient = 1e13

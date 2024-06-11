@@ -8,7 +8,7 @@ sp.settings.NTHREADS = 2
 tool = sp.Bezier([2], [[2.5, 2], [1.22, -0.5], [3, 0.5]])
 tool.cps[:] += [0.05, 0.3]
 # create solid
-nl = mimi.PyNonlinearViscoSolid()
+nl = mimi.NonlinearViscoSolid()
 
 # read mesh
 nl.read_mesh("tests/data/macro.mesh")
@@ -21,14 +21,14 @@ TO_K = 273.15
 n_threads = 4
 # we don't refine here
 # create material
-mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
+mat = mimi.J2AdiabaticViscoIsotropicHardening()
 mat.density = 7800
 mat.viscosity = -1  # maybe some higher value?
 mat.set_young_poisson(205.0e9, 0.29)
 mat.heat_fraction = 0.9
 mat.specific_heat = 450
 mat.initial_temperature = initial_temperature + TO_K
-mat.hardening = mimi.PyJohnsonCookThermoViscoHardening()
+mat.hardening = mimi.JohnsonCookThermoViscoHardening()
 mat.hardening.A = 288e6
 mat.hardening.B = 695e6
 mat.hardening.C = 0.034
@@ -41,7 +41,7 @@ mat.hardening.melting_temperature = 1500 + TO_K
 nl.set_material(mat)
 
 # create contact scene
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(tool)
 scene.plant_kd_tree(10001, 4)
 scene.coefficient = 1e13

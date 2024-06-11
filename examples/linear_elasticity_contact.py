@@ -7,7 +7,7 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyLinearElasticity()
+le = mimi.LinearElasticity()
 le.read_mesh("tests/data/square-nurbs.mesh")
 
 # set param
@@ -34,7 +34,7 @@ curv = sp.Bezier(
 )
 curv.cps[:] += [0.05, 1]
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(100000, 4)
 scene.coefficient = 1e11

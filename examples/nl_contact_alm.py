@@ -8,7 +8,7 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyNonlinearSolid()
+le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/sqn.mesh")
 
 # refine
@@ -16,8 +16,8 @@ le.elevate_degrees(2)
 le.subdivide(3)
 
 # mat
-mat = mimi.PyCompressibleOgdenNeoHookean()
-mat = mimi.PyJ2()
+mat = mimi.CompressibleOgdenNeoHookean()
+mat = mimi.J2()
 mat.density = 7e4
 mat.viscosity = 10
 mat.set_young_poisson(1e10, 0.3)
@@ -43,7 +43,7 @@ curv = sp.Bezier(
 curv.cps[:] += [0, 0.75]
 
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(1001, 4)
 scene.coefficient = 1e10
@@ -53,7 +53,7 @@ bc.initial.dirichlet(0, 0).dirichlet(0, 1)
 bc.current.contact(1, scene)
 le.boundary_condition = bc
 
-rc = mimi.PyRuntimeCommunication()
+rc = mimi.RuntimeCommunication()
 # rc.set_int("contact_quadrature_order", 50)
 # rc.set_int("nonlinear_solid_quadrature_order", 3)
 rc.fname = "n.npz"

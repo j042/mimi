@@ -7,7 +7,7 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyLinearElasticity()
+le = mimi.LinearElasticity()
 le.read_mesh("tests/data/cube-nurbs.mesh")
 
 # set param

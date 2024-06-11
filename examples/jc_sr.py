@@ -7,14 +7,14 @@ import numpy as np
 sp.settings.NTHREADS = 4
 
 #  create nl solid
-nl = mimi.PyNonlinearViscoSolid()
+nl = mimi.NonlinearViscoSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
 nl.subdivide(3)
 
 # create material
-mat = mimi.PyJ2ViscoIsotropicHardening()
+mat = mimi.J2ViscoIsotropicHardening()
 mat.density = 1
 
 mat.viscosity = -10
@@ -22,7 +22,7 @@ mat.viscosity = -10
 # define material properties (lamda, mu)
 mat.set_lame((790000 - (79000 * 2 / 3)) * 10, 790000)
 
-mat.hardening = mimi.PyJohnsonCookViscoHardening()
+mat.hardening = mimi.JohnsonCookViscoHardening()
 mat.hardening.A = 100
 mat.hardening.B = mat.hardening.A * 2.5
 mat.hardening.n = 0.2835

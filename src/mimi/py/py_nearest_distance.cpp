@@ -13,7 +13,7 @@ void init_py_nearest_distance(py::module_& m) {
 
   py::class_<NearestDistance, std::shared_ptr<NearestDistance>> nearest_klasse(
       m,
-      "PyNearestDistance");
+      "NearestDistance");
   nearest_klasse.def(py::init<>())
       .def_readwrite("coefficient", &NearestDistance::coefficient_)
       .def_readwrite("tolerance", &NearestDistance::tolerance_);
@@ -21,7 +21,7 @@ void init_py_nearest_distance(py::module_& m) {
   py::class_<NearestDistanceToSplines,
              std::shared_ptr<NearestDistanceToSplines>,
              NearestDistance>
-      nearest_spline_klasse(m, "PyNearestDistanceToSplines");
+      nearest_spline_klasse(m, "NearestDistanceToSplines");
   nearest_spline_klasse.def(py::init<>())
       .def("add_spline",
            &NearestDistanceToSplines::AddSpline,

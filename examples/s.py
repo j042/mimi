@@ -6,7 +6,7 @@ import numpy as np
 sp.settings.NTHREADS = 4
 
 # init, read mesh
-le = mimi.PyNonlinearSolid()
+le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/es.mesh")
 
 # refine
@@ -14,7 +14,7 @@ le.elevate_degrees(1)
 le.subdivide(3)
 
 # mat
-mat = mimi.PyCompressibleOgdenNeoHookean()
+mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 4000
 # mat.viscosity = 10000
 mat.viscosity = -1
@@ -135,11 +135,11 @@ down = path[ns:]
 mid = np.linspace(down, up, len(b3))[1:-1]
 
 # set bc
-scene0 = mimi.PyNearestDistanceToSplines()
+scene0 = mimi.NearestDistanceToSplines()
 scene0.add_spline(o)
 scene0.plant_kd_tree(1001, 4)
 scene0.coefficient = 1e3
-scene1 = mimi.PyNearestDistanceToSplines()
+scene1 = mimi.NearestDistanceToSplines()
 scene1.add_spline(u)
 scene1.plant_kd_tree(1001, 4)
 scene1.coefficient = 1e3

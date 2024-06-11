@@ -8,7 +8,7 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyNonlinearSolid()
+le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/square-nurbs.mesh")
 
 # refine
@@ -16,7 +16,7 @@ le.elevate_degrees(1)
 le.subdivide(3)
 
 # mat
-mat = mimi.PyCompressibleOgdenNeoHookean()
+mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 7e4
 mat.viscosity = -1
 mat.set_young_poisson(1e10, 0.3)
@@ -42,7 +42,7 @@ curv = sp.Bezier(
 )
 curv.cps[:] += [0.05, 1]
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(100000, 4)
 scene.coefficient = 0.5e11

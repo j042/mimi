@@ -4,17 +4,16 @@ import gustaf as gus
 
 sp.settings.NTHREADS = 4
 
-#  create nl solid
-nl = mimi.PyNonlinearSolid()
+# create nl solid
+nl = mimi.NonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
 nl.subdivide(2)
 
 # create material
-# PyMaterial is platzhalter
-mat = mimi.PyStVenantKirchhoff()
-mat = mimi.PyCompressibleOgdenNeoHookean()
+mat = mimi.StVenantKirchhoff()
+mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 1
 mat.viscosity = -1
 

@@ -5,14 +5,14 @@ import gustaf as gus
 sp.settings.NTHREADS = 1
 
 #  create nl solid
-nl = mimi.PyNonlinearSolid()
+nl = mimi.NonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
 nl.subdivide(3)
 
 # create material
-mat = mimi.PyJ2NonlinearIsotropicHardening()
+mat = mimi.J2NonlinearIsotropicHardening()
 mat.density = 10
 
 mat.viscosity = 10
@@ -20,7 +20,7 @@ mat.viscosity = 10
 # define material properties (young's modulus, poisson's ratio)
 mat.set_young_poisson(210000, 0.3)
 
-mat.hardening = mimi.PyJohnsonCookHardening()
+mat.hardening = mimi.JohnsonCookHardening()
 mat.hardening.A = 100
 mat.hardening.B = mat.hardening.A * 2.5
 mat.hardening.n = 0.2835

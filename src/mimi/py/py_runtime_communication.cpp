@@ -14,7 +14,7 @@ namespace py = pybind11;
 void init_py_runtime_communication(py::module_& m) {
   using RC = mimi::utils::RuntimeCommunication;
 
-  py::class_<RC, std::shared_ptr<RC>> rc(m, "PyRuntimeCommunication");
+  py::class_<RC, std::shared_ptr<RC>> rc(m, "RuntimeCommunication");
   rc.def(py::init<>())
       .def_readwrite("fname", &RC::fname_)
       .def("set_fname", &RC::SetFName)

@@ -6,14 +6,14 @@ import numpy as np
 sp.settings.NTHREADS = 4
 
 #  create nl solid
-nl = mimi.PyNonlinearSolid()
+nl = mimi.NonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
 nl.subdivide(2)
 
 # create material
-mat = mimi.PyCompressibleOgdenNeoHookean()
+mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 1
 mat.viscosity = 1
 

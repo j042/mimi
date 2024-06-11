@@ -5,14 +5,14 @@ import gustaf as gus
 sp.settings.NTHREADS = 4
 
 #  create nl solid
-nl = mimi.PyNonlinearSolid()
+nl = mimi.NonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
 nl.subdivide(3)
 
 # create material
-mat = mimi.PyJ2()
+mat = mimi.J2()
 mat.density = 1
 mat.viscosity = 10
 
