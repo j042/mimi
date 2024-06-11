@@ -41,7 +41,7 @@ bc.initial.traction(3, 1, -30)
 nl.boundary_condition = bc
 
 nl.setup(4)
-nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, False, False)
+nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, False)
 rhs = nl.linear_form_view2("rhs")
 print(rhs)
 

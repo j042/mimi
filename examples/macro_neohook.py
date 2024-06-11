@@ -50,7 +50,7 @@ s = sp.NURBS(**nl.nurbs())
 to_m, to_s = sp.io.mfem.dof_mapping(s)
 s.cps[:] = s.cps[to_s]
 
-nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, True, False)
+nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, True)
 n = nl.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
@@ -104,20 +104,20 @@ for i in range(10000):
     scene.coefficient = coe
     for j in range(20):
         sol()
-        nl.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True, False)
+        nl.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True)
         print("augumenting")
         print()
         if ni.gap_norm() < 1e-6:
             print(ni.gap_norm(), "exit!")
             break
     print("final solve!")
-    nl.configure_newton("nonlinear_solid", 1e-7, 1e-8, 20, True, True)
+    nl.configure_newton("nonlinear_solid", 1e-7, 1e-8, 20, True)
     nl.update_contact_lagrange()
     scene.coefficient = 0.0
     c_sol()
     rel, ab = nl.newton_final_norms("nonlinear_solid")
 
-    nl.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False, False)
+    nl.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
     scene.coefficient = coe
     adv()
     show()

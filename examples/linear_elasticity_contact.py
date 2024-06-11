@@ -49,7 +49,7 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("linear_elasticity", 1e-14, 1e-8, 20, False, False)
+le.configure_newton("linear_elasticity", 1e-14, 1e-8, 20, False)
 
 tic.toc("bilinear, linear forms assembly")
 
