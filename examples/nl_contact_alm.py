@@ -58,7 +58,7 @@ le.boundary_condition = bc
 rc = mimi.PyRuntimeCommunication()
 # rc.set_int("contact_quadrature_order", 50)
 # rc.set_int("nonlinear_solid_quadrature_order", 3)
-rc.fname = "tout/n.npz"
+rc.fname = "n.npz"
 rc.append_should_save("contact_history", 1)
 rc.append_should_save("contact_forces", 1)
 rc.setup_real_history("area", 10000)
