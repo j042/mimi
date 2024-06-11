@@ -8,7 +8,8 @@
 
 #include "mimi/integrators/materials.hpp"
 #include "mimi/integrators/nonlinear_visco_solid.hpp"
-#include "mimi/integrators/penalty_contact.hpp"
+// #include "mimi/integrators/penalty_contact.hpp"
+#include "mimi/integrators/averaged_penalty_contact.hpp"
 #include "mimi/integrators/vector_diffusion.hpp"
 #include "mimi/integrators/vector_mass.hpp"
 #include "mimi/operators/nonlinear_visco_solid.hpp"
@@ -260,7 +261,7 @@ public:
       for (const auto& [bid, nd_coeff] : contact) {
         // initialzie integrator with nearest distance coeff (splinepy splines)
         auto contact_integ =
-            std::make_shared<mimi::integrators::PenaltyContact>(
+            std::make_shared<mimi::integrators::AveragedPenaltyContact>(
                 nd_coeff,
                 std::to_string(bid),
                 contact_precomputed);

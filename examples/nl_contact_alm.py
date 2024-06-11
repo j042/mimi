@@ -42,13 +42,13 @@ curv = sp.Bezier(
         [10.5, 2.3],
     ],
 )
-curv.cps[:] += [0.0, 0.75]
+curv.cps[:] += [-5, 0.75]
 
 
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(1001, 4)
-scene.coefficient = 1e12
+scene.coefficient = 1e9
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
@@ -68,7 +68,7 @@ le.runtime_communication = rc
 tic.toc()
 
 # setup needs to be called this assembles bilinear forms, linear forms
-le.setup(4)
+le.setup(1)
 
 le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
 
@@ -134,10 +134,11 @@ n = le.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
 for i in range(200):
     move()
-    le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
-    le.advance_time2()
+    # le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
+    # le.advance_time2()
+    le.step_time2()
     tic.toc(f"{i}-step")
-#    show()
+    show()
 
 
 tic.summary(print_=True)
