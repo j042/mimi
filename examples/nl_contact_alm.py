@@ -125,13 +125,16 @@ def show():
 
 
 # initialize a plotter
-plt = gus.show([s, curv], interactive=False, close=False)
-for i in range(400):
+plt = gus.show([s, curv], close=False)
+n = le.nonlinear_from2("contact")
+ni = n.boundary_integrator(0)
+for i in range(200):
     move()
     # le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
     # le.advance_time2()
     le.step_time2()
     tic.toc(f"{i}-step")
+    show()
 
 tic.summary(print_=True)
 gus.show(s, vedoplot=plt, interactive=True)
