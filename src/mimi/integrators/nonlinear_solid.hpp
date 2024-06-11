@@ -551,9 +551,8 @@ public:
             for (auto& q_data : e.quad_data_) {
               e.scalar_post_process_view_.Add(
                   q_data.integration_weight_ * q_data.det_dX_dxi_
-                      * q_data.material_state_
-                            ->scalars_[J2NonlinearIsotropicHardening::State::
-                                           k_plastic_strain],
+                      * q_data.material_state_->scalars_
+                            [J2NonlinearIsotropic::State::k_plastic_strain],
                   q_data.N_);
             }
           }

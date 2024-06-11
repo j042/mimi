@@ -20,7 +20,7 @@ nl.subdivide(3)
 n_threads = 4
 # we don't refine here
 # create material
-mat = mimi.J2NonlinearIsotropicHardening()
+mat = mimi.J2NonlinearIsotropic()
 mat.density = 7800
 mat.viscosity = 100  # maybe some higher value?
 mat.set_young_poisson(205.0e9, 0.29)

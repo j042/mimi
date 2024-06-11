@@ -21,7 +21,7 @@ void init_py_material(py::module_& m) {
   using StVK = mimi::integrators::StVenantKirchhoff;
   using CompOgdenNH = mimi::integrators::CompressibleOgdenNeoHookean;
   using J2 = mimi::integrators::J2;
-  using J2NonlinHi = mimi::integrators::J2NonlinearIsotropicHardening;
+  using J2NonlinIso = mimi::integrators::J2NonlinearIsotropic;
   using J2NonlinVisco = mimi::integrators::J2NonlinearVisco;
   using J2NonlinAdiabaticVisco = mimi::integrators::J2AdiabaticVisco;
   using J2NonlinAdiabaticViscoLarge = mimi::integrators::J2AdiabaticViscoLarge;
@@ -108,11 +108,11 @@ void init_py_material(py::module_& m) {
       .def_readwrite("B", &JCHardening::B_)
       .def_readwrite("n", &JCHardening::n_);
 
-  py::class_<J2NonlinHi, std::shared_ptr<J2NonlinHi>, MaterialBase> j2_nl_hi(
+  py::class_<J2NonlinIso, std::shared_ptr<J2NonlinIso>, MaterialBase> j2_nl_hi(
       m,
-      "J2NonlinearIsotropicHardening");
+      "J2NonlinearIsotropic");
   j2_nl_hi.def(py::init<>())
-      .def_readwrite("hardening", &J2NonlinHi::hardening_);
+      .def_readwrite("hardening", &J2NonlinIso::hardening_);
 
   py::class_<JCViscoHardening, std::shared_ptr<JCViscoHardening>, JCHardening>
       jc_visco(m, "JohnsonCookViscoHardening");
