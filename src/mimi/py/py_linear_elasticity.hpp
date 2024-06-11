@@ -280,6 +280,7 @@ public:
                 nd_coeff,
                 std::to_string(bid),
                 contact_precomputed);
+        contact_integ->runtime_communication_ = RuntimeCommunication();
         // set the same boundary marker. It will be internally used for nthread
         // assemble of marked boundaries
         contact_integ->SetBoundaryMarker(&Base_::boundary_markers_[bid]);
