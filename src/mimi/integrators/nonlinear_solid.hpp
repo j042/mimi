@@ -220,15 +220,14 @@ public:
   }
 
   /// Performs quad loop with element data and temporary data
-  void QuadLoop(const mfem::DenseMatrix& x,
-                const Vector_<QuadData>& q_data,
+  void QuadLoop(const Vector_<QuadData>& q_data,
                 TemporaryData& tmp,
                 mfem::DenseMatrix& residual_matrix) const {
     MIMI_FUNC()
     for (const QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
       // does mfem::MultAtB(x, q.dN_dX_, tmp.F_) and resets internal flags
-      tmp.ComputeF(x, q.dN_dX_);
+      tmp.ComputeF(q.dN_dX_);
 
       // currently we will just use PK1
       material_->EvaluatePK1(q.material_state_, tmp, tmp.stress_);
@@ -240,13 +239,12 @@ public:
   }
 
   /// Performs quad loop with element data and temporary data
-  void AccumulateStatesAtQuads(const mfem::DenseMatrix& x,
-                               Vector_<QuadData>& q_data,
+  void AccumulateStatesAtQuads(Vector_<QuadData>& q_data,
                                TemporaryData& tmp) const {
     MIMI_FUNC()
     for (QuadData& q : q_data) {
       // get dx_dX = x * dN_dX
-      tmp.ComputeF(x, q.dN_dX_);
+      tmp.ComputeF(q.dN_dX_);
 
       // currently we will just use PK1
       material_->Accumulate(q.material_state_, tmp);
@@ -270,11 +268,10 @@ public:
         tmp.local_residual_ = 0.0;
 
         // get current element solution as matrix
-        mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
+        tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
 
         // assemble residual
-        QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);
+        QuadLoop(e.quad_data_, tmp, tmp.local_residual_);
 
         // push right away - seems to work quite well!
         const std::lock_guard<std::mutex> lock(residual_mutex);
@@ -300,11 +297,10 @@ public:
             tmp.SetDof(e.n_dof_);
 
             // get current element solution as matrix
-            mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
+            tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
 
             // accumulate
-            AccumulateStatesAtQuads(current_element_x, e.quad_data_, tmp);
+            AccumulateStatesAtQuads(e.quad_data_, tmp);
           }
         };
     mimi::utils::NThreadExe(accumulate_states, n_elements_, n_threads_);
@@ -332,7 +328,7 @@ public:
                 tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
 
             // assemble residual
-            QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);
+            QuadLoop(e.quad_data_, tmp, tmp.local_residual_);
 
             double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
@@ -349,10 +345,7 @@ public:
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;
-              QuadLoop(current_element_x,
-                       e.quad_data_,
-                       tmp,
-                       tmp.forward_residual_);
+              QuadLoop(e.quad_data_, tmp, tmp.forward_residual_);
 
               for (int k{}; k < e.n_tdof_; ++k) {
                 *grad_data++ =
@@ -401,7 +394,7 @@ public:
                 tmp.CurrentElementSolutionCopy(current_x, *e.v_dofs_);
 
             // assemble residual
-            QuadLoop(current_element_x, e.quad_data_, tmp, tmp.local_residual_);
+            QuadLoop(e.quad_data_, tmp, tmp.local_residual_);
 
             double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
@@ -418,10 +411,7 @@ public:
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;
-              QuadLoop(current_element_x,
-                       e.quad_data_,
-                       tmp,
-                       tmp.forward_residual_);
+              QuadLoop(e.quad_data_, tmp, tmp.forward_residual_);
 
               for (int k{}; k < e.n_tdof_; ++k) {
                 *grad_data++ =

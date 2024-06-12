@@ -744,7 +744,7 @@ public:
   }
 
   /// checks GapNorm from given test_x
-  virtual double GapNorm(const mfem::Vector& test_x, const int nthreads) const {
+  virtual double GapNorm(const mfem::Vector& test_x, const int nthreads) {
     MIMI_FUNC()
 
     std::mutex gap_norm;
