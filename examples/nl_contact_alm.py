@@ -14,7 +14,7 @@ le.read_mesh("tests/data/sqn.mesh")
 # set param
 
 # refine
-le.elevate_degrees(1)
+le.elevate_degrees(3)
 le.subdivide(4)
 
 # mat
@@ -48,7 +48,7 @@ curv.cps[:] += [-5, 0.75]
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(1001, 4)
-scene.coefficient = 1e9
+scene.coefficient = 1e10
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
@@ -70,7 +70,7 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
+le.configure_newton("nonlinear_solid", 1e-10, 1e-8, 20, False)
 
 tic.toc("bilinear, linear forms assembly")
 

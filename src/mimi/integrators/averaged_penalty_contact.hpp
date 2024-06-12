@@ -464,10 +464,6 @@ public:
         }
         bed.local_v_dofs_[i] = local_marked_v_dofs_[(*bed.v_dofs_)[i]];
       }
-      mimi::utils::PrintInfo("dofs");
-      bed.local_dofs_.Print();
-      mimi::utils::PrintInfo("vdofs");
-      bed.local_v_dofs_.Print();
     }
 
     // save indices
@@ -530,56 +526,64 @@ public:
 
     std::mutex gap_mutex;
     // lambda for nthread assemble
-    auto prepare_average_gap = [&](const int begin,
-                                   const int end,
-                                   const int i_thread) {
-      double local_area{};
-      auto& tmp = temporary_data_[i_thread];
-      for (int i{begin}; i < end; ++i) {
-        BoundaryElementData& bed = boundary_element_data_[i];
-        tmp.SetDof(bed.n_dof_);
+    auto prepare_average_gap =
+        [&](const int begin, const int end, const int i_thread) {
+          double local_area{};
+          auto& tmp = temporary_data_[i_thread];
+          for (int i{begin}; i < end; ++i) {
+            BoundaryElementData& bed = boundary_element_data_[i];
+            tmp.SetDof(bed.n_dof_);
 
-        // get current element solution as matrix
-        mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_x, bed);
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, bed);
 
-        bool any_active = false;
-        const double penalty = nearest_distance_coeff_->coefficient_;
-        const int* ids = bed.local_dofs_.GetData();
-        for (QuadData& q : bed.quad_data_) {
-          tmp.ComputeNearestDistanceQuery(q.N_);
-          nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
-                                                   tmp.distance_results_);
-          tmp.distance_results_.ComputeNormal<true>(); // unit normal
-          const double g = tmp.distance_results_.NormalGap();
+            bool any_active = false;
+            const double penalty = nearest_distance_coeff_->coefficient_;
+            const int* ids = bed.local_dofs_.GetData();
+            for (QuadData& q : bed.quad_data_) {
+              tmp.ComputeNearestDistanceQuery(q.N_);
+              nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
+                                                       tmp.distance_results_);
+              tmp.distance_results_.ComputeNormal<true>(); // unit normal
+              const double g = tmp.distance_results_.NormalGap();
 
-          mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi_);
-          const double fac = q.integration_weight_ * J.Weight();
-          local_area += fac;
+              mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi_);
+              const double fac = q.integration_weight_ * J.Weight();
+              local_area += fac;
 
-          if (!(g < 0.)) { // tried going through all, but didn't work so well.
-                           // TODO Try again
-            continue;
+              // normalgap validity and angle tolerance
+              // angle between two vectors:  acos(a * b / (a.norm * b.norm))
+              // difference * unit_normal is g, distance is denom.
+              // wasn't so clear on paper if we only loop active or not, but
+              // this seems to work better
+              constexpr const double angle_tol = 1.e-5;
+              if (!(g < 0.)
+                  || std::acos(std::min(1.,
+                                        std::abs(g)
+                                            / tmp.distance_results_.distance_))
+                         > angle_tol) {
+                continue;
+              }
+
+              // push right away
+              double* a = area_.GetData();
+              double* avg_g = average_gap_.GetData();
+              const double* shape = q.N_.GetData();
+              const double g_fac = fac * g;
+              // real push
+              std::lock_guard<std::mutex> lock(gap_mutex);
+              for (int k{}; k < bed.n_dof_; ++k) {
+                const double N = shape[k];
+                a[ids[k]] += N * fac;
+                avg_g[ids[k]] += N * g_fac;
+              }
+            }
           }
-
-          // push right away
-          double* a = area_.GetData();
-          double* avg_g = average_gap_.GetData();
-          const double* shape = q.N_.GetData();
-          const double g_fac = fac * g;
-          // real push
+          // area contribution
           std::lock_guard<std::mutex> lock(gap_mutex);
-          for (int k{}; k < bed.n_dof_; ++k) {
-            const double N = shape[k];
-            a[ids[k]] += N * fac;
-            avg_g[ids[k]] += N * g_fac;
-          }
-        }
-      }
-      // area contribution
-      std::lock_guard<std::mutex> lock(gap_mutex);
-      area += local_area;
-    };
+          area += local_area;
+        };
 
     mimi::utils::NThreadExe(prepare_average_gap,
                             n_marked_boundaries_,
