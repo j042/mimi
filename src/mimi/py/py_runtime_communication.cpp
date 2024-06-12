@@ -26,7 +26,8 @@ void init_py_runtime_communication(py::module_& m) {
       .def("should_save", &RC::ShouldSave)
       .def("setup_real_history", &RC::SetupRealHistory)
       .def("get_real_history", &RC::GetRealHistory)
-      .def("save_real_history", &RC::SaveRealHistory);
+      .def("save_real_history", &RC::SaveRealHistory)
+      .def("latest_vector", &RC::LatestVector);
 }
 
 } // namespace mimi::py

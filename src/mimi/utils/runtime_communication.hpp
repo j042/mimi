@@ -48,6 +48,7 @@ void MapSet(MapType& map,
 class RuntimeCommunication {
 protected:
   std::unordered_map<std::string, Vector<mfem::Vector>> vectors_;
+  std::unordered_map<std::string, Vector<double>> latest_vector_;
   std::unordered_map<std::string, Vector<double>> real_history_;
   std::unordered_map<std::string, Vector<int>> integer_history_;
   std::unordered_map<std::string, double> real_;
@@ -181,6 +182,13 @@ public:
     SaveVector(vector_name + std::to_string(i_timestep_),
                vector.GetData(),
                vector.Size());
+    auto& vec = latest_vector_[vector_name];
+    vec.resize(vector.Size());
+    std::copy_n(vector.GetData(), vector.Size(), vec.data());
+  }
+
+  Vector<double>& LatestVector(const std::string& vector_name) {
+    return latest_vector_.at(vector_name);
   }
 };
 

@@ -14,8 +14,8 @@ le.read_mesh("tests/data/sqn.mesh")
 # set param
 
 # refine
-le.elevate_degrees(3)
-le.subdivide(4)
+le.elevate_degrees(1)
+le.subdivide(3)
 
 # mat
 mat = mimi.PyCompressibleOgdenNeoHookean()
@@ -42,7 +42,7 @@ curv = sp.Bezier(
         [10.5, 2.3],
     ],
 )
-curv.cps[:] += [-5, 0.75]
+curv.cps[:] += [0, 0.75]
 
 
 scene = mimi.PyNearestDistanceToSplines()
@@ -85,7 +85,7 @@ tic.summary(print_=True)
 # s.show_options["control_points"] = False
 # s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-s.show_options["control_points"] = False
+# s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
@@ -93,7 +93,7 @@ tic.summary(print_=True)
 
 
 def move():
-    if i < 100:
+    if i < 200:
         curv.cps[:] -= [0, 0.005]
     else:
         curv.cps[:] -= [0.04, 0]
@@ -130,9 +130,7 @@ def show():
 
 # initialize a plotter
 plt = gus.show([s, curv], interactive=False, close=False)
-n = le.nonlinear_from2("contact")
-ni = n.boundary_integrator(0)
-for i in range(200):
+for i in range(400):
     move()
     # le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
     # le.advance_time2()
