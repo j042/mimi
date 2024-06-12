@@ -109,7 +109,7 @@ inline void CalcDeterminantPlusIMinusOne(const mfem::DenseMatrix& A,
 /// @brief taken from optimism (github.com/sandialabs/optimism) to see if this
 /// behaves better
 template<int mat0 = 3, int mat1 = 4, int vec0 = 0, typename TmpData>
-inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
+inline void LogarithmicStrain(const mfem::DenseMatrix& Fp,
                               TmpData& tmp,
                               mfem::DenseMatrix& elastic_strain) {
   MIMI_FUNC()
@@ -117,12 +117,11 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
   const int dim = tmp.dim_;
 
   // name of this work matrix may change throughout this function
-  mfem::DenseMatrix& plastic_strain_inv = tmp.aux_mat_[mat0];
+  mfem::DenseMatrix& Fp_inv = tmp.aux_mat_[mat0];
   mfem::DenseMatrix& F_el = tmp.aux_mat_[mat1];
 
   // there's a way to preserve small J -> use/implement
   // CalcDeterminantPlusIMinusOne
-  // const double trace_Ee = std::log1p(std::abs(tmp.DetF()) - 1.);
   const double trace_Ee = std::log1p(tmp.DetF() - 1.);
   if (!std::isfinite(trace_Ee)) {
     mimi::utils::PrintAndThrowError(
@@ -130,10 +129,10 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
         tmp.DetF());
   }
 
-  mfem::CalcInverse(plastic_strain, plastic_strain_inv);
-  mfem::Mult(tmp.F_, plastic_strain_inv, F_el);
+  mfem::CalcInverse(Fp, Fp_inv);
+  mfem::Mult(tmp.F_, Fp_inv, F_el);
 
-  mfem::DenseMatrix& Ce = plastic_strain_inv; // use work1 as Ce
+  mfem::DenseMatrix& Ce = Fp_inv; // use work1 as Ce
   mfem::MultAtB(F_el, F_el, Ce);
 
   // do optimism.TensorMath.log_sqrt_symm
@@ -150,6 +149,48 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& plastic_strain,
   Ee *= 0.5;
 
   Dev(Ee, dim, 1.0, elastic_strain);
+  AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
+}
+
+template<int mat0 = 3, int mat1 = 4, int vec0 = 0, typename TmpData>
+inline void LogarithmicStrain2(const mfem::DenseMatrix& Fp,
+                               TmpData& tmp,
+                               mfem::DenseMatrix& elastic_strain) {
+  MIMI_FUNC()
+
+  const int dim = tmp.dim_;
+
+  // name of this work matrix may change throughout this function
+  mfem::DenseMatrix& w_mat0 = tmp.aux_mat_[mat0];
+  mfem::DenseMatrix& w_mat1 = tmp.aux_mat_[mat1];
+
+  mfem::DenseMatrix& Fp_inv_t = w_mat0;
+  mfem::DenseMatrix& F_e_t = w_mat1;
+
+  mfem::CalcInverse(Fp, Fp_inv_t);
+  mfem::MultABt(Fp_inv_t, tmp.F_, F_e_t);
+
+  const double Je = F_e_t.Det();
+  const double trace_Ee = std::log(Je);
+
+  mfem::DenseMatrix& CeIso = w_mat0; // use work1 as Ce
+  mfem::MultAAt(F_e_t, CeIso);
+  CeIso *= std::pow(Je, -2. / 3.);
+
+  // do optimism.TensorMath.log_sqrt_symm
+  mfem::Vector& eigen_values = tmp.aux_vec_[vec0];
+  mfem::DenseMatrix& eigen_vectors = w_mat1;
+  CeIso.Symmetrize();
+  CeIso.CalcEigenvalues(eigen_values.GetData(), eigen_vectors.GetData());
+  // apply log
+  for (int i{}; i < dim; ++i) {
+    eigen_values[i] = std::log(eigen_values[i]);
+  }
+  // mfem::DenseMatrix& Ee = Ce; // reuse Ce
+  mfem::MultADAt(eigen_vectors, eigen_values, elastic_strain);
+  elastic_strain *= 0.5;
+
+  // Dev(Ee, dim, 1.0, elastic_strain);
   AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
 }
 
