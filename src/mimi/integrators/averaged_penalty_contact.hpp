@@ -174,7 +174,7 @@ public:
     mfem::DenseMatrix local_grad_;
     mfem::DenseMatrix forward_residual_;
 
-    mfem::Vector element_gap_;
+    mfem::Vector element_pressure_;
 
     mimi::coefficients::NearestDistanceBase::Query distance_query_;
     mimi::coefficients::NearestDistanceBase::Results distance_results_;
@@ -204,7 +204,7 @@ public:
       local_residual_.SetSize(n_dof, dim_);
       local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
       forward_residual_.SetSize(n_dof, dim_);
-      element_gap_.SetSize(n_dof);
+      element_pressure_.SetSize(n_dof);
     }
 
     mfem::DenseMatrix&
@@ -216,12 +216,12 @@ public:
       return element_x_mat_;
     }
 
-    mfem::Vector& CurrentElementGap(const mfem::Vector& gap_all,
-                                    const BoundaryElementData& elem_data) {
+    mfem::Vector& CurrentElementPressure(const mfem::Vector& pressure_all,
+                                         const BoundaryElementData& elem_data) {
       MIMI_FUNC()
 
-      gap_all.GetSubVector(elem_data.local_dofs_, element_gap_);
-      return element_gap_;
+      pressure_all.GetSubVector(elem_data.local_dofs_, element_pressure_);
+      return element_pressure_;
     }
 
     mfem::DenseMatrix& ComputeJ(const mfem::DenseMatrix& dndxi) {
@@ -235,15 +235,15 @@ public:
       element_x_mat_.MultTranspose(N, distance_query_.query_.data());
     }
 
-    double Gap(const mfem::Vector& N) const {
+    double Pressure(const mfem::Vector& N) const {
       MIMI_FUNC()
-      const double* g_d = element_gap_.GetData();
+      const double* p_d = element_pressure_.GetData();
       const double* n_d = N.GetData();
-      double gap{};
+      double p{};
       for (int i{}; i < N.Size(); ++i) {
-        gap += n_d[i] * g_d[i];
+        p += n_d[i] * p_d[i];
       }
-      return gap;
+      return p;
     }
   };
 
@@ -274,6 +274,7 @@ protected:
 
   /// these are numerator and denominator
   mfem::Vector average_gap_;
+  mfem::Vector average_pressure_;
   mfem::Vector area_;
 
   Vector_<TemporaryData> temporary_data_;
@@ -482,6 +483,8 @@ public:
         + 1;
     average_gap_.SetSize(local_dof_size);
     average_gap_ = 0.0;
+    average_pressure_.SetSize(local_dof_size);
+    average_pressure_ = 0.0;
     area_.SetSize(local_dof_size);
     area_ = 0.0;
   }
@@ -512,10 +515,12 @@ public:
     MIMI_FUNC()
 
     double* ag_d = average_gap_.GetData();
+    double* ap_d = average_pressure_.GetData();
     double* ad = area_.GetData();
     for (int i{}; i < average_gap_.Size(); ++i) {
       ad[i] = 0.0;
       ag_d[i] = 0.0;
+      ap_d[i] = 0.0;
     }
   }
 
@@ -546,7 +551,8 @@ public:
               nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
                                                        tmp.distance_results_);
               tmp.distance_results_.ComputeNormal<true>(); // unit normal
-              const double g = tmp.distance_results_.NormalGap();
+              const double true_g = tmp.distance_results_.NormalGap();
+              double g = std::min(true_g, 0.);
 
               mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi_);
               const double fac = q.integration_weight_ * J.Weight();
@@ -558,13 +564,16 @@ public:
               // wasn't so clear on paper if we only loop active or not, but
               // this seems to work better
               constexpr const double angle_tol = 1.e-5;
-              if (!(g < 0.)
-                  || std::acos(std::min(1.,
-                                        std::abs(g)
-                                            / tmp.distance_results_.distance_))
-                         > angle_tol) {
-                continue;
+              // if (!(g < 0.) ||
+              if (std::acos(std::min(1.,
+                                     std::abs(true_g)
+                                         / tmp.distance_results_.distance_))
+                  > angle_tol) {
+                // q.active_ = false;
+                g = 0.0;
+                // continue;
               }
+              // q.active_ = true;
 
               // push right away
               double* a = area_.GetData();
@@ -576,7 +585,7 @@ public:
               for (int k{}; k < bed.n_dof_; ++k) {
                 const double N = shape[k];
                 a[ids[k]] += N * fac;
-                avg_g[ids[k]] += N * g_fac;
+                avg_g[ids[k]] += N * g_fac; // this maybe zero
               }
             }
           }
@@ -590,13 +599,25 @@ public:
                             (nthreads < 0) ? n_threads_ : nthreads);
 
     // divide
+    const double penalty = nearest_distance_coeff_->coefficient_;
     const double* a_d = area_.GetData();
     double* ag_d = average_gap_.GetData();
+    double* ap_d = average_pressure_.GetData();
     for (int i{}; i < average_gap_.Size(); ++i) {
       const double a = a_d[i];
-      if (a != 0.0) {
-        ag_d[i] /= a;
+      // check if average gap is avtive
+      if (!(ag_d[i] < 0.)) {
+        // not active
+        ap_d[i] = 0.0;
       }
+
+      if (a != 0.0) { // as we sum all, a should never be zero..
+        ag_d[i] /= a;
+      } else {
+        mimi::utils::PrintAndThrowError("bad area");
+      }
+
+      ap_d[i] = ag_d[i] * penalty;
     }
   }
 
@@ -611,10 +632,10 @@ public:
     const double penalty = nearest_distance_coeff_->coefficient_;
 
     for (QuadData& q : q_data) {
-      const double g = tmp.Gap(q.N_);
-      assert(std::isfinite(g));
+      const double p = tmp.Pressure(q.N_);
+      assert(std::isfinite(p));
 
-      if (!(g < 0.)) {
+      if (!(p < 0.)) {
         continue;
       }
 
@@ -642,16 +663,16 @@ public:
       // we allow reduction of p, as long as it doesn't change sign
       // implementation here has flipped sign so we cut at 0.0
       // see https://doi.org/10.1016/0045-7949(92)90540-G
-      const double p = std::min(q.lagrange_ + penalty * g, 0.0);
-      if (p == 0.0) {
-        // this quad no longer contributes to contact enforcement
-        q.Record(keep_record, det_J, 0.0, g, false);
-        continue;
-      }
+      // const double p = std::min(q.lagrange_ + penalty * g, 0.0);
+      // if (p == 0.0) {
+      //   // this quad no longer contributes to contact enforcement
+      //   q.Record(keep_record, det_J, 0.0, g, false);
+      //   continue;
+      // }
 
       // maybe only a minor difference, but we don't want to keep records from
       // line search or FD computations
-      q.Record(keep_record, det_J, p, g, true);
+      q.Record(keep_record, det_J, p, p, true);
 
       // set active after checking p
       any_active = true;
@@ -698,7 +719,7 @@ public:
 
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, bed);
-            tmp.CurrentElementGap(average_gap_, bed);
+            tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual
             // this function is called either at the last step at "melted"
@@ -745,7 +766,7 @@ public:
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, bed);
-            tmp.CurrentElementGap(average_gap_, bed);
+            tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual
             const bool any_active = QuadLoop(bed.quad_data_,
@@ -831,7 +852,7 @@ public:
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, bed);
-            tmp.CurrentElementGap(average_gap_, bed);
+            tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual
             const bool any_active = QuadLoop(bed.quad_data_,
@@ -951,6 +972,7 @@ public:
 
   virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {
     MIMI_FUNC()
+    average_pressure_.Print();
 
     auto& rc = *RuntimeCommunication();
     if (rc.ShouldSave("contact_history")) {
