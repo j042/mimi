@@ -945,12 +945,14 @@ public:
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    auto residual = [eqps_old, eqps_rate, q, temperature, *this](
+    const double thermo_visco_contrib =
+        hardening_->ThermoContribution(temperature)
+        * hardening_->ViscoContribution(eqps_rate);
+    auto residual = [eqps_old, q, thermo_visco_contrib, *this](
                         auto delta_eqps) -> ADScalar_ {
       return q - 3.0 * G_ * delta_eqps
-             - hardening_->Evaluate(eqps_old + delta_eqps,
-                                    eqps_rate,
-                                    temperature);
+             - hardening_->Evaluate(eqps_old + delta_eqps)
+                   * thermo_visco_contrib;
     };
 
     const double tolerance = hardening_->SigmaY() * k_tol;
