@@ -641,6 +641,7 @@ public:
 
     assert(x2_);
     assert(x2_dot_);
+    mimi::utils::PrintInfo("🌲🌲 StepTime2 🌲🌲 - t:", t_, "dt:", dt_);
 
     ode2_solver_->StepTime2(*x2_, *x2_dot_, t_, dt_);
     auto& rc = *RuntimeCommunication();
@@ -658,6 +659,7 @@ public:
 
     assert(x2_);
     assert(x2_dot_);
+    mimi::utils::PrintInfo("📌📌 FixedPointSolve2 📌📌 - t:", t_, "dt:", dt_);
 
     ode2_solver_->FixedPointSolve2(*x2_, *x2_dot_, t_, dt_);
   }
@@ -679,6 +681,7 @@ public:
       fv[i] = v[i];
     }
 
+    mimi::utils::PrintInfo("📍📍 FixedPointAdvance2 📍📍 - t:", t_, "dt:", dt_);
     ode2_solver_->FixedPointAdvance2(fp_x, fp_v, t_, dt_);
   }
 
@@ -740,6 +743,10 @@ public:
                                    const bool restart_augmentation) {
     MIMI_FUNC()
 
+    mimi::utils::PrintInfo("🧮🧮 FixedPointALMSolve2 🧮🧮 - t:",
+                           t_,
+                           "dt:",
+                           dt_);
     PrepareALM();
 
     /// maye add something like - ensure planted tree
@@ -818,6 +825,7 @@ public:
 
     assert(x2_);
     assert(x2_dot_);
+    mimi::utils::PrintInfo("🚂🚂 AdvanceTime2 🚂🚂 - t:", t_, "dt:", dt_);
 
     ode2_solver_->AdvanceTime2(*x2_, *x2_dot_, t_, dt_);
     auto& rc = *RuntimeCommunication();

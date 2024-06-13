@@ -274,6 +274,7 @@ protected:
   /// these are numerator and denominator
   mfem::Vector average_gap_;
   mfem::Vector average_pressure_;
+  mfem::Vector augmented_pressure_;
   mfem::Vector area_;
 
   Vector_<TemporaryData> temporary_data_;
