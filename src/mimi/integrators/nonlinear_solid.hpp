@@ -254,6 +254,10 @@ public:
   virtual void AddDomainResidual(const mfem::Vector& current_x,
                                  const int nthreads,
                                  mfem::Vector& residual) const {
+    material_->dt_ = dt_;
+    material_->first_effective_dt_ = first_effective_dt_;
+    material_->second_effective_dt_ = second_effective_dt_;
+
     std::mutex residual_mutex;
     // lambda for nthread assemble
     auto assemble_element_residual_and_contribute = [&](const int begin,
@@ -309,6 +313,10 @@ public:
   virtual void AddDomainGrad(const mfem::Vector& current_x,
                              const int nthreads,
                              mfem::SparseMatrix& grad) const {
+
+    material_->dt_ = dt_;
+    material_->first_effective_dt_ = first_effective_dt_;
+    material_->second_effective_dt_ = second_effective_dt_;
 
     std::mutex residual_mutex;
     // lambda for nthread assemble
@@ -376,6 +384,10 @@ public:
                                         const double grad_factor,
                                         mfem::Vector& residual,
                                         mfem::SparseMatrix& grad) const {
+
+    material_->dt_ = dt_;
+    material_->first_effective_dt_ = first_effective_dt_;
+    material_->second_effective_dt_ = second_effective_dt_;
 
     std::mutex residual_mutex;
     // lambda for nthread assemble

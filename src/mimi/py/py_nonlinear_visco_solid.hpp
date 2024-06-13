@@ -33,7 +33,7 @@ public:
                                       "is not rate dependent material, thus "
                                       "not suitable for NonlinearViscoSolid");
     }
-    material_ = material;
+    Base_::SetMaterial(material);
   }
 
   virtual void Setup(const int nthreads = -1) {

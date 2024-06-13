@@ -25,6 +25,7 @@ public:
   virtual void SetMaterial(const MaterialPointer_& material) {
     MIMI_FUNC()
     material_ = material;
+    mimi::utils::PrintInfo("Set material", material_->Name());
   }
 
   virtual void Setup(const int nthreads = -1) {

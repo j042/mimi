@@ -82,10 +82,9 @@ public:
   mfem::CGSolver mass_inv_;
   mfem::DSmoother mass_inv_prec_;
   mfem::UMFPackSolver mass_inv_direct_;
-  mfem::Vector mass_b_;        // for rhs
-  mfem::Vector mass_x_;        // for answer
-  mfem::Vector last_residual_; // Forces
-  double last_area_;           // for p = forces / A
+  mfem::Vector mass_b_; // for rhs
+  mfem::Vector mass_x_; // for answer
+  double last_area_;    // for p = forces / A
   mimi::utils::Data<double> last_force_;
 
   /// precomputed data at quad points
@@ -452,7 +451,6 @@ public:
       }
       local_marked_v_dofs_[m_vdof] = v_counter++;
     }
-    last_residual_.SetSize(local_marked_v_dofs_.size());
 
     // prepare local dofs for local, reduced length vectors
     for (auto& bed : boundary_element_data_) {
@@ -700,44 +698,46 @@ public:
                                    const int nthreads,
                                    mfem::Vector& residual) {
     MIMI_FUNC()
-    double dummy_area{};
-    AverageGap(current_x, nthreads, dummy_area);
+    last_area_ = 0.0;
+    AverageGap(current_x, nthreads, last_area_);
+    last_force_.Fill(0.0);
 
     std::mutex residual_mutex;
 
-    auto assemble_face_residual_and_maybe_grad =
-        [&](const int begin, const int end, const int i_thread) {
-          auto& tmp = temporary_data_[i_thread];
-          double area_dummy;
-          mimi::utils::Data<double> force_dummy;
-          // this loops marked boundary elements
-          for (int i{begin}; i < end; ++i) {
-            // get bed
-            BoundaryElementData& bed = boundary_element_data_[i];
-            tmp.SetDof(bed.n_dof_);
-            tmp.local_residual_ = 0.0;
+    auto assemble_face_residual_and_maybe_grad = [&](const int begin,
+                                                     const int end,
+                                                     const int i_thread) {
+      auto& tmp = temporary_data_[i_thread];
+      mimi::utils::Data<double> tl_force(dim_);
+      tl_force.Fill(0.0);
+      // this loops marked boundary elements
+      for (int i{begin}; i < end; ++i) {
+        // get bed
+        BoundaryElementData& bed = boundary_element_data_[i];
+        tmp.SetDof(bed.n_dof_);
+        tmp.local_residual_ = 0.0;
 
-            mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, bed);
-            tmp.CurrentElementPressure(average_pressure_, bed);
+        mfem::DenseMatrix& current_element_x =
+            tmp.CurrentElementSolutionCopy(current_x, bed);
+        tmp.CurrentElementPressure(average_pressure_, bed);
 
-            // assemble residual
-            // this function is called either at the last step at "melted"
-            // staged or during line search, keep_record = False
-            const bool any_active = QuadLoop(bed.quad_data_,
-                                             tmp,
-                                             tmp.local_residual_,
-                                             false,
-                                             force_dummy);
+        // assemble residual
+        // this function is called either at the last step at "melted"
+        // staged or during line search, keep_record = False
+        const bool any_active =
+            QuadLoop(bed.quad_data_, tmp, tmp.local_residual_, false, tl_force);
 
-            // only push if any of quad point was active
-            if (any_active) {
-              const std::lock_guard<std::mutex> lock(residual_mutex);
-              residual.AddElementVector(*bed.v_dofs_,
-                                        tmp.local_residual_.GetData());
-            }
-          } // marked elem loop
-        };
+        // only push if any of quad point was active
+        if (any_active) {
+          const std::lock_guard<std::mutex> lock(residual_mutex);
+          residual.AddElementVector(*bed.v_dofs_,
+                                    tmp.local_residual_.GetData());
+        }
+      } // marked elem loop
+        // reuse mutex for area and force update
+      std::lock_guard<std::mutex> lock(residual_mutex);
+      last_force_.Add(tl_force);
+    };
 
     mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
                             n_marked_boundaries_,
@@ -756,8 +756,7 @@ public:
     auto assemble_boundary_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
           auto& tmp = temporary_data_[i_thread];
-          double area_dummy;
-          mimi::utils::Data<double> force_dummy;
+          mimi::utils::Data<double> force_dummy(dim_);
           for (int i{begin}; i < end; ++i) {
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
@@ -831,19 +830,15 @@ public:
                                           mfem::SparseMatrix& grad) {
     last_area_ = 0.0;
     AverageGap(current_x, nthreads, last_area_);
-
     last_force_.Fill(0.0);
-    const bool save_residual =
-        RuntimeCommunication()->ShouldSave("contact_forces");
-    if (save_residual) {
-      last_residual_ = 0.0;
-    }
+
     std::mutex residual_mutex;
     // lambda for nthread assemble
     auto assemble_boundary_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
           auto& tmp = temporary_data_[i_thread];
           mimi::utils::Data<double> tl_force(dim_);
+          tl_force.Fill(0.0);
           for (int i{begin}; i < end; ++i) {
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
@@ -905,15 +900,6 @@ public:
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++ * grad_factor;
             }
-            if (save_residual) {
-              // since we don't save our local copy, we can't really have this
-              // serial at the end
-              double* last_r_d = last_residual_.GetData();
-              const double* local_r_d = tmp.local_residual_.GetData();
-              for (int k{}; k < bed.n_tdof_; ++k) {
-                last_r_d[bed.local_v_dofs_[k]] = local_r_d[k];
-              }
-            }
           }
           // reuse mutex for area and force update
           std::lock_guard<std::mutex> lock(residual_mutex);
@@ -972,7 +958,6 @@ public:
 
   virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {
     MIMI_FUNC()
-    average_pressure_.Print();
 
     auto& rc = *RuntimeCommunication();
     if (rc.ShouldSave("contact_history")) {
@@ -984,9 +969,9 @@ public:
       }
     }
     if (rc.ShouldSave("contact_forces")) {
-      rc.SaveDynamicVector("vector_residual_", last_residual_);
-    }
-    if (rc.ShouldSave("")) {
+      rc.SaveDynamicVector(
+          "pressure_",
+          average_pressure_); // with this we can always rebuild traction
     }
   }
 
