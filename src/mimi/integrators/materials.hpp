@@ -940,11 +940,6 @@ public:
     for (int i{}; i < dim_ * dim_; ++i) {
       tps_d[i] = (fac0 * s_d[i] + eps_d[i] - peps_d[i] - ps_d[i]) * t_fac1;
     }
-    // trial_plastic_strain_rate.Set(1.5 / q * accumulated_plastic_strain, s);
-    // trial_plastic_strain_rate += eps;
-    // trial_plastic_strain_rate -= previous_eps;
-    // trial_plastic_strain_rate -= plastic_strain;
-    // trial_plastic_strain_rate *= 1. / dt_;
     const double eqps_rate =
         EquivalentPlasticStrainRate(trial_plastic_strain_rate);
 
@@ -983,21 +978,23 @@ public:
       if constexpr (accumulate) {
         accumulated_plastic_strain += delta_eqps;
         plastic_strain.Add(delta_eqps, N_p);
-        // clip at melting temp + 1, just to make sure that in next
-        // simulation, this will trigger contribution=0.0
-        const double temp_rate =
-            (heat_fraction_ * eqps_rate * q) / (density_ * specific_heat_);
-        temperature =
-            std::min(temperature + temp_rate * dt_, melting_temperature_ + 1.0);
+        mat_w0.Set(delta_eqps / dt_,
+                   N_p); // accumulation rate to get temperature
       }
     }
 
     // returning s + p * I
-    if constexpr (!accumulate) {
-      mfem::Add(s, tmp.I_, p, sigma);
-    } else {
+    mfem::Add(s,
+              tmp.I_,
+              p,
+              sigma); // we'll compute temperature increase based on this
+    if constexpr (accumulate) {
       // in case of accumulation, we save elastic strain as well
       previous_eps = eps;
+      const double temp_rate = (heat_fraction_ * std::max(sigma * mat_w0, 0.0))
+                               / (density_ * specific_heat_);
+      temperature =
+          std::min(temperature + temp_rate * dt_, melting_temperature_ + 1.0);
     }
   }
 

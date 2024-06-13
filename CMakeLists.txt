@@ -4,8 +4,8 @@ project(mimi)
 
 option(MIMI_COMPILE_SPLINEPY "compile splinepy" OFF)
 
-#list(APPEND CMAKE_PREFIX_PATH /Users/j/sw /opt/homebrew/lib
-#     /opt/homebrew/opt/libomp)
+list(APPEND CMAKE_PREFIX_PATH /Users/j/sw /opt/homebrew/lib
+     /opt/homebrew/opt/libomp)
 
 option(MIMI_USE_OMP "Use openmp. else std::thread" ON)
 
