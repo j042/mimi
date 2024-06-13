@@ -930,11 +930,21 @@ public:
     const double q = sqrt_3_2_ * Norm(s); // trial mises
 
     mfem::DenseMatrix trial_plastic_strain_rate = mat_w0;
-    trial_plastic_strain_rate.Set(1.5 / q * accumulated_plastic_strain, s);
-    trial_plastic_strain_rate += eps;
-    trial_plastic_strain_rate -= previous_eps;
-    trial_plastic_strain_rate -= plastic_strain;
-    trial_plastic_strain_rate *= 1. / dt_;
+    const double* s_d = s.GetData();
+    const double* eps_d = eps.GetData();
+    const double* peps_d = previous_eps.GetData();
+    const double* ps_d = plastic_strain.GetData();
+    double* tps_d = trial_plastic_strain_rate.GetData();
+    const double fac0 = 1.5 / q * accumulated_plastic_strain;
+    const double t_fac1 = 1. / dt_;
+    for (int i{}; i < dim_ * dim_; ++i) {
+      tps_d[i] = (fac0 * s_d[i] + eps_d[i] - peps_d[i] - ps_d[i]) * t_fac1;
+    }
+    // trial_plastic_strain_rate.Set(1.5 / q * accumulated_plastic_strain, s);
+    // trial_plastic_strain_rate += eps;
+    // trial_plastic_strain_rate -= previous_eps;
+    // trial_plastic_strain_rate -= plastic_strain;
+    // trial_plastic_strain_rate *= 1. / dt_;
     const double eqps_rate =
         EquivalentPlasticStrainRate(trial_plastic_strain_rate);
 
@@ -976,7 +986,7 @@ public:
         // clip at melting temp + 1, just to make sure that in next
         // simulation, this will trigger contribution=0.0
         const double temp_rate =
-            (heat_fraction_ * eqps_rate) / (density_ * specific_heat_);
+            (heat_fraction_ * eqps_rate * q) / (density_ * specific_heat_);
         temperature =
             std::min(temperature + temp_rate * dt_, melting_temperature_ + 1.0);
       }
