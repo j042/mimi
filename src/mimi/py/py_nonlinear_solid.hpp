@@ -270,16 +270,21 @@ public:
 
     // setup solvers
     // setup linear solver - should try SUNDIALS::SuperLU_mt
-    auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
-    // auto lin_solver = std::make_shared<mfem::GMRESSolver>();
-    // auto prec = std::make_shared<mfem::DSmoother>();
-    // lin_solver->SetRelTol(1e-8);
-    // lin_solver->SetAbsTol(1e-12);
-    // lin_solver->SetMaxIter(300);
-    // lin_solver->SetPrintLevel(0);
-    // lin_solver->SetPreconditioner(*prec);
-    Base_::linear_solvers_["nonlinear_solid"] = lin_solver;
-    // Base_::linear_solvers_["nonlinear_solid_preconditioner"] = prec;
+    if (RuntimeCommunication()->GetInteger("use_iterative_solver", 0)) {
+      auto lin_solver = std::make_shared<mfem::GMRESSolver>();
+      auto prec = std::make_shared<mfem::DSmoother>();
+      lin_solver->SetRelTol(1e-8);
+      lin_solver->SetAbsTol(1e-12);
+      lin_solver->SetMaxIter(300);
+      lin_solver->SetPrintLevel(-1);
+      lin_solver->SetPreconditioner(*prec);
+      Base_::linear_solvers_["nonlinear_solid"] = lin_solver;
+      Base_::linear_solvers_["nonlinear_solid_preconditioner"] = prec;
+    } else {
+      auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
+      Base_::linear_solvers_["nonlinear_solid"] = lin_solver;
+    }
+
 
     // setup a newton solver
     auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
@@ -289,7 +294,7 @@ public:
     // basic config. you can change this using ConfigureNewton()
     newton->iterative_mode = false;
     newton->SetOperator(*nl_oper);
-    newton->SetSolver(*lin_solver);
+    newton->SetSolver(*Base_::linear_solvers_["nonlinear_solid"]);
     newton->SetPrintLevel(mfem::IterativeSolver::PrintLevel()
                               .Warnings()
                               .Errors()
