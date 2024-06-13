@@ -929,19 +929,18 @@ public:
     Dev(eps, dim_, 2.0 * G_, s);
     const double q = sqrt_3_2_ * Norm(s); // trial mises
 
-    mfem::DenseMatrix trial_plastic_strain_rate = mat_w0;
     const double* s_d = s.GetData();
     const double* eps_d = eps.GetData();
     const double* peps_d = previous_eps.GetData();
     const double* ps_d = plastic_strain.GetData();
-    double* tps_d = trial_plastic_strain_rate.GetData();
     const double fac0 = 1.5 / q * accumulated_plastic_strain;
     const double t_fac1 = 1. / dt_;
+    double rate_accum{}, rate_i;
     for (int i{}; i < dim_ * dim_; ++i) {
-      tps_d[i] = (fac0 * s_d[i] + eps_d[i] - peps_d[i] - ps_d[i]) * t_fac1;
+      rate_i = (fac0 * s_d[i] + eps_d[i] - peps_d[i] - ps_d[i]) * t_fac1;
+      rate_accum += rate_i * rate_i;
     }
-    const double eqps_rate =
-        EquivalentPlasticStrainRate(trial_plastic_strain_rate);
+    const double eqps_rate = std::sqrt(2. / 3. * rate_accum);
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;

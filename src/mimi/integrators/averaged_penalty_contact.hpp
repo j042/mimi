@@ -895,7 +895,6 @@ public:
             residual.AddElementVector(vdofs, tmp.local_residual_.GetData());
             double* A = grad.GetData();
             const double* local_A = tmp.local_grad_.GetData();
-
             const auto& A_ids = *bed.sparse_matrix_A_ids_;
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++ * grad_factor;
