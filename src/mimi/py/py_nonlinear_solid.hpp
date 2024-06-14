@@ -285,7 +285,6 @@ public:
       Base_::linear_solvers_["nonlinear_solid"] = lin_solver;
     }
 
-
     // setup a newton solver
     auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
     // give pointer of nl oper to control line search assembly
@@ -311,6 +310,15 @@ public:
     auto odesolver =
         std::make_unique<mimi::solvers::GeneralizedAlpha2>(*nl_oper);
     odesolver->PrintInfo();
+    if (!Base_::boundary_conditions_->InitialConfiguration()
+             .constant_velocity_.empty()) {
+      auto dynamic_dirichlet = std::make_shared<
+          mimi::utils::TimeDependentDirichletBoundaryCondition>();
+      dynamic_dirichlet->boundary_dof_ids_ = &disp_fes.boundary_dof_ids_;
+      dynamic_dirichlet->dynamic_bc_ = Base_::boundary_conditions_.get();
+      odesolver->dynamic_dirichlet_ = dynamic_dirichlet;
+    }
+    Base_::boundary_conditions_->Print();
 
     // finalize operator
     nl_oper->Setup();

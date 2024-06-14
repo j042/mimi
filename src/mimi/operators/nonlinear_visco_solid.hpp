@@ -26,9 +26,6 @@ protected:
   const double* mass_A_ = nullptr;
   int mass_n_nonzeros_ = -1;
 
-  mutable mfem::Vector temp_x_;
-  mutable mfem::Vector temp_v_;
-
 public:
   using Base_::Base_;
 
@@ -182,6 +179,10 @@ public:
     if (rhs_vector_) {
       y.Add(-1.0, *rhs_vector_);
     }
+
+    for (const int i : *dirichlet_dofs_) {
+      y[i] = 0.0;
+    }
   }
 
   /// Compute J = M + dt S + dt^2 E(x + dt (v + dt k)).
@@ -254,6 +255,10 @@ public:
     // this is usually just for fsi
     if (rhs_vector_) {
       y.Add(-1.0, *rhs_vector_);
+    }
+
+    for (const int i : *dirichlet_dofs_) {
+      y[i] = 0.0;
     }
 
     return jacobian_;

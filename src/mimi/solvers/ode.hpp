@@ -5,6 +5,7 @@
 #include <mfem.hpp>
 
 #include "mimi/operators/base.hpp"
+#include "mimi/utils/boundary_conditions.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::solvers {
@@ -16,6 +17,9 @@ protected:
   const mfem::Array<int>* dirichlet_dofs_{nullptr};
 
 public:
+  std::shared_ptr<mimi::utils::TimeDependentDirichletBoundaryCondition>
+      dynamic_dirichlet_;
+
   virtual ~OdeBase() = default;
   virtual std::string Name() const = 0;
   virtual void SetupDirichletDofs(const mfem::Array<int>* dirichlet_dofs) {
@@ -119,7 +123,60 @@ public:
     MIMI_FUNC()
 
     mimi_operator_->dt_ = dt;
-    Base_::Step(x, dxdt, t, dt);
+    // Base_::Step(x, dxdt, t, dt);
+
+    const double prev_fac = 1. - fac1_inv_;
+    const double fac0dt = fac0_ * dt;
+    const double fac1dt = fac1_ * dt;
+    const double fac2dt = fac2_ * dt;
+    const double fac3dtdt = fac3_ * dt * dt;
+    const double fac4dt = fac4_ * dt;
+    double* x_p = x.GetData();
+    double* v_p = dxdt.GetData();
+    double* a_p = d2xdt2.GetData();
+    double* xa_p = xa.GetData();
+    double* va_p = va.GetData();
+    const double* aa_p = aa.GetData();
+
+    if (nstate == 0) {
+      f->Mult(x, dxdt, d2xdt2);
+      nstate = 1;
+      aa = 0.0; // initialize aa as we want to use iterative mode for newton
+    }
+
+    // Predict alpha levels
+    // add(dxdt, fac0 * dt, d2xdt2, va);
+    // add(x, fac1 * dt, va, xa);
+    // add(dxdt, fac2 * dt, d2xdt2, va);
+    for (int i{}; i < x.Size(); ++i) {
+      xa_p[i] = x_p[i] + (v_p[i] + fac0dt * a_p[i]) * fac1dt;
+      va_p[i] = v_p[i] + fac2dt * a_p[i];
+    }
+
+    // solve alpha levels
+    f->SetTime(t + dt);
+    // apply BC
+    if (dynamic_dirichlet_) {
+      dynamic_dirichlet_->Apply(t, dt, x, dxdt, d2xdt2, xa, va, aa);
+    }
+    f->ImplicitSolve(fac3dtdt, fac4dt, xa, va, aa);
+
+    for (int i{}; i < x.Size(); ++i) {
+      const double aa_val = aa_p[i];
+      // corect alpha values
+      xa_p[i] += fac3dtdt * aa_val;
+      va_p[i] += fac4dt * aa_val;
+      // extrapolate
+      x_p[i] = (x_p[i] * prev_fac) + (fac1_inv_ * xa_p[i]);
+      v_p[i] = (v_p[i] * prev_fac) + (fac1_inv_ * va_p[i]);
+      a_p[i] = (a_p[i] * prev_fac) + (fac5_inv_ * aa_val);
+    }
+
+    // apply BC again
+    if (dynamic_dirichlet_) {
+      dynamic_dirichlet_->Restore(x, dxdt, d2xdt2);
+    }
+
     mimi_operator_->PostTimeAdvance(x, dxdt);
   }
   virtual void FixedPointSolve2(const mfem::Vector& x,
