@@ -1037,7 +1037,7 @@ public:
     static constexpr const int k_state_scalars{2};
     /// matrix indices
     static constexpr const int k_be_old{0};
-    static constexpr const int k_F_old_inv{1};
+    static constexpr const int k_F_old{1};
     /// scalar indices
     static constexpr const int k_accumulated_plastic_strain{0};
     static constexpr const int k_temperature{1};
@@ -1104,7 +1104,7 @@ public:
       mat = 0.;
     }
     state->matrices_[State::k_be_old].Diag(1., dim_);
-    state->matrices_[State::k_F_old_inv].Diag(1., dim_);
+    state->matrices_[State::k_F_old].Diag(1., dim_);
 
     // one scalar, also zero
     state->scalars_.assign(state->k_state_scalars, 0.);
@@ -1123,8 +1123,6 @@ public:
     MIMI_FUNC()
     using Mat = mfem::DenseMatrix;
 
-    mimi::utils::PrintSynced("here");
-
     // get aux
     Mat& w_mat0 = tmp.aux_mat_[0];
     Mat& w_mat1 = tmp.aux_mat_[1];
@@ -1136,16 +1134,33 @@ public:
         state->scalars_[State::k_accumulated_plastic_strain];
     auto& temperature = state->scalars_[State::k_temperature];
     // matrix
-    auto& F_old_inv = state->matrices_[State::k_F_old_inv];
+    auto& F_old = state->matrices_[State::k_F_old];
     auto& be_old = state->matrices_[State::k_be_old];
 
     // get inverse incremental deformation gradient
-    Mat& inc_F_inv = w_mat0;
-    Mat& f_bar = w_mat1;
-    // f^-1 = F F_old^-1
-    mfem::Mult(tmp.F_, F_old_inv, inc_F_inv);
+    // first, F_hat.
+    // F_hat = I + A @ FBar^-1
+    // A = (grad U - grad U old) = (F - F old)
+    // FBar = F_old
+    // Mat& A = w_mat0;
+    // Mat& F_old_inv = w_mat1;
+    // Mat& F_hat = w_mat2;
+    // mfem::Add(tmp.F_, F_old, -1.0, A);
+    // mfem::CalcInverse(F_old, F_old_inv);
+    // mfem::Mult(A, F_old_inv, F_hat);
+    // AddDiagonal(F_hat.GetData(), 1.0, dim_);
+
+    // // now, f = F F_hat^-1
+    // Mat& F_hat_inv = w_mat0;
+    // mfem::CalcInverse(F_hat, F_hat_inv);
+    Mat& f_inv = w_mat0;
+    mfem::Mult(F_old, tmp.FInv(), f_inv);
+
     // f_bar = f / (f.det)^(1/3)
-    mfem::CalcInverse(inc_F_inv, f_bar);
+    // f = F F_hat^-1
+    Mat& f_bar = w_mat1;
+    mfem::CalcInverse(f_inv, f_bar);
+    // mfem::Mult(tmp.F_, F_hat_inv, f_bar);
     f_bar *= std::cbrt(f_bar.Det());
 
     // elastic predictor
@@ -1214,7 +1229,7 @@ public:
       mfem::Add(s, tmp.I_, K_ * (det_F * det_F - 1.) * .5, tau);
       mfem::MultABt(tau, tmp.FInv(), P);
     } else { /* accumulate */
-      F_old_inv = tmp.FInv();
+      F_old = tmp.F_;
       be_old = be;
     }
   }
