@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <mfem.hpp>
 
@@ -24,6 +25,11 @@
 // void Eigen(mfem::DenseMatrix& A, mfem::Vector& e_val, )
 
 namespace mimi::integrators {
+
+template<typename T>
+bool AlmostZero(const T value) {
+  return std::abs(value) < std::numeric_limits<T>::epsilon();
+}
 
 template<typename T, typename IndexType>
 void AddDiagonal(T* data, const T fac, const IndexType dim) {

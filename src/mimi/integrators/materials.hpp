@@ -474,7 +474,7 @@ public:
 
       const double lower_bound = 0.0;
       const double upper_bound =
-          (q - hardening_->Evaluate(eqps_old).GetValue() / (3.0 * G_));
+          (q - hardening_->Evaluate(eqps_old).GetValue()) / (3.0 * G_);
       const double delta_eqps = mimi::solvers::ScalarSolve(residual,
                                                            0.0,
                                                            lower_bound,
@@ -650,8 +650,8 @@ public:
 
       const double lower_bound = 0.0;
       const double upper_bound =
-          (q
-           - hardening_->Evaluate(eqps_old, eqps_rate).GetValue() / (3.0 * G_));
+          (q - hardening_->Evaluate(eqps_old, eqps_rate).GetValue())
+          / (3.0 * G_);
       const double delta_eqps = mimi::solvers::ScalarSolve(residual,
                                                            0.0,
                                                            lower_bound,
@@ -965,8 +965,8 @@ public:
       const double lower_bound = 0.0;
       const double upper_bound =
           (q
-           - hardening_->Evaluate(eqps_old, eqps_rate, temperature).GetValue()
-                 / (3.0 * G_));
+           - hardening_->Evaluate(eqps_old, eqps_rate, temperature).GetValue())
+          / (3.0 * G_);
       const double delta_eqps = mimi::solvers::ScalarSolve(residual,
                                                            0.0,
                                                            lower_bound,
@@ -1005,6 +1005,226 @@ public:
     MIMI_FUNC()
 
     PlasticStress<false>(state, tmp, sigma);
+  }
+
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
+  }
+};
+
+class J2AdiabaticViscoLarge : public MaterialBase {
+public:
+  using Base_ = MaterialBase;
+  using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
+  using HardeningPtr_ = std::shared_ptr<HardeningBase>;
+  using ADScalar_ = typename HardeningBase::ADScalar_;
+
+  // additional parameters
+  HardeningPtr_ hardening_;
+
+  // thermo related
+  double heat_fraction_{0.9};        // 0.9 is apparently abaqus' default
+  double specific_heat_;             // for now, constant
+  double initial_temperature_{20.0}; //
+  double melting_temperature_{};     // takes from hardening - TODO - change
+
+  static constexpr const double k_tol{1.e-10};
+
+  struct State : public MaterialState {
+    static constexpr const int k_state_matrices{2};
+    static constexpr const int k_state_scalars{2};
+    /// matrix indices
+    static constexpr const int k_be_old{0};
+    static constexpr const int k_F_old_inv{1};
+    /// scalar indices
+    static constexpr const int k_accumulated_plastic_strain{0};
+    static constexpr const int k_temperature{1};
+  };
+
+protected:
+  /// some constants
+  const double sqrt_3_2_ = std::sqrt(3.0 / 2.0);
+
+  /// lookup index for matrix
+  static constexpr const int k_n_aux_mat{3};
+
+public:
+  virtual std::string Name() const { return "J2AdiabaticViscoLarge"; }
+
+  /// answers if this material is suitable for visco-solids.
+  virtual bool IsRateDependent() const { return true; }
+
+  virtual void Setup(const int dim) {
+    MIMI_FUNC()
+
+    /// base setup for conversions and dim, nthread
+    Base_::Setup(dim);
+
+    // check if this is an appropriate hardening.
+    if (hardening_) {
+      if (!hardening_->IsRateDependent()) {
+        mimi::utils::PrintAndThrowError(hardening_->Name(),
+                                        "is not rate-dependent.");
+      }
+      if (!hardening_->IsTemperatureDependent()) {
+        mimi::utils::PrintAndThrowError(hardening_->Name(),
+                                        "is not temperature-dependent.");
+      }
+
+      // validate hardening.
+      hardening_->Validate();
+    } else {
+      mimi::utils::PrintAndThrowError("hardening missing for", Name());
+    }
+
+    // temporary solution to getting melt t.
+    // TODO do better
+    melting_temperature_ =
+        std::dynamic_pointer_cast<JohnsonCookAdiabaticRateDependentHardening>(
+            hardening_)
+            ->melting_temperature_;
+  }
+
+  virtual void AllocateAux(TemporaryData& tmp) const {
+    MIMI_FUNC()
+
+    tmp.aux_mat_.assign(k_n_aux_mat, mfem::DenseMatrix(dim_, dim_));
+  }
+
+  virtual MaterialStatePtr_ CreateState() const {
+    MIMI_FUNC();
+
+    std::shared_ptr<State> state = std::make_shared<State>();
+    // create 2 matrices with the size of dim x dim and zero initialize
+    state->matrices_.resize(state->k_state_matrices);
+    for (mfem::DenseMatrix& mat : state->matrices_) {
+      mat.SetSize(dim_, dim_);
+      mat = 0.;
+    }
+    state->matrices_[State::k_be_old].Diag(1., dim_);
+    state->matrices_[State::k_F_old_inv].Diag(1., dim_);
+
+    // one scalar, also zero
+    state->scalars_.assign(state->k_state_scalars, 0.);
+
+    // set initial temp
+    state->scalars_[State::k_temperature] = initial_temperature_;
+    return state;
+  };
+
+  template<bool accumulate>
+  void PlasticStress(std::conditional_t<accumulate,
+                                        MaterialStatePtr_,
+                                        const MaterialStatePtr_>& state,
+                     TemporaryData& tmp,
+                     mfem::DenseMatrix& P) const {
+    MIMI_FUNC()
+    using Mat = mfem::DenseMatrix;
+
+    mimi::utils::PrintSynced("here");
+
+    // get aux
+    Mat& w_mat0 = tmp.aux_mat_[0];
+    Mat& w_mat1 = tmp.aux_mat_[1];
+    Mat& w_mat2 = tmp.aux_mat_[2];
+
+    // get states
+    // scalars
+    auto& accumulated_plastic_strain =
+        state->scalars_[State::k_accumulated_plastic_strain];
+    auto& temperature = state->scalars_[State::k_temperature];
+    // matrix
+    auto& F_old_inv = state->matrices_[State::k_F_old_inv];
+    auto& be_old = state->matrices_[State::k_be_old];
+
+    // get inverse incremental deformation gradient
+    Mat& inc_F_inv = w_mat0;
+    Mat& f_bar = w_mat1;
+    // f^-1 = F F_old^-1
+    mfem::Mult(tmp.F_, F_old_inv, inc_F_inv);
+    // f_bar = f / (f.det)^(1/3)
+    mfem::CalcInverse(inc_F_inv, f_bar);
+    f_bar *= std::cbrt(f_bar.Det());
+
+    // elastic predictor
+    Mat& be = w_mat0; // this one stays
+    Mat& fbbo = w_mat2;
+    // be = f_bar @ be_old @ f_bar^T
+    mfem::Mult(f_bar, be_old, fbbo);
+    mfem::MultABt(fbbo, f_bar, be);
+    // s = G * dev(be) (not 2*G?)
+    Mat& s = w_mat1;   // this one stays
+    Mat& N_p = w_mat2; // this one stays for awhile
+    Dev(be, dim_, G_, s);
+    const double s_norm = Norm(s);
+    if (AlmostZero(s_norm)) {
+      const double sqrt_1_2 = std::sqrt(1. / 2.);
+      N_p.Diag(sqrt_1_2, dim_);
+    } else {
+      N_p.Set(std::sqrt(3. / 2.) / s_norm, s);
+    }
+    const double s_effective = N_p * s; // q
+
+    // admissibility
+    const double eqps_old = accumulated_plastic_strain;
+    const double thermo_visco_contrib{1.0}; // TODO real thing
+    const double be_trace = be.Trace();
+    auto residual = [eqps_old,
+                     G = G_,
+                     s_effective,
+                     thermo_visco_contrib,
+                     hardening = hardening_,
+                     be_trace](auto delta_eqps) -> ADScalar_ {
+      // no 3 * G?
+      return s_effective - G * delta_eqps * be_trace
+             - hardening->Evaluate(eqps_old + delta_eqps)
+                   * thermo_visco_contrib;
+    };
+
+    const double tolerance = hardening_->SigmaY() * k_tol;
+    if (residual(0.0) > tolerance) {
+      /// return mapping
+      mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
+                                              .rtol = tolerance,
+                                              .max_iter = 100};
+
+      const double lower_bound = 0.0;
+      const double upper_bound =
+          (s_effective
+           - hardening_->Evaluate(eqps_old).GetValue() * thermo_visco_contrib)
+          / (G_ * be_trace);
+      const double delta_eqps = mimi::solvers::ScalarSolve(residual,
+                                                           0.0,
+                                                           lower_bound,
+                                                           upper_bound,
+                                                           opts);
+      be.Add(-2. / 3. * delta_eqps * be_trace, N_p);
+      Dev(be, dim_, G_, s);
+      if constexpr (accumulate) {
+        accumulated_plastic_strain += delta_eqps;
+      }
+    }
+
+    if constexpr (!accumulate) {
+      const double det_F = tmp.DetF();
+      // get kirchhoff stress
+      Mat& tau = w_mat2;
+      mfem::Add(s, tmp.I_, K_ * (det_F * det_F - 1.) * .5, tau);
+      mfem::MultABt(tau, tmp.FInv(), P);
+    } else { /* accumulate */
+      F_old_inv = tmp.FInv();
+      be_old = be;
+    }
+  }
+
+  virtual void EvaluatePK1(const MaterialStatePtr_& state,
+                           TemporaryData& tmp,
+                           mfem::DenseMatrix& P) const {
+    MIMI_FUNC()
+
+    PlasticStress<false>(state, tmp, P);
   }
 
   virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
@@ -1122,8 +1342,8 @@ public:
       const double lower_bound = 0.0;
       const double upper_bound =
           (q
-           - hardening_->Evaluate(eqps_old, eqps_rate, trial_T).GetValue()
-                 / (3.0 * G_));
+           - hardening_->Evaluate(eqps_old, eqps_rate, temperature).GetValue())
+          / (3.0 * G_);
       const double delta_eqps = mimi::solvers::ScalarSolve(residual,
                                                            0.0,
                                                            lower_bound,
