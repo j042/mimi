@@ -101,7 +101,7 @@ auto ScalarSolve(function&& f,
 
     while (!converged) {
       if (iterations == options.max_iter) {
-        mimi::utils::PrintWarning(
+        mimi::utils::PrintAndThrowError(
             "ScalarSolve: failed to converge in allotted iterations.",
             "delata_x",
             delta_x,
