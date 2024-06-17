@@ -52,7 +52,8 @@ nl.elevate_degrees(1)
 nl.subdivide(3)
 
 # mat = mimi.PyJ2LogStrainAdiabaticVisco()
-mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
+mat = mimi.PyJ2AdiabaticViscoLarge()
+# mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
 mat.density = 7800
 mat.viscosity = 10
 mat.set_young_poisson(205e9, 0.29)

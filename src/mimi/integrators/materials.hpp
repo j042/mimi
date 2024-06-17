@@ -1169,7 +1169,13 @@ public:
     // be = f_bar @ be_old @ f_bar^T
     mfem::Mult(f_bar, be_old, fbbo);
     mfem::MultABt(fbbo, f_bar, be);
-    // s = G * dev(be) (not 2*G?)
+
+    // compute strain rate
+    Mat& strain_rate = w_mat2;
+    mfem::Add(be, be_old, -1., strain_rate);
+    strain_rate *= 1. / dt_;
+    const double eqps_rate = EquivalentPlasticStrainRate(strain_rate);
+
     Mat& s = w_mat1;   // this one stays
     Mat& N_p = w_mat2; // this one stays for awhile
     Dev(be, dim_, G_, s);
@@ -1184,7 +1190,9 @@ public:
 
     // admissibility
     const double eqps_old = accumulated_plastic_strain;
-    const double thermo_visco_contrib{1.0}; // TODO real thing
+    const double thermo_visco_contrib =
+        hardening_->ThermoContribution(temperature)
+        * hardening_->ViscoContribution(eqps_rate);
     const double be_trace = be.Trace();
     auto residual = [eqps_old,
                      G = G_,
@@ -1192,7 +1200,7 @@ public:
                      thermo_visco_contrib,
                      hardening = hardening_,
                      be_trace](auto delta_eqps) -> ADScalar_ {
-      // no 3 * G?
+      // no 3 * G -> (1/3) integrated to be_trace
       return s_effective - G * delta_eqps * be_trace
              - hardening->Evaluate(eqps_old + delta_eqps)
                    * thermo_visco_contrib;
@@ -1231,6 +1239,13 @@ public:
     } else { /* accumulate */
       F_old = tmp.F_;
       be_old = be;
+      // for current use case, time step is so small that temperature stays
+      // almost constant
+      // // let's use tau and
+      // const double temp_rate = (heat_fraction_ * std::max(tau * be, 0.0))
+      //                          / (density_ * specific_heat_);
+      // temperature =
+      //     std::min(temperature + temp_rate * dt_, melting_temperature_ + 1.);
     }
   }
 
