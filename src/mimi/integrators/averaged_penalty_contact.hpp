@@ -964,6 +964,7 @@ public:
       rc.RecordRealHistory("area", last_area_);
       rc.RecordRealHistory("force_x", last_force_[0]);
       rc.RecordRealHistory("force_y", last_force_[1]);
+      rc.RecordRealHistory("x_over_y", last_force_[0] / last_force_[1]);
       if (dim_ > 2) {
         rc.RecordRealHistory("force_z", last_force_[2]);
       }
