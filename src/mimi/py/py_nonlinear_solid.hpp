@@ -57,6 +57,11 @@ public:
         // else, dofs does not match
         mfem::Ordering::byVDIM);
 
+      // mfem::Array<int> b_dofs_from(1), b_dofs_to(1), query;
+      // b_dofs_from = 3;
+      // b_dofs_to = 4;
+      // disp_fes.fe_space_->GetNURBSext()->ConnectBoundaries(b_dofs_from, b_dofs_to);
+
     // we need to create precomputed data one for:
     // - bilinear forms
     // - nonlinear solid
@@ -85,6 +90,7 @@ public:
 
     // set initial condition
     // you can change this in python using SolutionView()
+    mimi::utils::PrintInfo("x size:",x.Size(), "x ref size:", x_ref.Size());
     x = x_ref;
     x_dot = 0.0;
 

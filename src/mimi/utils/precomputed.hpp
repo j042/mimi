@@ -186,7 +186,7 @@ public:
     other->dim_ = dim_;
   }
 
-  virtual void Setup(const mfem::FiniteElementSpace& fe_space,
+  virtual void Setup( mfem::FiniteElementSpace& fe_space,
                      const int nthreads) {
     MIMI_FUNC()
 
@@ -197,6 +197,22 @@ public:
     // reset first
     Clear();
 
+    const int n_elem = fe_space.GetNE();
+    const int n_b_elem = fe_space.GetNBE();
+    const int dim = fe_space.GetMesh()->Dimension();
+    // save values
+    n_threads_ = nthreads;
+    n_elements_ = n_elem;
+    n_b_elements_ = n_b_elem;
+    n_v_dofs_ = fe_space.GetMesh()->GetNodes()->Size();
+    dim_ = dim;
+    n_dofs_ = n_v_dofs_ / dim;
+
+      // connect bdrs
+      mfem::Array<int> b_dofs_from(1), b_dofs_to(1), query;
+      b_dofs_from = 3;
+      b_dofs_to = 4;
+      // fe_space.GetNURBSext()->ConnectBoundaries(b_dofs_from, b_dofs_to);
     // create for each threads
     for (int i{}; i < nthreads; ++i) {
       // create int rules
@@ -216,18 +232,11 @@ public:
           std::make_shared<mfem::FiniteElementSpace>(fe_space,
                                                      meshes_[i].get(),
                                                      fe_collections_[i].get()));
+
+
+      fe_spaces_[i]->GetNURBSext()->ConnectBoundaries(b_dofs_from, b_dofs_to);
     }
 
-    const int n_elem = fe_space.GetNE();
-    const int n_b_elem = fe_space.GetNBE();
-    const int dim = fe_space.GetMesh()->Dimension();
-    // save values
-    n_threads_ = nthreads;
-    n_elements_ = n_elem;
-    n_b_elements_ = n_b_elem;
-    n_v_dofs_ = fe_space.GetMesh()->GetNodes()->Size();
-    dim_ = dim;
-    n_dofs_ = n_v_dofs_ / dim;
 
     // allocate vectors
     v_dofs_.resize(n_elem);
