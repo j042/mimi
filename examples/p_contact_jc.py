@@ -14,7 +14,7 @@ le.elevate_degrees(1)
 le.subdivide(4)
 
 # mat
-mat = mimi.J2AdiabaticViscoIsotropicHardening()
+mat = mimi.J2AdiabaticViscoIsotropic()
 mat.density = 7800
 mat.viscosity = -1
 mat.set_young_poisson(205.0e9, 0.29)

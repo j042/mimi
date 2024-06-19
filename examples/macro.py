@@ -21,7 +21,7 @@ TO_K = 273.15
 n_threads = 4
 # we don't refine here
 # create material
-mat = mimi.J2AdiabaticViscoIsotropicHardening()
+mat = mimi.J2AdiabaticViscoIsotropic()
 mat.density = 7800
 mat.viscosity = -1  # maybe some higher value?
 mat.set_young_poisson(205.0e9, 0.29)

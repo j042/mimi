@@ -15,7 +15,7 @@ nl.elevate_degrees(1)
 nl.subdivide(3)
 
 # create material
-mat = mimi.J2AdiabaticViscoIsotropicHardening()
+mat = mimi.J2AdiabaticViscoIsotropic()
 mat.density = 1
 mat.viscosity = -1
 

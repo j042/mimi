@@ -145,14 +145,14 @@ void init_py_material(py::module_& m) {
       .def_readwrite("m", &JCThermoViscoHardening::m_);
 
   py::class_<J2NonlinVisco, std::shared_ptr<J2NonlinVisco>, MaterialBase>
-      j2_visco(m, "J2ViscoIsotropicHardening");
+      j2_visco(m, "J2ViscoIsotropic");
   j2_visco.def(py::init<>())
       .def_readwrite("hardening", &J2NonlinVisco::hardening_);
 
   py::class_<J2NonlinAdiabaticVisco,
              std::shared_ptr<J2NonlinAdiabaticVisco>,
              MaterialBase>
-      j2_adia_visco(m, "J2AdiabaticViscoIsotropicHardening");
+      j2_adia_visco(m, "J2AdiabaticViscoIsotropic");
   j2_adia_visco.def(py::init<>())
       .def_readwrite("hardening", &J2NonlinAdiabaticVisco::hardening_)
       .def_readwrite("heat_fraction", &J2NonlinAdiabaticVisco::heat_fraction_)
