@@ -57,23 +57,6 @@ public:
         // else, dofs does not match
         mfem::Ordering::byVDIM);
 
-    // we need to create precomputed data one for:
-    // - bilinear forms
-    // - nonlinear solid
-    // - (optional) conatct
-    // here, we only create one for bilinear. others are done below
-    // note, for bilinear, nothing is really saved. just used for thread safety
-    auto& bilinear_precomputed = disp_fes.precomputed_["bilinear_forms"];
-    bilinear_precomputed = std::make_shared<mimi::utils::PrecomputedData>();
-
-    // following part doesn't work as we need to do create our mesh again based on updated NURBSext <- TODO!
-    // but before that, we should convert to displacement based formulation
-    // mfem::Array<int> b_dofs_from(1), b_dofs_to(1), query;
-    // b_dofs_from = 3;
-    // b_dofs_to = 4;
-    // disp_fes.fe_space_->GetNURBSext()->ConnectBoundaries(b_dofs_from, b_dofs_to);
-    bilinear_precomputed->Setup(*disp_fes.fe_space_, n_threads);
-
     // create solution fields for x and set local reference
     mfem::GridFunction& x = disp_fes.grid_functions_["x"];
     x.SetSpace(disp_fes.fe_space_.get());
@@ -92,8 +75,28 @@ public:
 
     // set initial condition
     // you can change this in python using SolutionView()
-    x = x_ref;
+    x = 0.0; // this is u
     x_dot = 0.0;
+
+    // we need to create precomputed data one for:
+    // - bilinear forms
+    // - nonlinear solid
+    // - (optional) conatct
+    // here, we only create one for bilinear. others are done below
+    // note, for bilinear, nothing is really saved. just used for thread safety
+    auto& bilinear_precomputed = disp_fes.precomputed_["bilinear_forms"];
+    // this is the first precomputed data which does all base work.
+    bilinear_precomputed = std::make_shared<mimi::utils::PrecomputedData>();
+    // this make x_ref_ available for all the integrators through StressFreeX()
+    bilinear_precomputed->x_ref_ = &x_ref;
+
+    // following part doesn't work as we need to do create our mesh again based
+    // on updated NURBSext <- TODO! but before that, we should convert to
+    // displacement based formulation mfem::Array<int> b_dofs_from(1),
+    // b_dofs_to(1), query; b_dofs_from = 3; b_dofs_to = 4;
+    // disp_fes.fe_space_->GetNURBSext()->ConnectBoundaries(b_dofs_from,
+    // b_dofs_to);
+    bilinear_precomputed->Setup(*disp_fes.fe_space_, n_threads);
 
     // let's process boundaries
     Base_::FindBoundaryDofIds();

@@ -9,14 +9,12 @@
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
 
-
 namespace mimi::integrators {
 
 template<typename T>
 bool AlmostZero(const T value) {
   return std::abs(value) < std::numeric_limits<T>::epsilon();
 }
-
 
 /// computes deviator.
 /// often used to compute stress deviator, so there's factor

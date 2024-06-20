@@ -133,8 +133,25 @@ public:
   std::unordered_map<std::string, std::shared_ptr<mfem::Array<int>>>
       boundary_attr_markers_;
 
+  /// precomputed keep a pointer to stress free x
+  mfem::GridFunction* x_ref_;
+
   PrecomputedData() = default;
   virtual ~PrecomputedData() = default;
+
+  virtual mfem::GridFunction& StressFreeX() {
+    if (!x_ref_) {
+      mimi::utils::PrintAndThrowError("StressFreeX (x_ref_) does not exist.");
+    }
+    return *x_ref_;
+  }
+
+  virtual const mfem::GridFunction& StressFreeX() const {
+    if (!x_ref_) {
+      mimi::utils::PrintAndThrowError("StressFreeX (x_ref_) does not exist.");
+    }
+    return *x_ref_;
+  }
 
   virtual void Clear() {
     int_rules_.clear();
@@ -154,6 +171,7 @@ public:
     boundary_attr_markers_.clear();
 
     n_threads_ = -1;
+    x_ref_ = nullptr;
   }
 
   /// @brief pastes shareable properties
@@ -184,6 +202,7 @@ public:
     other->n_v_dofs_ = n_v_dofs_;
     other->n_dofs_ = n_dofs_;
     other->dim_ = dim_;
+    other->x_ref_ = x_ref_;
   }
 
   virtual void Setup(const mfem::FiniteElementSpace& fe_space,
