@@ -8,18 +8,16 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyNonlinearSolid()
+le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/sqn.mesh")
-
-# set param
 
 # refine
 le.elevate_degrees(3)
 le.subdivide(3)
 
 # mat
-mat = mimi.PyCompressibleOgdenNeoHookean()
-mat = mimi.PyJ2()
+mat = mimi.CompressibleOgdenNeoHookean()
+mat = mimi.J2()
 mat.density = 7e4
 mat.viscosity = 10
 mat.set_young_poisson(1e10, 0.3)
@@ -27,6 +25,7 @@ mat.isotropic_hardening = 1e8
 mat.kinematic_hardening = 0
 mat.sigma_y = 1e7
 le.set_material(mat)
+
 # create splinepy partner
 s = sp.NURBS(**le.nurbs())
 to_m, to_s = sp.io.mfem.dof_mapping(s)
@@ -45,7 +44,7 @@ curv = sp.Bezier(
 curv.cps[:] += [0.0, 0.75]
 
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(100000, 4)
 scene.coefficient = 0.5e11
@@ -72,10 +71,7 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
-# s.show_options["control_points"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-# s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 

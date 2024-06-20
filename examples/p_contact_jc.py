@@ -6,24 +6,22 @@ import numpy as np
 sp.settings.NTHREADS = 2
 
 # init, read mesh
-le = mimi.PyNonlinearViscoSolid()
+le = mimi.NonlinearViscoSolid()
 le.read_mesh("tests/data/sqn.mesh")
-
-# set param
 
 # refine
 le.elevate_degrees(1)
 le.subdivide(4)
 
 # mat
-mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
+mat = mimi.J2AdiabaticViscoIsotropic()
 mat.density = 7800
 mat.viscosity = -1
 mat.set_young_poisson(205.0e9, 0.29)
 mat.heat_fraction = 0.9
 mat.specific_heat = 450
 mat.initial_temperature = 50
-hardening = mimi.PyJohnsonCookThermoViscoHardening()
+hardening = mimi.JohnsonCookThermoViscoHardening()
 hardening.A = 288e6
 hardening.B = 695e6
 hardening.C = 0.034
@@ -55,8 +53,7 @@ curv = sp.Bezier(
 )
 curv.cps[:] += [0.0, 0.75]
 
-
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(100000, 4)
 scene.coefficient = 0.5e11
@@ -145,8 +142,6 @@ plt = gus.show(
 n = le.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
 for i in range(2000):
-    #    if i < 820:
-    #        move()
     bc()
     old = 1
     b_old = 1

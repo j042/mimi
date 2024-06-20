@@ -11,7 +11,7 @@ namespace py = pybind11;
 
 void init_py_nonlinear_form(py::module_& m) {
   using NLF = mimi::forms::Nonlinear;
-  py::class_<NLF, std::shared_ptr<NLF>> klasse(m, "PyNonlinearForm");
+  py::class_<NLF, std::shared_ptr<NLF>> klasse(m, "NonlinearForm");
 
   klasse
       .def(

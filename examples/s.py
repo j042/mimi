@@ -6,7 +6,7 @@ import numpy as np
 sp.settings.NTHREADS = 4
 
 # init, read mesh
-le = mimi.PyNonlinearSolid()
+le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/es.mesh")
 
 # refine
@@ -14,7 +14,7 @@ le.elevate_degrees(1)
 le.subdivide(3)
 
 # mat
-mat = mimi.PyCompressibleOgdenNeoHookean()
+mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 4000
 # mat.viscosity = 10000
 mat.viscosity = -1
@@ -28,7 +28,6 @@ to_m = np.array(to_m)
 to_s = np.array(to_s)
 s.cps[:] = s.cps[to_s]
 
-print("fine")
 outlineo = {
     "degrees": [2, 1],
     "control_points": [
@@ -123,13 +122,11 @@ outline = sp.BSpline(**outlineo)  # this one will have negative jac
 o, u = outline.extract.boundaries([2, 3])
 u.cps[:] = u.cps[::-1].copy()
 u = u.copy()
-# u.show(control_points=True)
 u.cps[24] -= 1
 o.cps[0] += [-5, 0]
 
 mi = s.multi_index
 b3 = to_s[mi[-1, :]]
-
 
 ns = 500
 path = outline.extract.spline(1, [0.01, 0.99]).sample([ns, 2])
@@ -137,14 +134,12 @@ up = path[:ns]
 down = path[ns:]
 mid = np.linspace(down, up, len(b3))[1:-1]
 
-
-print("fine")
 # set bc
-scene0 = mimi.PyNearestDistanceToSplines()
+scene0 = mimi.NearestDistanceToSplines()
 scene0.add_spline(o)
 scene0.plant_kd_tree(1001, 4)
 scene0.coefficient = 1e3
-scene1 = mimi.PyNearestDistanceToSplines()
+scene1 = mimi.NearestDistanceToSplines()
 scene1.add_spline(u)
 scene1.plant_kd_tree(1001, 4)
 scene1.coefficient = 1e3

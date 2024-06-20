@@ -8,18 +8,16 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyNonlinearSolid()
+le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/sqn.mesh")
-
-# set param
 
 # refine
 le.elevate_degrees(2)
 le.subdivide(3)
 
 # mat
-mat = mimi.PyCompressibleOgdenNeoHookean()
-mat = mimi.PyJ2()
+mat = mimi.CompressibleOgdenNeoHookean()
+mat = mimi.J2()
 mat.density = 7e4
 mat.viscosity = 10
 mat.set_young_poisson(1e10, 0.3)
@@ -45,7 +43,7 @@ curv = sp.Bezier(
 curv.cps[:] += [0, 0.75]
 
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(1001, 4)
 scene.coefficient = 1e10
@@ -55,10 +53,10 @@ bc.initial.dirichlet(0, 0).dirichlet(0, 1)
 bc.current.contact(1, scene)
 le.boundary_condition = bc
 
-rc = mimi.PyRuntimeCommunication()
+rc = mimi.RuntimeCommunication()
 # rc.set_int("contact_quadrature_order", 50)
 # rc.set_int("nonlinear_solid_quadrature_order", 3)
-rc.fname = "tout/n.npz"
+rc.fname = "n.npz"
 rc.append_should_save("contact_history", 1)
 rc.append_should_save("contact_forces", 1)
 rc.setup_real_history("area", 10000)
@@ -82,10 +80,8 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
-# s.show_options["control_points"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-# s.show_options["control_points"] = False
+s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
@@ -129,15 +125,16 @@ def show():
 
 
 # initialize a plotter
-plt = gus.show([s, curv], interactive=False, close=False)
-for i in range(400):
+plt = gus.show([s, curv], close=False)
+n = le.nonlinear_from2("contact")
+ni = n.boundary_integrator(0)
+for i in range(200):
     move()
     # le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
     # le.advance_time2()
     le.step_time2()
     tic.toc(f"{i}-step")
     show()
-
 
 tic.summary(print_=True)
 gus.show(s, vedoplot=plt, interactive=True)

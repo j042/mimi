@@ -46,14 +46,13 @@ tool.cps += [0, 0.0005]
 # tool = splinepy.Bezier([1], [[-2e-3, 4e-3], [6e-3, 4e-3]])
 # tool = splinepy.Bezier([1], [[-1e-2, 4.1e-3], [14e-3, 4.1e-3]])
 
-nl = mimi.PyNonlinearViscoSolid()
+nl = mimi.NonlinearViscoSolid()
 nl.read_mesh("box.mesh")
 nl.elevate_degrees(1)
 nl.subdivide(3)
 
-# mat = mimi.PyJ2LogStrainAdiabaticVisco()
-mat = mimi.PyJ2AdiabaticViscoLarge()
-# mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
+mat = mimi.J2LogStrainAdiabaticVisco()
+# mat = mimi.J2AdiabaticViscoIsotropic()
 mat.density = 7800
 mat.viscosity = 10
 mat.set_young_poisson(205e9, 0.29)
@@ -61,7 +60,7 @@ mat.set_young_poisson(205e9, 0.29)
 mat.heat_fraction = 0.9
 mat.specific_heat = 450
 mat.initial_temperature = to_K(20)
-mat.hardening = mimi.PyJohnsonCookThermoViscoHardening()
+mat.hardening = mimi.JohnsonCookThermoViscoHardening()
 mat.hardening.A = 288e6
 mat.hardening.B = 695e6
 mat.hardening.C = 0.034
@@ -71,14 +70,14 @@ mat.hardening.eps0_dot = 0.004
 mat.hardening.reference_temperature = to_K(20)
 mat.hardening.melting_temperature = to_K(1500)
 
-# mat = mimi.PyStVenantKirchhoff()
+# mat = mimi.StVenantKirchhoff()
 # mat.density = 7800
 # mat.viscosity = -1
 # mat.set_young_poisson(205e9, 0.29)
 
 nl.set_material(mat)
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(tool)
 scene.plant_kd_tree(1001, 4)
 scene.coefficient = PENALTY_FACTOR

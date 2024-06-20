@@ -7,7 +7,7 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyLinearElasticity()
+le = mimi.LinearElasticity()
 le.read_mesh("tests/data/square-nurbs.mesh")
 
 # set param
@@ -34,7 +34,7 @@ curv = sp.Bezier(
 )
 curv.cps[:] += [0.05, 1]
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(100000, 4)
 scene.coefficient = 1e11
@@ -49,7 +49,7 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("linear_elasticity", 1e-14, 1e-8, 20, False, False)
+le.configure_newton("linear_elasticity", 1e-14, 1e-8, 20, False)
 
 tic.toc("bilinear, linear forms assembly")
 
@@ -62,7 +62,6 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 tic.summary(print_=True)
 # set visualization options
 s.show_options["control_point_ids"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = 100
 s.show_options["control_points"] = False
 s.cps[:] = x[to_s]

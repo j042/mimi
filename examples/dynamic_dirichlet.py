@@ -6,14 +6,14 @@ import numpy as np
 sp.settings.NTHREADS = 4
 
 #  create nl solid
-nl = mimi.PyNonlinearSolid()
+nl = mimi.NonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
 nl.subdivide(2)
 
 # create material
-mat = mimi.PyCompressibleOgdenNeoHookean()
+mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 1
 mat.viscosity = 1
 
@@ -52,7 +52,6 @@ nl.time_step_size = 0.01
 
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = 50
 s.cps[:] = x[to_s]
 

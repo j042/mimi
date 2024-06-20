@@ -7,7 +7,7 @@ namespace mimi::py {
 namespace py = pybind11;
 
 void init_py_solid(py::module_& m) {
-  py::class_<PySolid, std::shared_ptr<PySolid>> klasse(m, "PySolid");
+  py::class_<PySolid, std::shared_ptr<PySolid>> klasse(m, "Solid");
 
   klasse.def(py::init<>())
       .def("read_mesh", &PySolid::ReadMesh, py::arg("fname"))

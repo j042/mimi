@@ -8,24 +8,22 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyNonlinearViscoSolid()
+le = mimi.NonlinearViscoSolid()
 le.read_mesh("tests/data/sqn.mesh")
-
-# set param
 
 # refine
 le.elevate_degrees(1)
 le.subdivide(3)
 
 # mat
-mat = mimi.PyJ2AdiabaticViscoIsotropicHardening()
+mat = mimi.J2AdiabaticViscoIsotropic()
 mat.density = 7800
 mat.viscosity = -1
 mat.set_young_poisson(205.0e9, 0.29)
 mat.heat_fraction = 0.9
 mat.specific_heat = 450
 mat.initial_temperature = 50
-hardening = mimi.PyJohnsonCookThermoViscoHardening()
+hardening = mimi.JohnsonCookThermoViscoHardening()
 hardening.A = 288e6
 hardening.B = 695e6
 hardening.C = 0.034
@@ -56,7 +54,7 @@ curv = sp.Bezier(
 curv.cps[:] += [0.0, 0.75]
 
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(1001, 4)
 scene.coefficient = 1e12
@@ -83,8 +81,6 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
-# s.show_options["control_points"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 50]
 s.show_options["control_points"] = False
 curv.show_options["control_points"] = False

@@ -378,7 +378,7 @@ public:
 /// s: stress deviator
 /// Implementation reference from serac
 /// Considers nonlinear Isotropic hardening
-class J2NonlinearIsotropicHardening : public MaterialBase {
+class J2NonlinearIsotropic : public MaterialBase {
 public:
   using Base_ = MaterialBase;
   using MaterialStatePtr_ = typename Base_::MaterialStatePtr_;
@@ -410,7 +410,7 @@ protected:
   static constexpr const int k_N_p{2};
 
 public:
-  virtual std::string Name() const { return "J2NonlinearIsotropicHardening"; }
+  virtual std::string Name() const { return "J2NonlinearIsotropic"; }
 
   virtual void AllocateAux(TemporaryData& tmp) const {
     MIMI_FUNC()

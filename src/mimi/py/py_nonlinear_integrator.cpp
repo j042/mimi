@@ -10,7 +10,7 @@ void init_py_nonlinear_base_integrator(py::module_& m) {
   using mimi::integrators::NonlinearBase;
   py::class_<NonlinearBase, std::shared_ptr<NonlinearBase>> klasse(
       m,
-      "PyNonlinearIntegratorBase");
+      "NonlinearIntegratorBase");
   klasse.def("name", &NonlinearBase::Name)
       .def("gap_norm", &NonlinearBase::LastGapNorm)
       .def("temperature",

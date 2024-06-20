@@ -8,18 +8,15 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.PyNonlinearSolid()
+le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/square-nurbs.mesh")
-
-# set param
 
 # refine
 le.elevate_degrees(1)
 le.subdivide(3)
 
 # mat
-mat = mimi.PyCompressibleOgdenNeoHookean()
-# mat = mimi.PyJ2()
+mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 7e4
 mat.viscosity = -1
 mat.set_young_poisson(1e10, 0.3)
@@ -27,6 +24,7 @@ mat.set_young_poisson(1e10, 0.3)
 # mat.kinematic_hardening = 0
 # mat.sigma_y = 1e4
 le.set_material(mat)
+
 # create splinepy partner
 s = sp.NURBS(**le.nurbs())
 to_m, to_s = sp.io.mfem.dof_mapping(s)
@@ -44,7 +42,7 @@ curv = sp.Bezier(
 )
 curv.cps[:] += [0.05, 1]
 
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(100000, 4)
 scene.coefficient = 0.5e11
@@ -59,7 +57,7 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False, True)
+le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
 
 tic.toc("bilinear, linear forms assembly")
 
@@ -71,8 +69,6 @@ x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
-# s.show_options["control_points"] = False
-# s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
 s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
@@ -129,7 +125,7 @@ for i in range(1000):
     scene.coefficient = coe
     for j in range(100):
         sol()
-        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 3, True, True)
+        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 3, True)
         rel, ab = le.newton_final_norms("nonlinear_solid")
         bdr_norm = np.linalg.norm(n.boundary_residual())
         print("augumenting", bdr_norm)
@@ -138,13 +134,13 @@ for i in range(1000):
             print(ni.gap_norm(), "exit!")
             break
     print("final solve!")
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True, False)
+    le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True)
     le.update_contact_lagrange()
     scene.coefficient = 0.0
     c_sol()
     rel, ab = le.newton_final_norms("nonlinear_solid")
 
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False, True)
+    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
     scene.coefficient = coe
     adv()
     show()

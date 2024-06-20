@@ -9,7 +9,7 @@ tool = sp.Bezier([2], [[2.5, 2], [1.22, -0.5], [3, 0.5]])
 tool.cps[:] += [0.05, 0.3]
 
 # create solid
-nl = mimi.PyNonlinearSolid()
+nl = mimi.NonlinearSolid()
 
 # read mesh
 nl.read_mesh("tests/data/macro.mesh")
@@ -20,11 +20,11 @@ nl.subdivide(3)
 n_threads = 4
 # we don't refine here
 # create material
-mat = mimi.PyJ2NonlinearIsotropicHardening()
+mat = mimi.J2NonlinearIsotropic()
 mat.density = 7800
 mat.viscosity = 100  # maybe some higher value?
 mat.set_young_poisson(205.0e9, 0.29)
-mat.hardening = mimi.PyJohnsonCookHardening()
+mat.hardening = mimi.JohnsonCookHardening()
 mat.hardening.A = 288e6
 mat.hardening.B = 695e6
 mat.hardening.n = 0.2835
@@ -32,7 +32,7 @@ mat.hardening.n = 0.2835
 nl.set_material(mat)
 
 # create contact scene
-scene = mimi.PyNearestDistanceToSplines()
+scene = mimi.NearestDistanceToSplines()
 scene.add_spline(tool)
 scene.plant_kd_tree(10001, 4)
 scene.coefficient = 1e13
@@ -55,7 +55,7 @@ s = sp.NURBS(**nl.nurbs())
 to_m, to_s = sp.io.mfem.dof_mapping(s)
 s.cps[:] = s.cps[to_s]
 
-nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, True, False)
+nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, True)
 n = nl.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
 x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
@@ -73,7 +73,6 @@ def sol():
 
 def c_sol():
     nl.fixed_point_solve2()
-    # print(ni.gap_norm())
 
 
 def adv():
@@ -109,20 +108,20 @@ for i in range(10000):
     scene.coefficient = coe
     for j in range(20):
         sol()
-        nl.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True, False)
+        nl.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True)
         print("augumenting")
         print()
         if ni.gap_norm() < 1e-6:
             print(ni.gap_norm(), "exit!")
             break
     print("final solve!")
-    nl.configure_newton("nonlinear_solid", 1e-7, 1e-8, 20, True, True)
+    nl.configure_newton("nonlinear_solid", 1e-7, 1e-8, 20, True)
     nl.update_contact_lagrange()
     scene.coefficient = 0.0
     c_sol()
     rel, ab = nl.newton_final_norms("nonlinear_solid")
 
-    nl.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False, False)
+    nl.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
     scene.coefficient = coe
     adv()
     show()

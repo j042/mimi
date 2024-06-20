@@ -31,7 +31,7 @@ if os.path.isfile(os.path.join(EXPORT_PATH, A_FILE)):
     os.remove(os.path.join(EXPORT_PATH, A_FILE))
 
 # create nl solid
-nl = mimi.PyNonlinearSolid()
+nl = mimi.NonlinearSolid()
 
 # load mesh
 nl.read_mesh("tail.mesh")
@@ -42,7 +42,7 @@ nl.time_step_size = STEPSIZE
 
 
 # create material
-mat = mimi.PyStVenantKirchhoff()
+mat = mimi.StVenantKirchhoff()
 mat.density = 1000.0
 mat.viscosity = -1  # no damping
 mat.set_young_poisson(1.4e6, 0.4)
