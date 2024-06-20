@@ -8,6 +8,15 @@
 
 namespace mimi::utils {
 
+template<typename T, typename IndexType>
+void AddDiagonal(T* data, const T fac, const IndexType dim) {
+  MIMI_FUNC()
+
+  for (IndexType i{}; i < dim; ++i) {
+    data[(dim + 1) * i] += fac;
+  }
+}
+
 /// Adapted from a post from Casey
 /// http://stackoverflow.com/a/21028912/273767
 /// mentioned in `Note` at

@@ -9,20 +9,6 @@
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
 
-// extern "C" void
-// dsyev_(char *JOBZ, char *UPLO, int *N, double *A, int *LDA, double *W,
-//        double *WORK, int *LWORK, int *INFO);
-
-// struct SymmetricMatrixEigenValue {
-// protected:
-//   bool overwrite_reference_;
-//   mfem::DenseMatrix* reference_;
-//   mfem::DenseMatrix reference_copy_;
-// public:
-
-// };
-
-// void Eigen(mfem::DenseMatrix& A, mfem::Vector& e_val, )
 
 namespace mimi::integrators {
 
@@ -31,14 +17,6 @@ bool AlmostZero(const T value) {
   return std::abs(value) < std::numeric_limits<T>::epsilon();
 }
 
-template<typename T, typename IndexType>
-void AddDiagonal(T* data, const T fac, const IndexType dim) {
-  MIMI_FUNC()
-
-  for (IndexType i{}; i < dim; ++i) {
-    data[(dim + 1) * i] += fac;
-  }
-}
 
 /// computes deviator.
 /// often used to compute stress deviator, so there's factor
@@ -155,7 +133,7 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& Fp,
   Ee *= 0.5;
 
   Dev(Ee, dim, 1.0, elastic_strain);
-  AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
+  mimi::utils::AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
 }
 
 template<int mat0 = 3, int mat1 = 4, int vec0 = 0, typename TmpData>
@@ -197,7 +175,7 @@ inline void LogarithmicStrain2(const mfem::DenseMatrix& Fp,
   elastic_strain *= 0.5;
 
   // Dev(Ee, dim, 1.0, elastic_strain);
-  AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
+  mimi::utils::AddDiagonal(elastic_strain.GetData(), trace_Ee / dim, dim);
 }
 
 /// Frobenius norm of a matrix

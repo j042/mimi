@@ -1148,7 +1148,7 @@ public:
     // mfem::Add(tmp.F_, F_old, -1.0, A);
     // mfem::CalcInverse(F_old, F_old_inv);
     // mfem::Mult(A, F_old_inv, F_hat);
-    // AddDiagonal(F_hat.GetData(), 1.0, dim_);
+    // mimi::utils::AddDiagonal(F_hat.GetData(), 1.0, dim_);
 
     // // now, f = F F_hat^-1
     // Mat& F_hat_inv = w_mat0;
