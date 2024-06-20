@@ -24,6 +24,7 @@ void init_py_material(py::module_& m) {
   using J2NonlinHi = mimi::integrators::J2NonlinearIsotropicHardening;
   using J2NonlinVisco = mimi::integrators::J2NonlinearVisco;
   using J2NonlinAdiabaticVisco = mimi::integrators::J2AdiabaticVisco;
+  using J2NonlinAdiabaticViscoLarge = mimi::integrators::J2AdiabaticViscoLarge;
   using J2NonlinAdiabaticViscoLog =
       mimi::integrators::J2AdiabaticViscoLogStrain;
 
@@ -160,6 +161,19 @@ void init_py_material(py::module_& m) {
       .def_readwrite("specific_heat", &J2NonlinAdiabaticVisco::specific_heat_)
       .def_readwrite("initial_temperature",
                      &J2NonlinAdiabaticVisco::initial_temperature_);
+
+  py::class_<J2NonlinAdiabaticViscoLarge,
+             std::shared_ptr<J2NonlinAdiabaticViscoLarge>,
+             MaterialBase>
+      j2_av_large(m, "PyJ2AdiabaticViscoLarge");
+  j2_av_large.def(py::init<>())
+      .def_readwrite("hardening", &J2NonlinAdiabaticViscoLarge::hardening_)
+      .def_readwrite("heat_fraction",
+                     &J2NonlinAdiabaticViscoLarge::heat_fraction_)
+      .def_readwrite("specific_heat",
+                     &J2NonlinAdiabaticViscoLarge::specific_heat_)
+      .def_readwrite("initial_temperature",
+                     &J2NonlinAdiabaticViscoLarge::initial_temperature_);
 
   py::class_<J2NonlinAdiabaticViscoLog,
              std::shared_ptr<J2NonlinAdiabaticViscoLog>,

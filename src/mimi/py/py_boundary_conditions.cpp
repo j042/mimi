@@ -35,6 +35,12 @@ void init_py_boundary_conditions(py::module_& m) {
            py::arg("dim"),
            py::arg("value"),
            py::return_value_policy::reference_internal)
+      .def("constant_velocity",
+           &BCM::ConstantVelocity,
+           py::arg("bid"),
+           py::arg("dim"),
+           py::arg("value"),
+           py::return_value_policy::reference_internal)
       .def("contact",
            &BCM::Contact,
            py::arg("bid"),

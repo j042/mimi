@@ -27,6 +27,9 @@ protected:
   const double* mass_A_ = nullptr;
   int mass_n_nonzeros_ = -1;
 
+  mutable mfem::Vector temp_x_;
+  mutable mfem::Vector temp_v_;
+
 public:
   /// This is same as Base_'s ctor
   NonlinearSolid(mfem::FiniteElementSpace& fe_space, mfem::GridFunction* x_ref)
@@ -163,22 +166,21 @@ public:
   virtual void Mult(const mfem::Vector& d2x_dt2, mfem::Vector& y) const {
     MIMI_FUNC()
 
-    mimi::utils::Data<double> mem(x_->Size());
-    mfem::Vector temp_x(mem.data(), x_->Size());
-    add(*x_, fac0_, d2x_dt2, temp_x);
+    temp_x_.SetSize(x_->Size());
+    add(*x_, fac0_, d2x_dt2, temp_x_);
 
     mass_->Mult(d2x_dt2, y);
 
-    nonlinear_stiffness_->AddMult(temp_x, y);
+    nonlinear_stiffness_->AddMult(temp_x_, y);
 
     if (viscosity_) {
-      mfem::Vector temp_v(v_->Size());
-      add(*v_, fac1_, d2x_dt2, temp_v);
-      viscosity_->AddMult(temp_v, y);
+      temp_v_.SetSize(v_->Size());
+      add(*v_, fac1_, d2x_dt2, temp_v_);
+      viscosity_->AddMult(temp_v_, y);
     }
 
     if (contact_) {
-      contact_->AddMult(temp_x, y);
+      contact_->AddMult(temp_x_, y);
     }
 
     // substract rhs linear forms
@@ -190,6 +192,10 @@ public:
     if (rhs_vector_) {
       y.Add(-1.0, *rhs_vector_);
     }
+
+    for (const int i : *dirichlet_dofs_) {
+      y[i] = 0.0;
+    }
   }
 
   /// Compute J = M + dt S + dt^2 E(x + dt (v + dt k)).
@@ -197,30 +203,20 @@ public:
   virtual mfem::Operator& GetGradient(const mfem::Vector& d2x_dt2) const {
     MIMI_FUNC()
 
-    mimi::utils::Data<double> mem(x_->Size());
-    mfem::Vector temp_x(mem.data(), x_->Size());
-    add(*x_, fac0_, d2x_dt2, temp_x);
+    temp_x_.SetSize(x_->Size());
+    add(*x_, fac0_, d2x_dt2, temp_x_);
 
     // NOTE, if all the values are sorted, we can do nthread local to global
     // update
     double* J_data = jacobian_->GetData();
     const double* K_data = dynamic_cast<mfem::SparseMatrix*>(
-                               &nonlinear_stiffness_->GetGradient(temp_x))
+                               &nonlinear_stiffness_->GetGradient(temp_x_))
                                ->GetData();
 
     // get mass and nonlin stiff at the same time
     for (int i{}; i < mass_n_nonzeros_; ++i) {
       J_data[i] = mass_A_[i] + (fac0_ * K_data[i]);
     }
-
-    // // initalize
-    // // 1. mass - just copy A
-    // std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
-
-    // // 2. nonlinear stiffness
-    // jacobian_->Add(fac0_,
-    //                *dynamic_cast<mfem::SparseMatrix*>(
-    //                    &nonlinear_stiffness_->GetGradient(temp_x)));
 
     // 3. viscosity
     if (viscosity_) {
@@ -231,7 +227,7 @@ public:
     if (contact_) {
       jacobian_->Add(
           fac0_,
-          *dynamic_cast<mfem::SparseMatrix*>(&contact_->GetGradient(temp_x)));
+          *dynamic_cast<mfem::SparseMatrix*>(&contact_->GetGradient(temp_x_)));
     }
 
     return *jacobian_;
@@ -240,28 +236,26 @@ public:
   virtual mfem::Operator* ResidualAndGrad(const mfem::Vector& d2x_dt2,
                                           const int nthread,
                                           mfem::Vector& y) const {
-    const int problem_size = x_->Size();
-    mimi::utils::Data<double> mem(problem_size);
-    mfem::Vector temp_x(mem.data(), problem_size);
-    add(*x_, fac0_, d2x_dt2, temp_x);
+
+    temp_x_.SetSize(x_->Size());
+    add(*x_, fac0_, d2x_dt2, temp_x_);
 
     // do usual residual operation
     mass_->Mult(d2x_dt2, y); // this initializes y to zero
     if (viscosity_) {
-      mimi::utils::Data<double> mem_v(problem_size);
-      mfem::Vector temp_v(mem_v.data(), problem_size);
-      add(*v_, fac1_, d2x_dt2, temp_v);
-      viscosity_->AddMult(temp_v, y);
+      temp_v_.SetSize(v_->Size());
+      add(*v_, fac1_, d2x_dt2, temp_v_);
+      viscosity_->AddMult(temp_v_, y);
     }
 
     // now nonlin part
     // 1. initalize grad with mass
     std::copy_n(mass_A_, mass_n_nonzeros_, jacobian_->GetData());
-    nonlinear_stiffness_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
+    nonlinear_stiffness_->AddMultGrad(temp_x_, nthread, fac0_, y, *jacobian_);
 
     // contact -> both grad and residual
     if (contact_) {
-      contact_->AddMultGrad(temp_x, nthread, fac0_, y, *jacobian_);
+      contact_->AddMultGrad(temp_x_, nthread, fac0_, y, *jacobian_);
     }
 
     // 3. viscosity
@@ -275,6 +269,10 @@ public:
     // this is usually just for fsi
     if (rhs_vector_) {
       y.Add(-1.0, *rhs_vector_);
+    }
+
+    for (const int i : *dirichlet_dofs_) {
+      y[i] = 0.0;
     }
 
     return jacobian_;

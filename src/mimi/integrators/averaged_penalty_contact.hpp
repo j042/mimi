@@ -16,12 +16,12 @@ namespace mimi::integrators {
 
 /// simple rewrite of mfem::AddMult_a_VWt()
 template<typename DataType>
-void AddMult_a_VWt(const DataType a,
-                   const DataType* v_begin,
-                   const DataType* v_end,
-                   const DataType* w_begin,
-                   const DataType* w_end,
-                   DataType* aVWt) {
+void Ptr_AddMult_a_VWt(const DataType a,
+                       const DataType* v_begin,
+                       const DataType* v_end,
+                       const DataType* w_begin,
+                       const DataType* w_end,
+                       DataType* aVWt) {
   DataType* out{aVWt};
   for (const DataType* wi{w_begin}; wi != w_end; ++wi) {
     const DataType aw = *wi * a;
@@ -31,9 +31,47 @@ void AddMult_a_VWt(const DataType a,
   }
 }
 
-/// implements methods presented in "Sauer and De Lorenzis. An unbiased
-/// computational contact formulation for 3D friction (DOI: 10.1002/nme.4794)
-class PenaltyContact : public NonlinearBase {
+template<typename DerivativeContainer, typename NormalContainer>
+static inline void
+ComputeUnitNormal(const DerivativeContainer& first_derivatives,
+                  NormalContainer& unit_normal) {
+  MIMI_FUNC()
+
+  const int dim = unit_normal.Size();
+  const double* jac_d = first_derivatives.GetData();
+  double* unit_normal_d = unit_normal.GetData();
+  if (dim == 2) {
+    const double d0 = jac_d[0];
+    const double d1 = jac_d[1];
+    const double inv_norm2 = 1. / std::sqrt(d0 * d0 + d1 * d1);
+    unit_normal_d[0] = d1 * inv_norm2;
+    unit_normal_d[1] = -d0 * inv_norm2;
+
+    // this should be either 2d or 3d
+  } else {
+    const double d0 = jac_d[0];
+    const double d1 = jac_d[1];
+    const double d2 = jac_d[2];
+    const double d3 = jac_d[3];
+    const double d4 = jac_d[4];
+    const double d5 = jac_d[5];
+
+    const double n0 = d1 * d5 - d2 * d4;
+    const double n1 = d2 * d3 - d0 * d5;
+    const double n2 = d0 * d4 - d1 * d3;
+
+    const double inv_norm2 = 1. / std::sqrt(n0 * n0 + n1 * n1 + n2 * n2);
+
+    unit_normal_d[0] = n0 * inv_norm2;
+    unit_normal_d[1] = n1 * inv_norm2;
+    unit_normal_d[2] = n2 * inv_norm2;
+  }
+}
+
+/// implements normal contact methods presented in "De Lorenzis.
+// A large deformation frictional contact formulation using NURBS-based
+// isogeometric analysis"
+class AveragedPenaltyContact : public NonlinearBase {
 public:
   using Base_ = NonlinearBase;
   template<typename T>
@@ -44,10 +82,9 @@ public:
   mfem::CGSolver mass_inv_;
   mfem::DSmoother mass_inv_prec_;
   mfem::UMFPackSolver mass_inv_direct_;
-  mfem::Vector mass_b_;        // for rhs
-  mfem::Vector mass_x_;        // for answer
-  mfem::Vector last_residual_; // Forces
-  double last_area_;           // for p = forces / A
+  mfem::Vector mass_b_; // for rhs
+  mfem::Vector mass_x_; // for answer
+  double last_area_;    // for p = forces / A
   mimi::utils::Data<double> last_force_;
 
   /// precomputed data at quad points
@@ -103,8 +140,9 @@ public:
     bool active_ = false;
 
     std::shared_ptr<mfem::Array<int>> v_dofs_;
-    mfem::Array<int> local_v_dofs_; // scalar dofs for L2Projection
-    mfem::Array<int> local_dofs_;   // scalar dofs for L2Projection
+    mfem::Array<int> dofs_;
+    mfem::Array<int> local_v_dofs_;
+    mfem::Array<int> local_dofs_;
 
     Vector_<QuadData> quad_data_;
 
@@ -128,17 +166,19 @@ public:
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
   struct TemporaryData {
-    /// wraps element_state_data_
     mfem::Vector element_x_;
-    /// wraps element_x_
     mfem::DenseMatrix element_x_mat_;
-    /// wraps J_data
     mfem::DenseMatrix J_;
-    /// wraps forward_residual data
+    mfem::DenseMatrix local_residual_;
+    mfem::DenseMatrix local_grad_;
     mfem::DenseMatrix forward_residual_;
+
+    mfem::Vector element_pressure_;
 
     mimi::coefficients::NearestDistanceBase::Query distance_query_;
     mimi::coefficients::NearestDistanceBase::Results distance_results_;
+
+    mfem::Vector normal_;
 
     int dim_{-1};
 
@@ -150,6 +190,8 @@ public:
 
       distance_query_.SetSize(dim);
       distance_results_.SetSize(dim - 1, dim);
+      J_.SetSize(dim_, dim_ - 1);
+      normal_.SetSize(dim_);
     }
 
     void SetDof(const int n_dof) {
@@ -158,8 +200,10 @@ public:
       assert(dim_ > 0);
       element_x_.SetSize(n_dof * dim_);
       element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
-      J_.SetSize(dim_, dim_ - 1);
+      local_residual_.SetSize(n_dof, dim_);
+      local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
       forward_residual_.SetSize(n_dof, dim_);
+      element_pressure_.SetSize(n_dof);
     }
 
     mfem::DenseMatrix&
@@ -169,6 +213,36 @@ public:
 
       current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
       return element_x_mat_;
+    }
+
+    mfem::Vector& CurrentElementPressure(const mfem::Vector& pressure_all,
+                                         const BoundaryElementData& elem_data) {
+      MIMI_FUNC()
+
+      pressure_all.GetSubVector(elem_data.local_dofs_, element_pressure_);
+      return element_pressure_;
+    }
+
+    mfem::DenseMatrix& ComputeJ(const mfem::DenseMatrix& dndxi) {
+      MIMI_FUNC()
+      mfem::MultAtB(element_x_mat_, dndxi, J_);
+      return J_;
+    }
+
+    void ComputeNearestDistanceQuery(const mfem::Vector& N) {
+      MIMI_FUNC()
+      element_x_mat_.MultTranspose(N, distance_query_.query_.data());
+    }
+
+    double Pressure(const mfem::Vector& N) const {
+      MIMI_FUNC()
+      const double* p_d = element_pressure_.GetData();
+      const double* n_d = N.GetData();
+      double p{};
+      for (int i{}; i < N.Size(); ++i) {
+        p += n_d[i] * p_d[i];
+      }
+      return p;
     }
   };
 
@@ -197,8 +271,16 @@ protected:
   Vector_<bool> element_activity_;
   Vector_<int> active_elements_;
 
+  /// these are numerator and denominator
+  mfem::Vector average_gap_;
+  mfem::Vector average_pressure_;
+  mfem::Vector augmented_pressure_;
+  mfem::Vector area_;
+
+  Vector_<TemporaryData> temporary_data_;
+
 public:
-  PenaltyContact(
+  AveragedPenaltyContact(
       const std::shared_ptr<mimi::coefficients::NearestDistanceBase>&
           nearest_distance_coeff,
       const std::string& name,
@@ -258,11 +340,15 @@ public:
     const int default_q_order =
         RuntimeCommunication()->GetInteger("contact_quadrature_order", -1);
 
+    temporary_data_.resize(n_threads_);
+
     auto precompute_at_elem_and_quad = [&](const int marked_b_el_begin,
                                            const int marked_b_el_end,
                                            const int i_thread) {
       // thread's obj
       auto& int_rules = precomputed_->int_rules_[i_thread];
+      auto& tmp = temporary_data_[i_thread];
+      tmp.SetDim(dim_);
 
       for (int i{marked_b_el_begin}; i < marked_b_el_end; ++i) {
         // we only need makred boundaries
@@ -281,10 +367,10 @@ public:
         i_bed.n_dof_ = i_bed.element_->GetDof();
         i_bed.n_tdof_ = i_bed.n_dof_ * dim_;
         i_bed.v_dofs_ = precomputed_->boundary_v_dofs_[m];
-        // i_bed.dofs_.SetSize(i_bed.v_dofs_->Size() / dim_);
-        // for (int k{}; l{}; k < i_bed.v_dofs_->Size(); k += dim_, ++l) {
-        //   i_bed.dofs_[l] = (*i_bed.v_dofs_)[k] / dim_;
-        // }
+        i_bed.dofs_.SetSize(i_bed.v_dofs_->Size() / dim_);
+        for (int k{}, l{}; k < i_bed.v_dofs_->Size(); k += dim_, ++l) {
+          i_bed.dofs_[l] = (*i_bed.v_dofs_)[k] / dim_;
+        }
 
         // quick size check
         const int n_tdof = i_bed.n_tdof_;
@@ -366,11 +452,16 @@ public:
       }
       local_marked_v_dofs_[m_vdof] = v_counter++;
     }
-    last_residual_.SetSize(local_marked_v_dofs_.size());
 
+    // prepare local dofs for local, reduced length vectors
     for (auto& bed : boundary_element_data_) {
+      // v_dofs are xxxxyyyyzzzz
       bed.local_v_dofs_.SetSize(bed.n_tdof_);
+      bed.local_dofs_.SetSize(bed.n_dof_);
       for (int i{}; i < bed.n_tdof_; ++i) {
+        if (i < bed.n_dof_) {
+          bed.local_dofs_[i] = local_marked_dofs_[(*bed.v_dofs_)[i] / dim_];
+        }
         bed.local_v_dofs_[i] = local_marked_v_dofs_[(*bed.v_dofs_)[i]];
       }
     }
@@ -384,6 +475,17 @@ public:
                                          marked_boundary_v_dofs_.data(),
                                          marked_boundary_v_dofs_.size());
     }
+
+    // resize and init
+    const int local_dof_size =
+        *std::max_element(local_marked_dofs_.begin(), local_marked_dofs_.end())
+        + 1;
+    average_gap_.SetSize(local_dof_size);
+    average_gap_ = 0.0;
+    average_pressure_.SetSize(local_dof_size);
+    average_pressure_ = 0.0;
+    area_.SetSize(local_dof_size);
+    area_ = 0.0;
   }
 
   // we will average lagrange
@@ -408,90 +510,183 @@ public:
     }
   }
 
+  void InitializeAverageGapAndArea() {
+    MIMI_FUNC()
+
+    double* ag_d = average_gap_.GetData();
+    double* ap_d = average_pressure_.GetData();
+    double* ad = area_.GetData();
+    for (int i{}; i < average_gap_.Size(); ++i) {
+      ad[i] = 0.0;
+      ag_d[i] = 0.0;
+      ap_d[i] = 0.0;
+    }
+  }
+
+  void
+  AverageGap(const mfem::Vector& current_x, const int nthreads, double& area) {
+
+    InitializeAverageGapAndArea();
+
+    std::mutex gap_mutex;
+    // lambda for nthread assemble
+    auto prepare_average_gap =
+        [&](const int begin, const int end, const int i_thread) {
+          double local_area{};
+          auto& tmp = temporary_data_[i_thread];
+          for (int i{begin}; i < end; ++i) {
+            BoundaryElementData& bed = boundary_element_data_[i];
+            tmp.SetDof(bed.n_dof_);
+
+            // get current element solution as matrix
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_x, bed);
+
+            bool any_active = false;
+            const double penalty = nearest_distance_coeff_->coefficient_;
+            const int* ids = bed.local_dofs_.GetData();
+            for (QuadData& q : bed.quad_data_) {
+              tmp.ComputeNearestDistanceQuery(q.N_);
+              nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
+                                                       tmp.distance_results_);
+              tmp.distance_results_.ComputeNormal<true>(); // unit normal
+              const double true_g = tmp.distance_results_.NormalGap();
+              double g = std::min(true_g, 0.);
+
+              mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi_);
+              const double fac = q.integration_weight_ * J.Weight();
+              local_area += fac;
+
+              // normalgap validity and angle tolerance
+              // angle between two vectors:  acos(a * b / (a.norm * b.norm))
+              // difference * unit_normal is g, distance is denom.
+              // wasn't so clear on paper if we only loop active or not, but
+              // this seems to work better
+              constexpr const double angle_tol = 1.e-5;
+              // if (!(g < 0.) ||
+              if (std::acos(std::min(1.,
+                                     std::abs(true_g)
+                                         / tmp.distance_results_.distance_))
+                  > angle_tol) {
+                // q.active_ = false;
+                g = 0.0;
+                // continue;
+              }
+              // q.active_ = true;
+
+              // push right away
+              double* a = area_.GetData();
+              double* avg_g = average_gap_.GetData();
+              const double* shape = q.N_.GetData();
+              const double g_fac = fac * g;
+              // real push
+              std::lock_guard<std::mutex> lock(gap_mutex);
+              for (int k{}; k < bed.n_dof_; ++k) {
+                const double N = shape[k];
+                a[ids[k]] += N * fac;
+                avg_g[ids[k]] += N * g_fac; // this maybe zero
+              }
+            }
+          }
+          // area contribution
+          std::lock_guard<std::mutex> lock(gap_mutex);
+          area += local_area;
+        };
+
+    mimi::utils::NThreadExe(prepare_average_gap,
+                            n_marked_boundaries_,
+                            (nthreads < 0) ? n_threads_ : nthreads);
+
+    // divide
+    const double penalty = nearest_distance_coeff_->coefficient_;
+    const double* a_d = area_.GetData();
+    double* ag_d = average_gap_.GetData();
+    double* ap_d = average_pressure_.GetData();
+    for (int i{}; i < average_gap_.Size(); ++i) {
+      const double a = a_d[i];
+      // check if average gap is avtive
+      if (!(ag_d[i] < 0.)) {
+        // not active
+        ap_d[i] = 0.0;
+      }
+
+      if (a != 0.0) { // as we sum all, a should never be zero..
+        ag_d[i] /= a;
+      } else {
+        mimi::utils::PrintAndThrowError("bad area");
+      }
+
+      ap_d[i] = ag_d[i] * penalty;
+    }
+  }
+
   bool
-  QuadLoop(const mfem::DenseMatrix& x,
-           Vector_<QuadData>& q_data,
+  QuadLoop(Vector_<QuadData>& q_data,
            TemporaryData& tmp,
-           mfem::DenseMatrix& residual_matrix,
+           mfem::DenseMatrix& residual,
            const bool keep_record,
-           double& area, // must if keep_record
            mimi::utils::Data<double>& force /* only if applicable*/) const {
     MIMI_FUNC()
     bool any_active = false;
     const double penalty = nearest_distance_coeff_->coefficient_;
 
-    double* residual_begin = residual_matrix.GetData();
     for (QuadData& q : q_data) {
-      // get current position and F
-      x.MultTranspose(q.N_, tmp.distance_query_.query_.data());
+      const double p = tmp.Pressure(q.N_);
+      assert(std::isfinite(p));
 
-      // nearest distance query
-      nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
-                                               tmp.distance_results_);
-      tmp.distance_results_.ComputeNormal<true>(); // unit normal
-      const double g = tmp.distance_results_.NormalGap();
-      // for some reason, some query hit right at the very very end
-      // and returned super big number / small number
-      // Practical solution was to plant the tree with an odd number.
-      assert(std::isfinite(g));
-
-      // defer J eval if this isn't keep_record
-      double det_J{};
-      if (keep_record) {
-        mfem::MultAtB(x, q.dN_dxi_, tmp.J_);
-        det_J = tmp.J_.Weight();
-        area += det_J * q.integration_weight_;
+      if (!(p < 0.)) {
+        continue;
       }
 
-      // check for angle and sign of normal gap for the first augmentation loop
-      // otherwise, we detemine exit criteria based on p value.
-      if (!(q.lagrange_ < 0.0)) {
-        // normalgap validity and angle tolerance
-        // angle between two vectors:  acos(a * b / (a.norm * b.norm))
-        // difference * unit_normal is g, distance is denom.
-        constexpr const double angle_tol = 1.e-5;
-        if (g > 0.
-            || std::acos(
-                   std::min(1., std::abs(g) / tmp.distance_results_.distance_))
-                   > angle_tol) {
-          q.Record(keep_record, det_J, 0.0, g, false);
-          continue;
-        }
-      }
+      // we need derivatives to get normal.
+      mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi_);
+      const double det_J = J.Weight();
+      ComputeUnitNormal(J, tmp.normal_);
+
+      // // check for angle and sign of normal gap for the first augmentation
+      // // loop otherwise, we detemine exit criteria based on p value.
+      // if (!(q.lagrange_ < 0.0)) {
+      //   // normalgap validity and angle tolerance
+      //   // angle between two vectors:  acos(a * b / (a.norm * b.norm))
+      //   // difference * unit_normal is g, distance is denom.
+      //   constexpr const double angle_tol = 1.e-5;
+      //   if (g > 0.
+      //       || std::acos(
+      //              std::min(1., std::abs(g) /
+      //              tmp.distance_results_.distance_)) > angle_tol) {
+      //     q.Record(keep_record, det_J, 0.0, g, false);
+      //     continue;
+      //   }
+      // }
 
       // we allow reduction of p, as long as it doesn't change sign
       // implementation here has flipped sign so we cut at 0.0
       // see https://doi.org/10.1016/0045-7949(92)90540-G
-      const double p = std::min(q.lagrange_ + penalty * g, 0.0);
-      if (p == 0.0) {
-        // this quad no longer contributes to contact enforcement
-        q.Record(keep_record, det_J, 0.0, g, false);
-        continue;
-      }
-
-      // do deferred
-      if (!keep_record) {
-        mfem::MultAtB(x, q.dN_dxi_, tmp.J_);
-        det_J = tmp.J_.Weight();
-      }
+      // const double p = std::min(q.lagrange_ + penalty * g, 0.0);
+      // if (p == 0.0) {
+      //   // this quad no longer contributes to contact enforcement
+      //   q.Record(keep_record, det_J, 0.0, g, false);
+      //   continue;
+      // }
 
       // maybe only a minor difference, but we don't want to keep records from
       // line search or FD computations
-      q.Record(keep_record, det_J, p, g, true);
+      q.Record(keep_record, det_J, p, p, true);
 
       // set active after checking p
       any_active = true;
 
-      // again, note no negative sign.
-      AddMult_a_VWt(q.integration_weight_ * det_J * p,
-                    q.N_.begin(),
-                    q.N_.end(),
-                    tmp.distance_results_.normal_.begin(),
-                    tmp.distance_results_.normal_.end(),
-                    residual_begin);
+      // this one has negative sign as we use the normal from gauss point
+      const double fac = q.integration_weight_ * det_J * p;
+      Ptr_AddMult_a_VWt(-fac,
+                        q.N_.begin(),
+                        q.N_.end(),
+                        tmp.normal_.begin(),
+                        tmp.normal_.end(),
+                        residual.GetData());
       if (keep_record) {
-        force.Add(p * det_J * q.integration_weight_,
-                  tmp.distance_results_.normal_.begin());
+        // no negative sign, because we want to keep the sign to point inwards
+        force.Add(fac, tmp.normal_.begin());
       }
     }
 
@@ -504,47 +699,46 @@ public:
                                    const int nthreads,
                                    mfem::Vector& residual) {
     MIMI_FUNC()
+    last_area_ = 0.0;
+    AverageGap(current_x, nthreads, last_area_);
+    last_force_.Fill(0.0);
 
     std::mutex residual_mutex;
 
-    auto assemble_face_residual_and_maybe_grad =
-        [&](const int begin, const int end, const int i_thread) {
-          TemporaryData tmp;
-          tmp.SetDim(dim_);
-          double area_dummy;
-          mimi::utils::Data<double> force_dummy;
-          // this loops marked boundary elements
-          for (int i{begin}; i < end; ++i) {
-            // get bed
-            BoundaryElementData& bed = boundary_element_data_[i];
-            tmp.SetDof(bed.n_dof_);
-            // variable name is misleading - this is just local residual
-            // we use this container, as we already allocate this in tmp
-            // anyways
-            tmp.forward_residual_ = 0.0;
+    auto assemble_face_residual_and_maybe_grad = [&](const int begin,
+                                                     const int end,
+                                                     const int i_thread) {
+      auto& tmp = temporary_data_[i_thread];
+      mimi::utils::Data<double> tl_force(dim_);
+      tl_force.Fill(0.0);
+      // this loops marked boundary elements
+      for (int i{begin}; i < end; ++i) {
+        // get bed
+        BoundaryElementData& bed = boundary_element_data_[i];
+        tmp.SetDof(bed.n_dof_);
+        tmp.local_residual_ = 0.0;
 
-            mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, bed);
+        mfem::DenseMatrix& current_element_x =
+            tmp.CurrentElementSolutionCopy(current_x, bed);
+        tmp.CurrentElementPressure(average_pressure_, bed);
 
-            // assemble residual
-            // this function is called either at the last step at "melted"
-            // staged or during line search, keep_record = False
-            const bool any_active = QuadLoop(current_element_x,
-                                             bed.quad_data_,
-                                             tmp,
-                                             tmp.forward_residual_,
-                                             false,
-                                             area_dummy,
-                                             force_dummy);
+        // assemble residual
+        // this function is called either at the last step at "melted"
+        // staged or during line search, keep_record = False
+        const bool any_active =
+            QuadLoop(bed.quad_data_, tmp, tmp.local_residual_, false, tl_force);
 
-            // only push if any of quad point was active
-            if (any_active) {
-              const std::lock_guard<std::mutex> lock(residual_mutex);
-              residual.AddElementVector(*bed.v_dofs_,
-                                        tmp.forward_residual_.GetData());
-            }
-          } // marked elem loop
-        };
+        // only push if any of quad point was active
+        if (any_active) {
+          const std::lock_guard<std::mutex> lock(residual_mutex);
+          residual.AddElementVector(*bed.v_dofs_,
+                                    tmp.local_residual_.GetData());
+        }
+      } // marked elem loop
+        // reuse mutex for area and force update
+      std::lock_guard<std::mutex> lock(residual_mutex);
+      last_force_.Add(tl_force);
+    };
 
     mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
                             n_marked_boundaries_,
@@ -554,34 +748,31 @@ public:
   virtual void AddBoundaryGrad(const mfem::Vector& current_x,
                                const int nthreads,
                                mfem::SparseMatrix& grad) {
+    MIMI_FUNC()
+    double dummy_area{};
+    AverageGap(current_x, nthreads, dummy_area);
+
     std::mutex residual_mutex;
     // lambda for nthread assemble
     auto assemble_boundary_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
-          mfem::DenseMatrix local_residual;
-          mfem::DenseMatrix local_grad;
-          TemporaryData tmp;
-          tmp.SetDim(dim_);
-          double area_dummy;
-          mimi::utils::Data<double> force_dummy;
+          auto& tmp = temporary_data_[i_thread];
+          mimi::utils::Data<double> force_dummy(dim_);
           for (int i{begin}; i < end; ++i) {
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
-            local_residual.SetSize(bed.n_dof_, dim_);
-            local_grad.SetSize(bed.n_tdof_, bed.n_tdof_);
-            local_residual = 0.0;
+            tmp.local_residual_ = 0.0;
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, bed);
+            tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual
-            const bool any_active = QuadLoop(current_element_x,
-                                             bed.quad_data_,
+            const bool any_active = QuadLoop(bed.quad_data_,
                                              tmp,
-                                             local_residual,
+                                             tmp.local_residual_,
                                              false,
-                                             area_dummy,
                                              force_dummy);
 
             // skip if nothing's active
@@ -589,9 +780,9 @@ public:
               continue;
             }
 
-            double* grad_data = local_grad.GetData();
+            double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
-            const double* residual_data = local_residual.GetData();
+            const double* residual_data = tmp.local_residual_.GetData();
             const double* fd_forward_data = tmp.forward_residual_.GetData();
             for (int j{}; j < bed.n_tdof_; ++j) {
               tmp.forward_residual_ = 0.0;
@@ -602,12 +793,10 @@ public:
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;
-              QuadLoop(current_element_x,
-                       bed.quad_data_,
+              QuadLoop(bed.quad_data_,
                        tmp,
                        tmp.forward_residual_,
                        false,
-                       area_dummy,
                        force_dummy);
 
               for (int k{}; k < bed.n_tdof_; ++k) {
@@ -620,7 +809,7 @@ public:
             // push right away
             std::lock_guard<std::mutex> lock(residual_mutex);
             double* A = grad.GetData();
-            const double* local_A = local_grad.GetData();
+            const double* local_A = tmp.local_grad_.GetData();
             const auto& A_ids = *bed.sparse_matrix_A_ids_;
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++;
@@ -641,40 +830,31 @@ public:
                                           mfem::Vector& residual,
                                           mfem::SparseMatrix& grad) {
     last_area_ = 0.0;
+    AverageGap(current_x, nthreads, last_area_);
     last_force_.Fill(0.0);
-    const bool save_residual =
-        RuntimeCommunication()->ShouldSave("contact_forces");
-    if (save_residual) {
-      last_residual_ = 0.0;
-    }
+
     std::mutex residual_mutex;
     // lambda for nthread assemble
     auto assemble_boundary_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
-          mfem::DenseMatrix local_residual;
-          mfem::DenseMatrix local_grad;
-          TemporaryData tmp;
-          tmp.SetDim(dim_);
-          double tl_area{};
+          auto& tmp = temporary_data_[i_thread];
           mimi::utils::Data<double> tl_force(dim_);
+          tl_force.Fill(0.0);
           for (int i{begin}; i < end; ++i) {
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
-            local_residual.SetSize(bed.n_dof_, dim_);
-            local_grad.SetSize(bed.n_tdof_, bed.n_tdof_);
-            local_residual = 0.0;
+            tmp.local_residual_ = 0.0;
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
                 tmp.CurrentElementSolutionCopy(current_x, bed);
+            tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual
-            const bool any_active = QuadLoop(current_element_x,
-                                             bed.quad_data_,
+            const bool any_active = QuadLoop(bed.quad_data_,
                                              tmp,
-                                             local_residual,
+                                             tmp.local_residual_,
                                              true,
-                                             tl_area,
                                              tl_force);
 
             // skip if nothing's active
@@ -682,9 +862,9 @@ public:
               continue;
             }
 
-            double* grad_data = local_grad.GetData();
+            double* grad_data = tmp.local_grad_.GetData();
             double* solution_data = current_element_x.GetData();
-            const double* residual_data = local_residual.GetData();
+            const double* residual_data = tmp.local_residual_.GetData();
             const double* fd_forward_data = tmp.forward_residual_.GetData();
             for (int j{}; j < bed.n_tdof_; ++j) {
               tmp.forward_residual_ = 0.0;
@@ -695,12 +875,10 @@ public:
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;
-              QuadLoop(current_element_x,
-                       bed.quad_data_,
+              QuadLoop(bed.quad_data_,
                        tmp,
                        tmp.forward_residual_,
                        false,
-                       tl_area, /* this won't be changed */
                        tl_force /* this either */);
 
               for (int k{}; k < bed.n_tdof_; ++k) {
@@ -715,26 +893,16 @@ public:
             // push right away
             std::lock_guard<std::mutex> lock(residual_mutex);
             const auto& vdofs = *bed.v_dofs_;
-            residual.AddElementVector(vdofs, local_residual.GetData());
+            residual.AddElementVector(vdofs, tmp.local_residual_.GetData());
             double* A = grad.GetData();
-            const double* local_A = local_grad.GetData();
+            const double* local_A = tmp.local_grad_.GetData();
             const auto& A_ids = *bed.sparse_matrix_A_ids_;
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++ * grad_factor;
             }
-            if (save_residual) {
-              // since we don't save our local copy, we can't really have this
-              // serial at the end
-              double* last_r_d = last_residual_.GetData();
-              const double* local_r_d = local_residual.GetData();
-              for (int k{}; k < bed.n_tdof_; ++k) {
-                last_r_d[bed.local_v_dofs_[k]] = local_r_d[k];
-              }
-            }
           }
           // reuse mutex for area and force update
           std::lock_guard<std::mutex> lock(residual_mutex);
-          last_area_ += tl_area;
           last_force_.Add(tl_force);
         };
 
@@ -750,8 +918,7 @@ public:
     std::mutex gap_norm;
     double gap_squared_total{};
     auto find_gap = [&](const int begin, const int end, const int i_thread) {
-      TemporaryData tmp;
-      tmp.SetDim(dim_);
+      auto& tmp = temporary_data_[i_thread];
       double local_g_squared_sum{};
       // this loops marked boundary elements
       for (int i{begin}; i < end; ++i) {
@@ -797,14 +964,15 @@ public:
       rc.RecordRealHistory("area", last_area_);
       rc.RecordRealHistory("force_x", last_force_[0]);
       rc.RecordRealHistory("force_y", last_force_[1]);
+      rc.RecordRealHistory("x_over_y", last_force_[0] / last_force_[1]);
       if (dim_ > 2) {
         rc.RecordRealHistory("force_z", last_force_[2]);
       }
     }
     if (rc.ShouldSave("contact_forces")) {
-      rc.SaveDynamicVector("vector_residual_", last_residual_);
-    }
-    if (rc.ShouldSave("")) {
+      rc.SaveDynamicVector(
+          "pressure_",
+          average_pressure_); // with this we can always rebuild traction
     }
   }
 

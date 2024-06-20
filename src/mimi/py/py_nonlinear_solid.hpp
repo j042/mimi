@@ -4,7 +4,8 @@
 
 #include "mimi/integrators/materials.hpp"
 #include "mimi/integrators/nonlinear_solid.hpp"
-#include "mimi/integrators/penalty_contact.hpp"
+// #include "mimi/integrators/penalty_contact.hpp"
+#include "mimi/integrators/averaged_penalty_contact.hpp"
 #include "mimi/integrators/vector_diffusion.hpp"
 #include "mimi/integrators/vector_mass.hpp"
 #include "mimi/operators/nonlinear_solid.hpp"
@@ -24,6 +25,7 @@ public:
   virtual void SetMaterial(const MaterialPointer_& material) {
     MIMI_FUNC()
     material_ = material;
+    mimi::utils::PrintInfo("Set material", material_->Name());
   }
 
   virtual void Setup(const int nthreads = -1) {
@@ -250,7 +252,7 @@ public:
       for (const auto& [bid, nd_coeff] : contact) {
         // initialzie integrator with nearest distance coeff (splinepy splines)
         auto contact_integ =
-            std::make_shared<mimi::integrators::PenaltyContact>(
+            std::make_shared<mimi::integrators::AveragedPenaltyContact>(
                 nd_coeff,
                 std::to_string(bid),
                 contact_precomputed);
@@ -268,8 +270,20 @@ public:
 
     // setup solvers
     // setup linear solver - should try SUNDIALS::SuperLU_mt
-    auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
-    Base_::linear_solvers_["nonlinear_solid"] = lin_solver;
+    if (RuntimeCommunication()->GetInteger("use_iterative_solver", 0)) {
+      auto lin_solver = std::make_shared<mfem::GMRESSolver>();
+      auto prec = std::make_shared<mfem::DSmoother>();
+      lin_solver->SetRelTol(1e-8);
+      lin_solver->SetAbsTol(1e-12);
+      lin_solver->SetMaxIter(300);
+      lin_solver->SetPrintLevel(-1);
+      lin_solver->SetPreconditioner(*prec);
+      Base_::linear_solvers_["nonlinear_solid"] = lin_solver;
+      Base_::linear_solvers_["nonlinear_solid_preconditioner"] = prec;
+    } else {
+      auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
+      Base_::linear_solvers_["nonlinear_solid"] = lin_solver;
+    }
 
     // setup a newton solver
     auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
@@ -279,7 +293,7 @@ public:
     // basic config. you can change this using ConfigureNewton()
     newton->iterative_mode = false;
     newton->SetOperator(*nl_oper);
-    newton->SetSolver(*lin_solver);
+    newton->SetSolver(*Base_::linear_solvers_["nonlinear_solid"]);
     newton->SetPrintLevel(mfem::IterativeSolver::PrintLevel()
                               .Warnings()
                               .Errors()
@@ -296,6 +310,15 @@ public:
     auto odesolver =
         std::make_unique<mimi::solvers::GeneralizedAlpha2>(*nl_oper);
     odesolver->PrintInfo();
+    if (!Base_::boundary_conditions_->InitialConfiguration()
+             .constant_velocity_.empty()) {
+      auto dynamic_dirichlet = std::make_shared<
+          mimi::utils::TimeDependentDirichletBoundaryCondition>();
+      dynamic_dirichlet->boundary_dof_ids_ = &disp_fes.boundary_dof_ids_;
+      dynamic_dirichlet->dynamic_bc_ = Base_::boundary_conditions_.get();
+      odesolver->dynamic_dirichlet_ = dynamic_dirichlet;
+    }
+    Base_::boundary_conditions_->Print();
 
     // finalize operator
     nl_oper->Setup();

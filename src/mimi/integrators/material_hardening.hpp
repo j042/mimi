@@ -47,6 +47,21 @@ struct HardeningBase {
     mimi::utils::PrintAndThrowError("HardeningBase::SigmaY not overriden");
     return -1.0;
   }
+
+  virtual double
+  ViscoContribution(const double equivalent_plastic_strain_rate) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "HardeningBase::ViscoContribution  not overriden");
+    return {};
+  }
+
+  virtual double ThermoContribution(const double temperature) const {
+    MIMI_FUNC()
+    mimi::utils::PrintAndThrowError(
+        "HardeningBase::ThermoContribution  not overriden");
+    return {};
+  }
 };
 
 struct PowerLawHardening : public HardeningBase {
@@ -135,20 +150,27 @@ struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
 
   virtual bool IsRateDependent() const { return true; }
 
-  virtual ADScalar_
-  Evaluate(const ADScalar_& accumulated_plastic_strain,
-           const double& equivalent_plastic_strain_rate) const {
+  virtual double
+  ViscoContribution(const double equivalent_plastic_strain_rate) const {
     MIMI_FUNC()
 
+    // get visco contribution
     double visco_contribution{1.0};
-    // we only want to avoid negative output
     if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
       visco_contribution += C_
                             * std::log(equivalent_plastic_strain_rate
                                        / effective_plastic_strain_rate_);
     }
+    return visco_contribution;
+  }
 
-    return Base_::Evaluate(accumulated_plastic_strain) * visco_contribution;
+  virtual ADScalar_
+  Evaluate(const ADScalar_& accumulated_plastic_strain,
+           const double& equivalent_plastic_strain_rate) const {
+    MIMI_FUNC()
+
+    return Base_::Evaluate(accumulated_plastic_strain)
+           * ViscoContribution(equivalent_plastic_strain_rate);
   }
 };
 
@@ -242,6 +264,7 @@ struct JohnsonCookConstantTemperatureHardening
 struct JohnsonCookAdiabaticRateDependentHardening
     : public JohnsonCookRateDependentHardening {
   using Base_ = JohnsonCookRateDependentHardening;
+  using JCBase_ = Base_::Base_;
   using ADScalar_ = Base_::ADScalar_;
 
   using Base_::A_;
@@ -291,14 +314,13 @@ struct JohnsonCookAdiabaticRateDependentHardening
                              const double& temperature) const {
     MIMI_FUNC()
 
-    // get visco contribution
-    double visco_contribution{1.0};
-    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
-      visco_contribution += C_
-                            * std::log(equivalent_plastic_strain_rate
-                                       / effective_plastic_strain_rate_);
-    }
+    return JCBase_::Evaluate(accumulated_plastic_strain)
+           * ViscoContribution(equivalent_plastic_strain_rate)
+           * ThermoContribution(temperature);
+  }
 
+  virtual double ThermoContribution(const double temperature) const {
+    MIMI_FUNC()
     // then thermo
     double thermo_contribution{1.0};
     if (temperature < reference_temperature_) {
@@ -311,13 +333,7 @@ struct JohnsonCookAdiabaticRateDependentHardening
           std::pow((temperature - reference_temperature_) * inv_Tm_minus_Tr_,
                    m_);
     }
-
-    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
-      return ADScalar_(A_) * visco_contribution * thermo_contribution;
-    }
-
-    return (A_ + B_ * pow(accumulated_plastic_strain, n_)) * visco_contribution
-           * thermo_contribution;
+    return thermo_contribution;
   }
 };
 

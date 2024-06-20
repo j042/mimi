@@ -177,6 +177,13 @@ public:
     other->domain_A_ids_ = domain_A_ids_;
     other->boundary_A_ids_ = boundary_A_ids_;
     other->sparsity_pattern_ = sparsity_pattern_;
+
+    other->n_elements_ = n_elements_;
+    other->n_threads_ = n_threads_;
+    other->n_b_elements_ = n_b_elements_;
+    other->n_v_dofs_ = n_v_dofs_;
+    other->n_dofs_ = n_dofs_;
+    other->dim_ = dim_;
   }
 
   virtual void Setup(const mfem::FiniteElementSpace& fe_space,

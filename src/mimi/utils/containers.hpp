@@ -155,6 +155,7 @@ public:
   }
 
   constexpr IndexType size() const { return size_; }
+  constexpr IndexType Size() const { return size_; }
 
   constexpr void DestroyData() {
     if (own_data_ && data_) {

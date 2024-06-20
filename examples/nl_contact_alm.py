@@ -14,8 +14,8 @@ le.read_mesh("tests/data/sqn.mesh")
 # set param
 
 # refine
-le.elevate_degrees(1)
-le.subdivide(4)
+le.elevate_degrees(2)
+le.subdivide(3)
 
 # mat
 mat = mimi.PyCompressibleOgdenNeoHookean()
@@ -42,13 +42,13 @@ curv = sp.Bezier(
         [10.5, 2.3],
     ],
 )
-curv.cps[:] += [0.0, 0.75]
+curv.cps[:] += [0, 0.75]
 
 
 scene = mimi.PyNearestDistanceToSplines()
 scene.add_spline(curv)
 scene.plant_kd_tree(1001, 4)
-scene.coefficient = 1e12
+scene.coefficient = 1e10
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
@@ -70,7 +70,7 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
+le.configure_newton("nonlinear_solid", 1e-10, 1e-8, 20, False)
 
 tic.toc("bilinear, linear forms assembly")
 
@@ -85,7 +85,7 @@ tic.summary(print_=True)
 # s.show_options["control_points"] = False
 # s.show_options["knots"] = False
 s.show_options["resolutions"] = [100, 30]
-s.show_options["control_points"] = False
+# s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
 s.cps[:] = x[to_s]
 
@@ -93,7 +93,7 @@ tic.summary(print_=True)
 
 
 def move():
-    if i < 100:
+    if i < 200:
         curv.cps[:] -= [0, 0.005]
     else:
         curv.cps[:] -= [0.04, 0]
@@ -130,14 +130,13 @@ def show():
 
 # initialize a plotter
 plt = gus.show([s, curv], interactive=False, close=False)
-n = le.nonlinear_from2("contact")
-ni = n.boundary_integrator(0)
-for i in range(200):
+for i in range(400):
     move()
-    le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
-    le.advance_time2()
+    # le.fixed_point_alm_solve2(10, 3, 10, 0, 1e-8, 1e-5, 1e-5, True)
+    # le.advance_time2()
+    le.step_time2()
     tic.toc(f"{i}-step")
-#    show()
+    show()
 
 
 tic.summary(print_=True)

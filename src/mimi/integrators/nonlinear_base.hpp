@@ -154,7 +154,7 @@ public:
     return true;
   }
 
-  virtual double GapNorm(const mfem::Vector& test_x, const int nthreads) const {
+  virtual double GapNorm(const mfem::Vector& test_x, const int nthreads) {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError("GapNorm(x, nthread) not implemented for",
                                     Name());
@@ -264,12 +264,12 @@ struct TemporaryData {
   }
 
   // computes F and resets flags
-  void ComputeF(const mfem::DenseMatrix& x, const mfem::DenseMatrix& dNdX) {
+  void ComputeF(const mfem::DenseMatrix& dNdX) {
     MIMI_FUNC()
     has_det_F_ = false;
     has_F_inv_ = false;
 
-    mfem::MultAtB(x, dNdX, F_);
+    mfem::MultAtB(element_x_mat_, dNdX, F_);
   }
 
   mfem::DenseMatrix& FInv() {
@@ -313,9 +313,7 @@ struct TemporaryViscoData : TemporaryData {
   using BaseTD_::FInv;
 
   // computes F and resets flags
-  void ComputeFAndFDot(const mfem::DenseMatrix& x,
-                       const mfem::DenseMatrix& v,
-                       const mfem::DenseMatrix& dNdX) {
+  void ComputeFAndFDot(const mfem::DenseMatrix& dNdX) {
     MIMI_FUNC()
     has_det_F_ = false;
     has_F_inv_ = false;
@@ -324,12 +322,12 @@ struct TemporaryViscoData : TemporaryData {
     // MultAtB together for 2 As. adapted from mfem::MultAtB
 
     // loop size
-    const int ah = x.Height();
-    const int aw = x.Width();
+    const int ah = element_x_mat_.Height();
+    const int aw = element_x_mat_.Width();
     const int bw = dNdX.Width();
     // A and B's data
-    const double* x_d_begin = x.Data();
-    const double* v_d_begin = v.Data();
+    const double* x_d_begin = element_x_.GetData();
+    const double* v_d_begin = element_v_.GetData();
     const double* dndx_d = dNdX.Data();
     // output
     double* f_d = F_.Data();
