@@ -65,6 +65,13 @@ public:
     // note, for bilinear, nothing is really saved. just used for thread safety
     auto& bilinear_precomputed = disp_fes.precomputed_["bilinear_forms"];
     bilinear_precomputed = std::make_shared<mimi::utils::PrecomputedData>();
+
+    // following part doesn't work as we need to do create our mesh again based on updated NURBSext <- TODO!
+    // but before that, we should convert to displacement based formulation
+    // mfem::Array<int> b_dofs_from(1), b_dofs_to(1), query;
+    // b_dofs_from = 3;
+    // b_dofs_to = 4;
+    // disp_fes.fe_space_->GetNURBSext()->ConnectBoundaries(b_dofs_from, b_dofs_to);
     bilinear_precomputed->Setup(*disp_fes.fe_space_, n_threads);
 
     // create solution fields for x and set local reference

@@ -206,7 +206,7 @@ public:
       meshes_.emplace_back(
           std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(), true));
 
-      // create fe_collection - TODO - what do they really do?
+      // create fe_collection
       fe_collections_.emplace_back(
           std::make_shared<mfem::NURBSFECollection>()); // default is varing
                                                         // degrees
