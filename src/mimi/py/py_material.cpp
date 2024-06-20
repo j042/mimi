@@ -163,7 +163,7 @@ void init_py_material(py::module_& m) {
   py::class_<J2NonlinAdiabaticViscoLarge,
              std::shared_ptr<J2NonlinAdiabaticViscoLarge>,
              MaterialBase>
-      j2_av_large(m, "PyJ2AdiabaticViscoLarge");
+      j2_av_large(m, "J2AdiabaticViscoLarge");
   j2_av_large.def(py::init<>())
       .def_readwrite("hardening", &J2NonlinAdiabaticViscoLarge::hardening_)
       .def_readwrite("heat_fraction",
