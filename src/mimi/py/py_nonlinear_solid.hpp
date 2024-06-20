@@ -45,33 +45,89 @@ public:
     }
 
     // create displacement fe space
-    // I realize, this is misleading: we work with x, not u
     auto& disp_fes = Base_::fe_spaces_["displacement"];
-    // here, if we pass NURBSext, it will steal the ownership, causing segfault.
-    disp_fes.fe_space_ = std::make_unique<mfem::FiniteElementSpace>(
-        Base_::Mesh().get(),
-        nullptr, // Base_::Mesh()->NURBSext,
-        fe_collection,
-        MeshDim(),
-        // this is how mesh provides its nodes, so solutions should match them
-        // else, dofs does not match
-        mfem::Ordering::byVDIM);
 
+    // check if we have periodic bc. if so, we need to create everything again
+    if (auto& periodic_map = Base_::boundary_conditions_->InitialConfiguration()
+                                 .periodic_boundaries_;
+        !periodic_map.empty()) {
+      mimi::utils::PrintInfo("Periodic boundaries requested.");
+
+      const int n_periodic = periodic_map.size();
+      mfem::Array<int> b0s(n_periodic), b1s(n_periodic);
+      b0s = -1;
+      b1s = -1;
+      int i_p{};
+      for (const auto& [bid0, bid1] : periodic_map) {
+        mimi::utils::PrintInfo("Requested to connect", bid0, bid1);
+        b0s[i_p] = bid0;
+        b1s[i_p] = bid1;
+        ++i_p;
+      }
+      // following nurbs_ex1, create a separate ext
+      auto nurbsext = std::make_unique<mfem::NURBSExtension>(*Base_::Mesh()->NURBSext);
+      nurbsext->ConnectBoundaries(b0s, b1s);
+
+      // create new fe space with this nurbsext
+      disp_fes.fe_space_ = std::make_unique<mfem::FiniteElementSpace>(
+          Base_::Mesh().get(),
+          // takes ownership
+          nurbsext.release(),
+          fe_collection,
+          MeshDim(),
+          mfem::Ordering::byVDIM);
+    } else {
+      // here, if we pass NURBSext, it will steal the ownership, causing
+      // segfault.
+      disp_fes.fe_space_ = std::make_unique<mfem::FiniteElementSpace>(
+          Base_::Mesh().get(),
+          nullptr, // Base_::Mesh()->NURBSext,
+          fe_collection,
+          MeshDim(),
+          // this is how mesh provides its nodes, so solutions should match them
+          // else, dofs does not match
+          mfem::Ordering::byVDIM);
+    }
+
+    mimi::utils::PrintInfo("Creating grid functions u");
     // create solution fields for x and set local reference
     mfem::GridFunction& x = disp_fes.grid_functions_["x"];
     x.SetSpace(disp_fes.fe_space_.get());
     Base_::x2_ = &x; // "2" means x for ode second order
 
     // and x_dot (= v)
+    mimi::utils::PrintInfo("Creating grid functions v");
     mfem::GridFunction& x_dot = disp_fes.grid_functions_["x_dot"];
     x_dot.SetSpace(disp_fes.fe_space_.get());
     Base_::x2_dot_ = &x_dot;
 
     // and reference / initial reference. initialize with fe space then
     // copy from mesh
+    mimi::utils::PrintInfo("Creating grid functions x_ref");
     mfem::GridFunction& x_ref = disp_fes.grid_functions_["x_ref"];
     x_ref.SetSpace(disp_fes.fe_space_.get());
-    x_ref = *Base_::Mesh()->GetNodes();
+
+    // carefully create x_ref, in case we have periodic mesh
+    mfem::GridFunction& nodes = *Base_::Mesh()->GetNodes();
+    mimi::utils::PrintInfo("Number of geometric coordinates x dim:",
+                           nodes.Size());
+    mimi::utils::PrintInfo("Size of grid function:", x_ref.Size());
+
+    // if there's more efficient way, do so.
+    if (nodes.Size() != x_ref.Size()) {
+      mfem::NURBSExtension& ext = *disp_fes.fe_space_->GetNURBSext();
+      const int dim = Base_::MeshDim();
+      const double* node_d = nodes.GetData();
+      for (int i{}; i < nodes.Size() / dim; ++i) {
+        const int k = ext.DofMap(i);
+        for (int j{}; j < dim; ++j) {
+          x_ref[k * dim + j] = *node_d++;
+        }
+      }
+    } else {
+      // they should have same fespace
+      x_ref = nodes;
+    }
 
     // set initial condition
     // you can change this in python using SolutionView()
@@ -84,21 +140,18 @@ public:
     // - (optional) conatct
     // here, we only create one for bilinear. others are done below
     // note, for bilinear, nothing is really saved. just used for thread safety
+    mimi::utils::PrintDebug("Creating PrecomputedData");
     auto& bilinear_precomputed = disp_fes.precomputed_["bilinear_forms"];
     // this is the first precomputed data which does all base work.
     bilinear_precomputed = std::make_shared<mimi::utils::PrecomputedData>();
     // this make x_ref_ available for all the integrators through StressFreeX()
     bilinear_precomputed->x_ref_ = &x_ref;
 
-    // following part doesn't work as we need to do create our mesh again based
-    // on updated NURBSext <- TODO! but before that, we should convert to
-    // displacement based formulation mfem::Array<int> b_dofs_from(1),
-    // b_dofs_to(1), query; b_dofs_from = 3; b_dofs_to = 4;
-    // disp_fes.fe_space_->GetNURBSext()->ConnectBoundaries(b_dofs_from,
-    // b_dofs_to);
+    mimi::utils::PrintDebug("Setup PrecomputedData");
     bilinear_precomputed->Setup(*disp_fes.fe_space_, n_threads);
 
     // let's process boundaries
+    mimi::utils::PrintDebug("Find boundary dof ids");
     Base_::FindBoundaryDofIds();
 
     // creating operators

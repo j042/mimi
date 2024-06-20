@@ -204,7 +204,8 @@ public:
     other->x_ref_ = x_ref_;
   }
 
-  virtual void Setup(const mfem::FiniteElementSpace& fe_space,
+  // virtual void Setup(const mfem::FiniteElementSpace& fe_space,
+  virtual void Setup(mfem::FiniteElementSpace& fe_space,
                      const int nthreads) {
     MIMI_FUNC()
 
@@ -216,20 +217,27 @@ public:
     Clear();
 
     // create for each threads
+    mimi::utils::PrintDebug(
+        "Creating copies of IntegrationRules, Mesh, NURBSFECollection, "
+        "FiniteElementSpace for each thread");
     for (int i{}; i < nthreads; ++i) {
       // create int rules
+      mimi::utils::PrintDebug(i, "IntegrationRules");
       int_rules_.emplace_back(mfem::IntegrationRules{});
 
       // deep copy mesh
+      mimi::utils::PrintDebug(i, "MeshExt");
       meshes_.emplace_back(
           std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(), true));
 
       // create fe_collection
+      mimi::utils::PrintDebug(i, "NURBSFECollection");
       fe_collections_.emplace_back(
           std::make_shared<mfem::NURBSFECollection>()); // default is varing
                                                         // degrees
 
       // create fe spaces
+      mimi::utils::PrintDebug(i, "FiniteElementSpace");
       fe_spaces_.emplace_back(
           std::make_shared<mfem::FiniteElementSpace>(fe_space,
                                                      meshes_[i].get(),
@@ -243,7 +251,11 @@ public:
     n_threads_ = nthreads;
     n_elements_ = n_elem;
     n_b_elements_ = n_b_elem;
-    n_v_dofs_ = fe_space.GetMesh()->GetNodes()->Size();
+    mimi::utils::PrintDebug("Mesh",
+                           fe_space.GetMesh()->GetNodes()->Size(),
+                           "Nodes x dim and VSize is",
+                           fe_space.GetVSize());
+    n_v_dofs_ = fe_space.GetVSize();
     dim_ = dim;
     n_dofs_ = n_v_dofs_ / dim;
 
@@ -273,10 +285,12 @@ public:
             e_tr = CreateTransformation(); // make_shared
 
             // process/set FE
+            mimi::utils::PrintDebug("Getting FE", i);
             fes.GetNURBSext()->LoadFE(i, elem.get());
 
             // prepare transformation - we could just copy paste the code, and
             // this will save GetElementVDofs, but let's not go too crazy
+            mimi::utils::PrintDebug("Getting ElTrans", i);
             fes.GetElementTransformation(i, e_tr.get());
             // however, we do need to set FE to this newly created, as it is a
             // ptr to internal obj
@@ -284,6 +298,7 @@ public:
 
             // is there a dof trans? I am pretty sure not
             // if so, we can extend here
+            mimi::utils::PrintDebug("Getting ElementVDofs for formality", i);
             auto& v_dof = v_dofs_[i];
             v_dof = std::make_shared<mfem::Array<int>>();
             mfem::DofTransformation* doftrans = fes.GetElementVDofs(i, *v_dof);
