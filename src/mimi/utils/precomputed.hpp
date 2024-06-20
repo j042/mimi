@@ -171,7 +171,6 @@ public:
     boundary_attr_markers_.clear();
 
     n_threads_ = -1;
-    x_ref_ = nullptr;
   }
 
   /// @brief pastes shareable properties

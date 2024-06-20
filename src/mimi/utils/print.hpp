@@ -6,13 +6,13 @@
 #include <stdexcept>
 #include <utility>
 
-#ifndef NDEBUG
-#define MIMI_FUNC()                                                            \
-  (std::cout << "\n (" << __PRETTY_FUNCTION__ << " - " << __FILE__ << ":"      \
-             << __LINE__ << ") \n");
-#else
+// #ifndef NDEBUG
+// #define MIMI_FUNC() \
+//   (std::cout << "\n (" << __PRETTY_FUNCTION__ << " - " << __FILE__ << ":" \
+//              << __LINE__ << ") \n");
+// #else
 #define MIMI_FUNC()
-#endif
+// #endif
 
 namespace mimi::utils {
 

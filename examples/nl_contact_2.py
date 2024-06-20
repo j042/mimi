@@ -16,7 +16,6 @@ le.elevate_degrees(3)
 le.subdivide(3)
 
 # mat
-mat = mimi.CompressibleOgdenNeoHookean()
 mat = mimi.J2()
 mat.density = 7e4
 mat.viscosity = 10
@@ -67,13 +66,14 @@ tic.toc("bilinear, linear forms assembly")
 le.time_step_size = 0.001
 
 # get view of solution, displacement
-x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+x_ref = le.solution_view("displacement", "x_ref").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
 s.show_options["resolutions"] = [100, 30]
 curv.show_options["control_points"] = False
-s.cps[:] = x[to_s]
+s.cps[:] = x_ref[to_s]
 
 tic.summary(print_=True)
 
@@ -87,26 +87,11 @@ def move():
     scene.plant_kd_tree(1000, 4)
 
 
-def sol():
-    le.update_contact_lagrange()
-    le.fixed_point_solve2()
-
-
-def c_sol():
-    le.fixed_point_solve2()
-    print(ni.gap_norm())
-
-
-def adv():
-    le.advance_time2()
-    le.fill_contact_lagrange(0)
-
-
 def show():
-    s.cps[:] = x[to_s]
+    s.cps[:] = (x_ref + u)[to_s]
     gus.show(
         [
-            str(i) + " " + str(j) + " " + str(ab) + " " + str(ni.gap_norm()),
+            str(i),
             s,
             curv,
         ],
@@ -116,35 +101,12 @@ def show():
 
 
 coe = 1e11
+scene.coefficient = coe
 # initialize a plotter
-plt = gus.show([s, curv], close=False)
-n = le.nonlinear_from2("contact")
-ni = n.boundary_integrator(0)
+plt = gus.show([s, curv], close=False, interactive=False)
 for i in range(1000):
     move()
-    old = 1
-    b_old = 1
-    scene.coefficient = coe
-    for j in range(10):
-        sol()
-        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 5, True)
-        rel, ab = le.newton_final_norms("nonlinear_solid")
-        bdr_norm = np.linalg.norm(n.boundary_residual())
-        print("augumenting", n.boundary_residual().sum())
-        print()
-        if ni.gap_norm() < 1e-4:
-            print(ni.gap_norm(), "exit!")
-            break
-    print("final solve!", n.boundary_residual().sum())
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 20, True)
-    le.update_contact_lagrange()
-    scene.coefficient = 0.0
-    c_sol()
-    rel, ab = le.newton_final_norms("nonlinear_solid")
-
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
-    scene.coefficient = coe
-    adv()
+    le.step_time2()
     show()
 
 
