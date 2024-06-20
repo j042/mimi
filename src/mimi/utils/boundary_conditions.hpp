@@ -26,6 +26,7 @@ public:
     std::map<int, std::shared_ptr<mimi::coefficients::NearestDistanceBase>>
         contact_;
     std::map<int, std::map<int, double>> constant_velocity_;
+    std::map<int, int> periodic_boundaries_;
 
     void OnlyForInitialConfig(const std::string& b_name) {
       if (!initial_config_) {
@@ -189,6 +190,26 @@ public:
         }
       return *this;
     }
+
+    /// values to be used in NURBSExtension::ConnectBoundaries(b0, b1)
+    /// those are "fortran" numbering unlike other BC
+    BCMarker& PeriodicBoundary(const int bid0, const int bid1) {
+      MIMI_FUNC()
+
+      OnlyForInitialConfig("PeriodicBoundary");
+      // this will disqualify any other boundary that's applied.
+      periodic_boundaries_[bid0] = bid1;
+      return *this;
+    }
+
+    BCMarker& PrintPeriodicBoundary() {
+      MIMI_FUNC()
+      mimi::utils::PrintInfo("periodic bc (bid0 | bid1):");
+      for (auto const& [bid0, bid1] : periodic_boundaries_) {
+        mimi::utils::PrintInfo("  ", bid0, "|", bid1);
+      }
+      return *this;
+    }
   };
 
   BCMarker initial_;
@@ -217,7 +238,8 @@ public:
         .PrintTraction()
         .PrintBodyForce()
         .PrintConstantVelocity()
-        .PrintContact();
+        .PrintContact()
+        .PrintPeriodicBoundary();
     mimi::utils::PrintInfo("\nTo be applied on current configuration:");
     CurrentConfiguration()
         .PrintDirichlet()
