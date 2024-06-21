@@ -65,17 +65,18 @@ public:
         ++i_p;
       }
       // following nurbs_ex1, create a separate ext
-      auto nurbsext = std::make_unique<mfem::NURBSExtension>(*Base_::Mesh()->NURBSext);
+      auto nurbsext =
+          std::make_unique<mfem::NURBSExtension>(*Base_::Mesh()->NURBSext);
       nurbsext->ConnectBoundaries(b0s, b1s);
 
       // create new fe space with this nurbsext
-      disp_fes.fe_space_ = std::make_unique<mfem::FiniteElementSpace>(
-          Base_::Mesh().get(),
-          // takes ownership
-          nurbsext.release(),
-          fe_collection,
-          MeshDim(),
-          mfem::Ordering::byVDIM);
+      disp_fes.fe_space_ =
+          std::make_unique<mfem::FiniteElementSpace>(Base_::Mesh().get(),
+                                                     // takes ownership
+                                                     nurbsext.release(),
+                                                     fe_collection,
+                                                     MeshDim(),
+                                                     mfem::Ordering::byVDIM);
     } else {
       // here, if we pass NURBSext, it will steal the ownership, causing
       // segfault.

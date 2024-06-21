@@ -32,6 +32,7 @@ void init_py_solid(py::module_& m) {
            py::arg("spline_name"),
            py::arg("spline"))
       .def("setup", &PySolid::Setup)
+      .def("dof_map", &PySolid::DofMap, py::arg("fe_space"))
       .def_property_readonly("current_time", &PySolid::CurrentTime)
       .def_property("time_step_size",
                     &PySolid::GetTimeStepSize,

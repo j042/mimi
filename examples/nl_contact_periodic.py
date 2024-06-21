@@ -12,8 +12,8 @@ le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/sqn.mesh")
 
 # refine
-le.elevate_degrees(3)
-le.subdivide(3)
+le.elevate_degrees(1)
+le.subdivide(2)
 
 # mat
 mat = mimi.J2()
@@ -28,8 +28,8 @@ le.set_material(mat)
 # create splinepy partner
 s = sp.NURBS(**le.nurbs())
 to_m, to_s = sp.io.mfem.dof_mapping(s)
+o_cps = s.cps.copy()
 s.cps[:] = s.cps[to_s]
-
 # set bc
 curv = sp.Bezier(
     [3],
@@ -51,7 +51,10 @@ scene.coefficient = 0.5e11
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
 bc.initial.periodic(3, 4)
-bc.current.contact(1, scene)
+# bc.initial.traction(1, 1, 10000000)
+# bc.initial.traction(1, 1, 10000000000)
+bc.initial.traction(1, 0, 10000000)
+# bc.current.contact(1, scene)
 le.boundary_condition = bc
 
 tic.toc()
@@ -69,12 +72,13 @@ le.time_step_size = 0.001
 # get view of solution, displacement
 u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 x_ref = le.solution_view("displacement", "x_ref").reshape(-1, le.mesh_dim())
+dof_map = le.dof_map("displacement")
 
 tic.summary(print_=True)
 # set visualization options
 s.show_options["resolutions"] = [100, 30]
 curv.show_options["control_points"] = False
-s.cps[:] = x_ref[to_s]
+# s.cps[:] = x_ref[to_s]
 
 tic.summary(print_=True)
 
@@ -89,7 +93,7 @@ def move():
 
 
 def show():
-    s.cps[:] = (x_ref + u)[to_s]
+    s.cps = (o_cps + u[dof_map])[to_s]
     gus.show(
         [
             str(i),
@@ -106,8 +110,9 @@ scene.coefficient = coe
 # initialize a plotter
 plt = gus.show([s, curv], close=False, interactive=False)
 for i in range(1000):
-    move()
+    # move()
     le.step_time2()
+    print(u)
     show()
 
 

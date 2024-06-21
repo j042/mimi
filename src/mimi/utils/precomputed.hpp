@@ -205,8 +205,7 @@ public:
   }
 
   // virtual void Setup(const mfem::FiniteElementSpace& fe_space,
-  virtual void Setup(mfem::FiniteElementSpace& fe_space,
-                     const int nthreads) {
+  virtual void Setup(mfem::FiniteElementSpace& fe_space, const int nthreads) {
     MIMI_FUNC()
 
     if (nthreads < 0) {
@@ -252,9 +251,9 @@ public:
     n_elements_ = n_elem;
     n_b_elements_ = n_b_elem;
     mimi::utils::PrintDebug("Mesh",
-                           fe_space.GetMesh()->GetNodes()->Size(),
-                           "Nodes x dim and VSize is",
-                           fe_space.GetVSize());
+                            fe_space.GetMesh()->GetNodes()->Size(),
+                            "Nodes x dim and VSize is",
+                            fe_space.GetVSize());
     n_v_dofs_ = fe_space.GetVSize();
     dim_ = dim;
     n_dofs_ = n_v_dofs_ / dim;
