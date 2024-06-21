@@ -323,9 +323,10 @@ struct TimeDependentDirichletBoundaryCondition {
   }
 
   void Restore(mfem::Vector& x, mfem::Vector& v, mfem::Vector& a) const {
+    MIMI_FUNC()
 
     if (HasDynamicDirichlet()) {
-      mimi::utils::PrintInfo("Restoring dynamic dirichlet");
+      mimi::utils::PrintInfo("Ensuring dynamic dirichlet");
 
       const auto& b_tdof = *boundary_dof_ids_;
 
@@ -346,8 +347,9 @@ struct TimeDependentDirichletBoundaryCondition {
             a_d[i] = saved_a_[i];
           }
         }
+      mimi::utils::PrintInfo("  -> Ensured");
     } else {
-      mimi::utils::PrintDebug("Restoring NO dynamic dirichlet");
+      mimi::utils::PrintDebug("NO dynamic dirichlet");
     }
   }
 };

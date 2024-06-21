@@ -147,6 +147,11 @@ public:
     return real_history_.at(name);
   }
 
+  double GetRealHistoryAt(const std::string& name, const int at) {
+    MIMI_FUNC()
+    return real_history_.at(name).at(at);
+  }
+
   void SaveRealHistory(const std::string& name) {
     MIMI_FUNC()
 

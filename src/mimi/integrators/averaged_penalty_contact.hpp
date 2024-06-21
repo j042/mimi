@@ -741,7 +741,7 @@ public:
         // this function is called either at the last step at "melted"
         // staged or during line search, keep_record = False
         const bool any_active =
-            QuadLoop(bed.quad_data_, tmp, tmp.local_residual_, false, tl_force);
+            QuadLoop(bed.quad_data_, tmp, tmp.local_residual_, true, tl_force);
 
         // only push if any of quad point was active
         if (any_active) {
@@ -973,7 +973,6 @@ public:
 
   virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_u) {
     MIMI_FUNC()
-
     auto& rc = *RuntimeCommunication();
     if (rc.ShouldSave("contact_history")) {
       rc.RecordRealHistory("area", last_area_);
