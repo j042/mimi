@@ -86,7 +86,6 @@ public:
   mfem::Vector mass_x_; // for answer
   double last_area_;    // for p = forces / A
   mimi::utils::Data<double> last_force_;
-  mfem::Vector current_x_; // this is to add x_ref_ and current_u
 
   /// precomputed data at quad points
   struct QuadData {
@@ -152,6 +151,10 @@ public:
     std::shared_ptr<mfem::NURBSFiniteElement> element_;
     std::shared_ptr<mfem::FaceElementTransformations> element_trans_;
 
+    // we need this to compute current location - this way it works also for
+    // periodic. we transpose PointMat from eltrans.
+    mfem::DenseMatrix x_ref_;
+
     // direct access id to sparse matrix
     // as we only loop over marked boundaries, keep this pointer for easy access
     std::shared_ptr<mimi::utils::Vector<int>> sparse_matrix_A_ids_;
@@ -213,6 +216,8 @@ public:
       MIMI_FUNC()
 
       current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
+      element_x_mat_ += elem_data.x_ref_;
+
       return element_x_mat_;
     }
 
@@ -373,6 +378,15 @@ public:
           i_bed.dofs_[l] = (*i_bed.v_dofs_)[k] / dim_;
         }
 
+        // get x_ref -> transposed layout
+        i_bed.x_ref_.SetSize(i_bed.n_dof_, dim_);
+        const mfem::DenseMatrix& p_mat = i_bed.element_trans_->GetPointMat();
+        for (int i_dof{}; i_dof < i_bed.n_dof_; ++i_dof) {
+          for (int i_dim{}; i_dim < dim_; ++i_dim) {
+            i_bed.x_ref_(i_dof, i_dim) = p_mat(i_dim, i_dof);
+          }
+        }
+
         // quick size check
         const int n_tdof = i_bed.n_tdof_;
 
@@ -524,26 +538,10 @@ public:
     }
   }
 
-  /// @brief as we now work with displacement, compute X
-  /// @param current_u
-  void PrepareCurrentX(const mfem::Vector& current_u) {
-    MIMI_FUNC()
-
-    current_x_.SetSize(current_u.Size());
-
-    const double* u_d = current_u.GetData();
-    const double* xref_d = precomputed_->StressFreeX().GetData();
-    double* x_d = current_x_.GetData();
-    for (const int mb_dof : marked_boundary_v_dofs_) {
-      x_d[mb_dof] = xref_d[mb_dof] + u_d[mb_dof];
-    }
-  }
-
   void
   AverageGap(const mfem::Vector& current_u, const int nthreads, double& area) {
 
     InitializeAverageGapAndArea();
-    PrepareCurrentX(current_u);
 
     std::mutex gap_mutex;
     // lambda for nthread assemble
@@ -557,7 +555,7 @@ public:
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x_, bed);
+                tmp.CurrentElementSolutionCopy(current_u, bed);
 
             bool any_active = false;
             const double penalty = nearest_distance_coeff_->coefficient_;
@@ -736,7 +734,7 @@ public:
         tmp.local_residual_ = 0.0;
 
         mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_x_, bed);
+            tmp.CurrentElementSolutionCopy(current_u, bed);
         tmp.CurrentElementPressure(average_pressure_, bed);
 
         // assemble residual
@@ -782,7 +780,7 @@ public:
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x_, bed);
+                tmp.CurrentElementSolutionCopy(current_u, bed);
             tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual
@@ -864,7 +862,7 @@ public:
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x_, bed);
+                tmp.CurrentElementSolutionCopy(current_u, bed);
             tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual

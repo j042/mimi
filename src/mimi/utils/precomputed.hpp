@@ -134,7 +134,7 @@ public:
       boundary_attr_markers_;
 
   /// precomputed keep a pointer to stress free x
-  mfem::GridFunction* x_ref_;
+  mfem::GridFunction* x_ref_; // this should be always original size
 
   PrecomputedData() = default;
   virtual ~PrecomputedData() = default;

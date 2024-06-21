@@ -51,10 +51,7 @@ scene.coefficient = 0.5e11
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
 bc.initial.periodic(3, 4)
-# bc.initial.traction(1, 1, 10000000)
-# bc.initial.traction(1, 1, 10000000000)
-bc.initial.traction(1, 0, 10000000)
-# bc.current.contact(1, scene)
+bc.current.contact(1, scene)
 le.boundary_condition = bc
 
 tic.toc()
@@ -105,14 +102,13 @@ def show():
     )
 
 
-coe = 1e11
+coe = 0.1e11
 scene.coefficient = coe
 # initialize a plotter
 plt = gus.show([s, curv], close=False, interactive=False)
 for i in range(1000):
-    # move()
+    move()
     le.step_time2()
-    print(u)
     show()
 
 
