@@ -28,9 +28,8 @@ mat.hardening.strain_constant = 1
 nl.set_material(mat)
 
 # create splinepy nurbs to show
-s = sp.NURBS(**nl.nurbs())
-to_m, to_s = sp.io.mfem.dof_mapping(s)
-s.cps[:] = s.cps[to_s]
+s, to_m, to_s = mimi.to_splinepy(nl)
+o_cps = s.cps.copy()
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
@@ -45,16 +44,16 @@ nl.configure_newton("nonlinear_solid", 1e-12, 1e-8, 40, False)
 rhs = nl.linear_form_view2("rhs")
 
 nl.time_step_size = 0.01
-x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
+u = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
 s.show_options["control_points"] = False
 s.show_options["resolutions"] = 50
-s.cps[:] = x[to_s]
+s.cps[:] = u[to_s] + o_cps
 
 plt = gus.show(s, close=False)
 for i in range(10000):
     if True:
-        s.cps[:] = x[to_s]
+        s.cps[:] = u[to_s] + o_cps
         gus.show(
             [str(i), s],
             vedoplot=plt,
