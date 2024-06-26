@@ -18,9 +18,8 @@ le.elevate_degrees(1)
 le.subdivide(2)
 
 # create splinepy partner
-s = sp.NURBS(**le.nurbs())
-to_m, to_s = sp.io.mfem.dof_mapping(s)
-s.cps[:] = s.cps[to_s]
+s, to_m, to_s = mimi.to_splinepy(le)
+o_cps = s.cps.copy()
 
 # set bc
 bc = mimi.BoundaryConditions()
@@ -40,18 +39,18 @@ tic.summary(print_=True)
 le.time_step_size = 0.01
 
 # get view of solution, displacement
-x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 # set visualization options
 s.show_options["control_point_ids"] = False
 s.show_options["resolutions"] = 50
-s.cps[:] = x[to_s]
+s.cps[:] = u[to_s] + o_cps
 
 # initialize a plotter
 plt = gus.show(s, close=False)
 for i in range(100):
     tic.toc("stepped")
-    s.cps[:] = x[to_s]
+    s.cps[:] = u[to_s] + o_cps
     gus.show(
         s,
         vedoplot=plt,
