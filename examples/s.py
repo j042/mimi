@@ -22,11 +22,10 @@ mat.set_young_poisson(1e7, 0.3)
 le.set_material(mat)
 
 # create splinepy partner
-s = sp.NURBS(**le.nurbs())
-to_m, to_s = sp.io.mfem.dof_mapping(s)
+s, to_m, to_s = mimi.to_splinepy(le)
 to_m = np.array(to_m)
 to_s = np.array(to_s)
-s.cps[:] = s.cps[to_s]
+o_cps = s.cps.copy()
 
 outlineo = {
     "degrees": [2, 1],
@@ -119,10 +118,10 @@ outlineo = {
 outline = sp.BSpline(**outlineo)  # this one will have negative jac
 # outline.elevate_degrees([0, 0])
 # outline.normalize_knot_vectors()
-o, u = outline.extract.boundaries([2, 3])
-u.cps[:] = u.cps[::-1].copy()
-u = u.copy()
-u.cps[24] -= 1
+o, uu = outline.extract.boundaries([2, 3])
+uu.cps[:] = uu.cps[::-1].copy()
+uu = uu.copy()
+uu.cps[24] -= 1
 o.cps[0] += [-5, 0]
 
 mi = s.multi_index
@@ -140,7 +139,7 @@ scene0.add_spline(o)
 scene0.plant_kd_tree(1001, 4)
 scene0.coefficient = 1e3
 scene1 = mimi.NearestDistanceToSplines()
-scene1.add_spline(u)
+scene1.add_spline(uu)
 scene1.plant_kd_tree(1001, 4)
 scene1.coefficient = 1e3
 
@@ -159,13 +158,13 @@ le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
 le.time_step_size = 0.0003
 
 # get view of solution, displacement
-x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 s.show_options["resolutions"] = [100, 30]
 s.show_options["control_points"] = False
 o.show_options["control_points"] = False
-u.show_options["control_points"] = False
-s.cps[:] = x[to_s]
+uu.show_options["control_points"] = False
+s.cps[:] = u[to_s] + o_cps
 
 cam = dict(
     position=(-0.251124, 0.293697, 5.26880),
@@ -179,9 +178,9 @@ cam = dict(
 
 def move():
     if i > int(ns - 1):
-        x[b3] = np.array([down[-1], *[mm[-1] for mm in mid], up[-1]])
+        u[b3] = np.array([down[-1], *[mm[-1] for mm in mid], up[-1]])
         return
-    x[b3] = np.array([down[i], *[mm[i] for mm in mid], up[i]])
+    u[b3] = np.array([down[i], *[mm[i] for mm in mid], up[i]])
     return
 
 
@@ -201,10 +200,10 @@ def adv():
 
 
 def show():
-    s.cps[:] = x[to_s]
+    s.cps[:] = u[to_s] + o_cps
     gus.show(
-        # [str(i) + " " + str(j) + " " + str(ab) + " " + str(gn()), s, o, u],
-        [str(i) + " " + str(gn()), s, o, u],
+        # [str(i) + " " + str(j) + " " + str(ab) + " " + str(gn()), s, o, uu],
+        [str(i) + " " + str(gn()), s, o, uu],
         vedoplot=plt,
         interactive=False,
         cam=cam,
@@ -216,7 +215,7 @@ def show():
 coe = 0.9e10
 le.fill_contact_lagrange(0)
 # initialize a plotter
-plt = gus.show([s, o, u], close=False)
+plt = gus.show([s, o, uu], close=False)
 n = le.nonlinear_from2("contact")
 ni = n.boundary_integrator(0)
 ni2 = n.boundary_integrator(1)
