@@ -35,4 +35,10 @@ py::array_t<ReturnType> NumpyView(MfemContainerType& mfem_container,
                                  py::none());
 }
 
+template<typename DataType>
+DataType* Ptr(py::array_t<DataType>& data) {
+  MIMI_FUNC()
+  return static_cast<DataType*>(data.request().ptr);
+}
+
 } // namespace mimi::py

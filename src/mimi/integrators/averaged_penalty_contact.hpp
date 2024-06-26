@@ -151,6 +151,10 @@ public:
     std::shared_ptr<mfem::NURBSFiniteElement> element_;
     std::shared_ptr<mfem::FaceElementTransformations> element_trans_;
 
+    // we need this to compute current location - this way it works also for
+    // periodic. we transpose PointMat from eltrans.
+    mfem::DenseMatrix x_ref_;
+
     // direct access id to sparse matrix
     // as we only loop over marked boundaries, keep this pointer for easy access
     std::shared_ptr<mimi::utils::Vector<int>> sparse_matrix_A_ids_;
@@ -212,6 +216,8 @@ public:
       MIMI_FUNC()
 
       current_all.GetSubVector(*elem_data.v_dofs_, element_x_);
+      element_x_mat_ += elem_data.x_ref_;
+
       return element_x_mat_;
     }
 
@@ -372,6 +378,15 @@ public:
           i_bed.dofs_[l] = (*i_bed.v_dofs_)[k] / dim_;
         }
 
+        // get x_ref -> transposed layout
+        i_bed.x_ref_.SetSize(i_bed.n_dof_, dim_);
+        const mfem::DenseMatrix& p_mat = i_bed.element_trans_->GetPointMat();
+        for (int i_dof{}; i_dof < i_bed.n_dof_; ++i_dof) {
+          for (int i_dim{}; i_dim < dim_; ++i_dim) {
+            i_bed.x_ref_(i_dof, i_dim) = p_mat(i_dim, i_dof);
+          }
+        }
+
         // quick size check
         const int n_tdof = i_bed.n_tdof_;
 
@@ -524,7 +539,7 @@ public:
   }
 
   void
-  AverageGap(const mfem::Vector& current_x, const int nthreads, double& area) {
+  AverageGap(const mfem::Vector& current_u, const int nthreads, double& area) {
 
     InitializeAverageGapAndArea();
 
@@ -540,7 +555,7 @@ public:
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, bed);
+                tmp.CurrentElementSolutionCopy(current_u, bed);
 
             bool any_active = false;
             const double penalty = nearest_distance_coeff_->coefficient_;
@@ -695,12 +710,12 @@ public:
 
   /// rhs (for us, we have them on lhs - thus fliped sign) - used in line
   /// search
-  virtual void AddBoundaryResidual(const mfem::Vector& current_x,
+  virtual void AddBoundaryResidual(const mfem::Vector& current_u,
                                    const int nthreads,
                                    mfem::Vector& residual) {
     MIMI_FUNC()
     last_area_ = 0.0;
-    AverageGap(current_x, nthreads, last_area_);
+    AverageGap(current_u, nthreads, last_area_);
     last_force_.Fill(0.0);
 
     std::mutex residual_mutex;
@@ -719,14 +734,14 @@ public:
         tmp.local_residual_ = 0.0;
 
         mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_x, bed);
+            tmp.CurrentElementSolutionCopy(current_u, bed);
         tmp.CurrentElementPressure(average_pressure_, bed);
 
         // assemble residual
         // this function is called either at the last step at "melted"
         // staged or during line search, keep_record = False
         const bool any_active =
-            QuadLoop(bed.quad_data_, tmp, tmp.local_residual_, false, tl_force);
+            QuadLoop(bed.quad_data_, tmp, tmp.local_residual_, true, tl_force);
 
         // only push if any of quad point was active
         if (any_active) {
@@ -745,12 +760,12 @@ public:
                             (nthreads < 0) ? n_threads_ : nthreads);
   }
 
-  virtual void AddBoundaryGrad(const mfem::Vector& current_x,
+  virtual void AddBoundaryGrad(const mfem::Vector& current_u,
                                const int nthreads,
                                mfem::SparseMatrix& grad) {
     MIMI_FUNC()
     double dummy_area{};
-    AverageGap(current_x, nthreads, dummy_area);
+    AverageGap(current_u, nthreads, dummy_area);
 
     std::mutex residual_mutex;
     // lambda for nthread assemble
@@ -765,7 +780,7 @@ public:
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, bed);
+                tmp.CurrentElementSolutionCopy(current_u, bed);
             tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual
@@ -824,13 +839,13 @@ public:
 
   /// assembles residual and grad at the same time. this should also have
   /// assembled the last converged residual
-  virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
+  virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_u,
                                           const int nthreads,
                                           const double grad_factor,
                                           mfem::Vector& residual,
                                           mfem::SparseMatrix& grad) {
     last_area_ = 0.0;
-    AverageGap(current_x, nthreads, last_area_);
+    AverageGap(current_u, nthreads, last_area_);
     last_force_.Fill(0.0);
 
     std::mutex residual_mutex;
@@ -847,7 +862,7 @@ public:
 
             // get current element solution as matrix
             mfem::DenseMatrix& current_element_x =
-                tmp.CurrentElementSolutionCopy(current_x, bed);
+                tmp.CurrentElementSolutionCopy(current_u, bed);
             tmp.CurrentElementPressure(average_pressure_, bed);
 
             // assemble residual
@@ -956,9 +971,8 @@ public:
     return std::sqrt(gap_squared_total);
   }
 
-  virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {
+  virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_u) {
     MIMI_FUNC()
-
     auto& rc = *RuntimeCommunication();
     if (rc.ShouldSave("contact_history")) {
       rc.RecordRealHistory("area", last_area_);

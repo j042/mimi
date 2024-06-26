@@ -508,6 +508,20 @@ public:
     mimi::utils::PrintAndThrowError("Derived class need to implement Setup().");
   };
 
+  virtual py::array_t<int> DofMap(const std::string& key) const {
+    MIMI_FUNC()
+    mfem::NURBSExtension& ext = *fe_spaces_.at(key).fe_space_->GetNURBSext();
+    const int dim = MeshDim();
+    const int n_dof = Mesh()->GetNodes()->Size() / dim;
+
+    py::array_t<int> dofmap(n_dof);
+    int* dm_d = Ptr(dofmap);
+    for (int i{}; i < n_dof; ++i) {
+      dm_d[i] = ext.DofMap(i);
+    }
+    return dofmap;
+  }
+
   /// as newton solvers are separetly by name, you can configure newton solvers
   /// by name
   virtual void ConfigureNewton(const std::string& name,

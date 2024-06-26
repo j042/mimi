@@ -7,7 +7,7 @@ def to_splinepy(pysolid):
     """
     Extracts nurbs from mimi.PySolid and creates splinepy.NURBS (or BSpline)
     """
-    if not isinstance(pysolid, mimi_core.PySolid):
+    if not isinstance(pysolid, mimi_core.Solid):
         raise TypeError("Expecting mimi.PySolid types.")
 
     dict_spline = pysolid.nurbs()

@@ -45,6 +45,11 @@ void init_py_boundary_conditions(py::module_& m) {
            &BCM::Contact,
            py::arg("bid"),
            py::arg("nearest_distance"),
+           py::return_value_policy::reference_internal)
+      .def("periodic",
+           &BCM::PeriodicBoundary,
+           py::arg("bid0"),
+           py::arg("bid1"),
            py::return_value_policy::reference_internal);
 
   py::class_<BC, std::shared_ptr<BC>> bc(m, "BoundaryConditions");

@@ -270,6 +270,7 @@ struct TemporaryData {
     has_F_inv_ = false;
 
     mfem::MultAtB(element_x_mat_, dNdX, F_);
+    mimi::utils::AddDiagonal(F_.GetData(), 1.0, dim_);
   }
 
   mfem::DenseMatrix& FInv() {
@@ -348,6 +349,8 @@ struct TemporaryViscoData : TemporaryData {
       }
       dndx_d += ah;
     }
+
+    mimi::utils::AddDiagonal(F_.GetData(), 1.0, dim_);
   }
 
   void SetDof(const int n_dof) {

@@ -178,6 +178,7 @@ public:
     }
 
     mimi_operator_->PostTimeAdvance(x, dxdt);
+    t += dt; // advance time within
   }
   virtual void FixedPointSolve2(const mfem::Vector& x,
                                 const mfem::Vector& dxdt,

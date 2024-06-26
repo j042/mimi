@@ -1,4 +1,5 @@
-#include <thread>
+#include <array>
+#include <limits>
 
 #include "mimi/solvers/newton.hpp"
 
@@ -13,6 +14,38 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
   int it;
   double norm0, norm, norm_goal;
   const bool have_b = (b.Size() == Height());
+
+  // we keep best result and return that in case nothing worked or there were no
+  // better solution within 5 extra iterations
+  std::array<bool, 5> improved;
+  // initialize with true to ensure that this isn't the reason for too early
+  // exit
+  improved.fill(true);
+  int i_improved{};
+  int best_it{};
+  // keep history
+  double best_residual{std::numeric_limits<double>::max()};
+  best_x_.SetSize(x.Size());
+  auto keep_best = [&]() {
+    if (norm < best_residual) {
+      best_x_ = x;
+      improved[i_improved % improved.size()] = true;
+      best_residual = norm; // now is the best
+      best_it = it;
+    } else {
+      improved[i_improved % improved.size()] = false;
+    }
+    ++i_improved;
+  };
+
+  auto not_improving = [&improved]() -> bool {
+    for (auto i : improved) {
+      // any improving is improving
+      if (i)
+        return false;
+    }
+    return true;
+  };
 
   // check iterative mode
   if (!Base_::iterative_mode) {
@@ -66,6 +99,25 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     // exit? - n iter check
     if (it >= max_iter) {
       Base_::converged = false;
+      // only return best if we actually have called keep_best()
+      if (it != 0) {
+        x = best_x_;
+        mimi::utils::PrintInfo("Returning best solution from iteration:",
+                               best_it,
+                               "norm:",
+                               best_residual);
+      }
+      break;
+    }
+
+    // exit? - history check
+    if (not_improving()) {
+      Base_::converged = false;
+      mimi::utils::PrintInfo("Returning best solution from iteration:",
+                             best_it,
+                             "norm:",
+                             best_residual);
+      x = best_x_;
       break;
     }
 
@@ -148,6 +200,7 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
 
     // current norm
     norm = Base_::Norm(Base_::r);
+    keep_best();
   }
 
   Base_::final_iter = it;
