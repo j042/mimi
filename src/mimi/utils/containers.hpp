@@ -461,6 +461,19 @@ public:
     return *this;
   }
 
+  /// @brief this[i] += abs(a * b[i])
+  /// @param a
+  /// @param b
+  /// @return
+  constexpr Data& AddAbs(const DataType_& a, const DataType* b) {
+    assert(data_);
+
+    for (IndexType i{}; i < size_; ++i) {
+      data_[i] += std::abs(a * b[i]);
+    }
+    return *this;
+  }
+
   /// @brief this[i] *= a * this[i]
   /// @param a
   constexpr Data& Multiply(const DataType& a) {
