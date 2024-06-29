@@ -202,10 +202,16 @@ public:
       add(x, fac1_ * dt, va, xa);
       add(dxdt, fac2_ * dt, d2xdt2, va);
       fixed_point_predict_alpha_level_ = false;
+      // double check if aa is zero where it should be
+      if (dynamic_dirichlet_) {
+        dynamic_dirichlet_->Apply(t, dt, x, dxdt, d2xdt2, xa, va, aa);
+      }
     }
 
     // Solve alpha levels
     mimi_operator_->dt_ = dt;
+
+    // solve alpha levels
     f->SetTime(t + dt);
     f->ImplicitSolve(fac3_ * dt * dt, fac4_ * dt, xa, va, aa);
   }
@@ -253,6 +259,11 @@ public:
       v_ptr[i] =
           (v_ptr[i] * prev_fac) + (fac1_inv_ * (va_ptr[i] + fac4dt * aa_val));
     }
+
+    // apply BC again
+    if (dynamic_dirichlet_) {
+      dynamic_dirichlet_->Restore(x, dxdt, d2xdt2);
+    }
   }
 
   virtual void
@@ -298,6 +309,11 @@ public:
 
     // now xa and va should be changing
     fixed_point_predict_alpha_level_ = true;
+
+    // apply BC again
+    if (dynamic_dirichlet_) {
+      dynamic_dirichlet_->Restore(x, dxdt, d2xdt2);
+    }
 
     // accumulate!
     mimi_operator_->PostTimeAdvance(x, dxdt);
