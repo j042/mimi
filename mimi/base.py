@@ -1,4 +1,5 @@
 import splinepy
+import numpy as np
 
 from mimi import mimi_core
 
@@ -22,4 +23,4 @@ def to_splinepy(pysolid):
     to_m, to_s = splinepy.io.mfem.dof_mapping(s)
     s.cps[:] = s.cps[to_s]
 
-    return s, to_m, to_s
+    return s, np.array(to_m, dtype=int), np.array(to_s, dtype=int)
