@@ -27,6 +27,3 @@ DEBUG=1 python3 setup.py develop
 # 4. try examples - currently those need to be called at mimi's root
 python3 examples/linear_elasticity_contact.py
 ```
-
-## Notes
-- Ninja seems to have some issues - use make!

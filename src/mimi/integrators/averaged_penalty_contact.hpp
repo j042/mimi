@@ -85,6 +85,7 @@ public:
   mfem::Vector mass_b_; // for rhs
   mfem::Vector mass_x_; // for answer
   double last_area_;    // for p = forces / A
+  double last_pressure_;
   mimi::utils::Data<double> last_force_;
 
   /// precomputed data at quad points
@@ -635,12 +636,12 @@ public:
     }
   }
 
-  bool
-  QuadLoop(Vector_<QuadData>& q_data,
-           TemporaryData& tmp,
-           mfem::DenseMatrix& residual,
-           const bool keep_record,
-           mimi::utils::Data<double>& force /* only if applicable*/) const {
+  bool QuadLoop(Vector_<QuadData>& q_data,
+                TemporaryData& tmp,
+                mfem::DenseMatrix& residual,
+                const bool keep_record,
+                mimi::utils::Data<double>& force /* only if applicable*/,
+                double& pressure_integral) const {
     MIMI_FUNC()
     bool any_active = false;
     const double penalty = nearest_distance_coeff_->coefficient_;
@@ -702,6 +703,8 @@ public:
       if (keep_record) {
         // no negative sign, because we want to keep the sign to point inwards
         force.Add(fac, tmp.normal_.begin());
+        // force.AddAbs(fac, tmp.normal_.begin());
+        pressure_integral += fac;
       }
     }
 
@@ -717,43 +720,49 @@ public:
     last_area_ = 0.0;
     AverageGap(current_u, nthreads, last_area_);
     last_force_.Fill(0.0);
+    last_pressure_ = 0.0;
 
     std::mutex residual_mutex;
 
-    auto assemble_face_residual_and_maybe_grad = [&](const int begin,
-                                                     const int end,
-                                                     const int i_thread) {
-      auto& tmp = temporary_data_[i_thread];
-      mimi::utils::Data<double> tl_force(dim_);
-      tl_force.Fill(0.0);
-      // this loops marked boundary elements
-      for (int i{begin}; i < end; ++i) {
-        // get bed
-        BoundaryElementData& bed = boundary_element_data_[i];
-        tmp.SetDof(bed.n_dof_);
-        tmp.local_residual_ = 0.0;
+    auto assemble_face_residual_and_maybe_grad =
+        [&](const int begin, const int end, const int i_thread) {
+          auto& tmp = temporary_data_[i_thread];
+          mimi::utils::Data<double> tl_force(dim_);
+          tl_force.Fill(0.0);
+          double local_pressure{};
+          // this loops marked boundary elements
+          for (int i{begin}; i < end; ++i) {
+            // get bed
+            BoundaryElementData& bed = boundary_element_data_[i];
+            tmp.SetDof(bed.n_dof_);
+            tmp.local_residual_ = 0.0;
 
-        mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(current_u, bed);
-        tmp.CurrentElementPressure(average_pressure_, bed);
+            mfem::DenseMatrix& current_element_x =
+                tmp.CurrentElementSolutionCopy(current_u, bed);
+            tmp.CurrentElementPressure(average_pressure_, bed);
 
-        // assemble residual
-        // this function is called either at the last step at "melted"
-        // staged or during line search, keep_record = False
-        const bool any_active =
-            QuadLoop(bed.quad_data_, tmp, tmp.local_residual_, true, tl_force);
+            // assemble residual
+            // this function is called either at the last step at "melted"
+            // staged or during line search, keep_record = False
+            const bool any_active = QuadLoop(bed.quad_data_,
+                                             tmp,
+                                             tmp.local_residual_,
+                                             true,
+                                             tl_force,
+                                             local_pressure);
 
-        // only push if any of quad point was active
-        if (any_active) {
-          const std::lock_guard<std::mutex> lock(residual_mutex);
-          residual.AddElementVector(*bed.v_dofs_,
-                                    tmp.local_residual_.GetData());
-        }
-      } // marked elem loop
-        // reuse mutex for area and force update
-      std::lock_guard<std::mutex> lock(residual_mutex);
-      last_force_.Add(tl_force);
-    };
+            // only push if any of quad point was active
+            if (any_active) {
+              const std::lock_guard<std::mutex> lock(residual_mutex);
+              residual.AddElementVector(*bed.v_dofs_,
+                                        tmp.local_residual_.GetData());
+            }
+          } // marked elem loop
+            // reuse mutex for area and force update
+          std::lock_guard<std::mutex> lock(residual_mutex);
+          last_force_.Add(tl_force);
+          last_pressure_ += local_pressure;
+        };
 
     mimi::utils::NThreadExe(assemble_face_residual_and_maybe_grad,
                             n_marked_boundaries_,
@@ -773,6 +782,7 @@ public:
         [&](const int begin, const int end, const int i_thread) {
           auto& tmp = temporary_data_[i_thread];
           mimi::utils::Data<double> force_dummy(dim_);
+          double dummy_pressure{};
           for (int i{begin}; i < end; ++i) {
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
@@ -788,7 +798,8 @@ public:
                                              tmp,
                                              tmp.local_residual_,
                                              false,
-                                             force_dummy);
+                                             force_dummy,
+                                             dummy_pressure);
 
             // skip if nothing's active
             if (!any_active) {
@@ -812,7 +823,8 @@ public:
                        tmp,
                        tmp.forward_residual_,
                        false,
-                       force_dummy);
+                       force_dummy,
+                       dummy_pressure);
 
               for (int k{}; k < bed.n_tdof_; ++k) {
                 *grad_data++ =
@@ -847,6 +859,7 @@ public:
     last_area_ = 0.0;
     AverageGap(current_u, nthreads, last_area_);
     last_force_.Fill(0.0);
+    last_pressure_ = 0.0;
 
     std::mutex residual_mutex;
     // lambda for nthread assemble
@@ -855,6 +868,8 @@ public:
           auto& tmp = temporary_data_[i_thread];
           mimi::utils::Data<double> tl_force(dim_);
           tl_force.Fill(0.0);
+          double local_pressure{}, dummy{};
+
           for (int i{begin}; i < end; ++i) {
             BoundaryElementData& bed = boundary_element_data_[i];
             tmp.SetDof(bed.n_dof_);
@@ -870,7 +885,8 @@ public:
                                              tmp,
                                              tmp.local_residual_,
                                              true,
-                                             tl_force);
+                                             tl_force,
+                                             local_pressure);
 
             // skip if nothing's active
             if (!any_active) {
@@ -890,11 +906,13 @@ public:
               const double diff_step_inv = 1. / diff_step;
 
               with_respect_to = orig_wrt + diff_step;
-              QuadLoop(bed.quad_data_,
-                       tmp,
-                       tmp.forward_residual_,
-                       false,
-                       tl_force /* this either */);
+              QuadLoop(
+                  bed.quad_data_,
+                  tmp,
+                  tmp.forward_residual_,
+                  false,
+                  tl_force /* this either */,
+                  dummy /* can pass local_pressure and won't do anything*/);
 
               for (int k{}; k < bed.n_tdof_; ++k) {
                 *grad_data++ =
@@ -919,6 +937,7 @@ public:
           // reuse mutex for area and force update
           std::lock_guard<std::mutex> lock(residual_mutex);
           last_force_.Add(tl_force);
+          last_pressure_ += local_pressure;
         };
 
     mimi::utils::NThreadExe(assemble_boundary_residual_and_grad_then_contribute,
@@ -979,6 +998,7 @@ public:
       rc.RecordRealHistory("force_x", last_force_[0]);
       rc.RecordRealHistory("force_y", last_force_[1]);
       rc.RecordRealHistory("x_over_y", last_force_[0] / last_force_[1]);
+      rc.RecordRealHistory("pressure", last_pressure_);
       if (dim_ > 2) {
         rc.RecordRealHistory("force_z", last_force_[2]);
       }
