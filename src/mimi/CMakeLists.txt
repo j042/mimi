@@ -2,7 +2,6 @@ set(SRCS
     solvers/newton.cpp
     py/py_boundary_conditions.cpp
     py/py_solid.cpp
-    py/py_linear_elasticity.cpp
     py/py_nearest_distance.cpp
     py/py_material.cpp
     py/py_nonlinear_solid.cpp
