@@ -144,7 +144,7 @@ public:
       aa = 0.0; // initialize aa as we want to use iterative mode for newton
     }
 
-    // Predict alpha levels
+    // Predict alpha levels - same as the following part
     // add(dxdt, fac0 * dt, d2xdt2, va);
     // add(x, fac1 * dt, va, xa);
     // add(dxdt, fac2 * dt, d2xdt2, va);
@@ -192,10 +192,6 @@ public:
       nstate = 1;
     }
 
-    // for (const int& d_id : *dirichlet_dofs_) {
-    //   d2xdt2[d_id] = 0.0;
-    // }
-
     // Predict alpha levels
     if (fixed_point_predict_alpha_level_) {
       add(dxdt, fac0_ * dt, d2xdt2, va);
@@ -227,26 +223,11 @@ public:
     }
 
     // // xa and va are always freshly overwritten in fixedpointsolve,
-    // // but would duplicate in AdvanceTime2, so assign a temp vector
-    // fixed_point_tmp_xa_.SetSize(x.Size());
-    // fixed_point_tmp_va_.SetSize(dxdt.Size());
 
     const double fac3dtdt = fac3_ * dt * dt;
     const double fac4dt = fac4_ * dt;
-    // // Correct alpha levels
-    // // xa.Add(fac3_ * dt * dt, aa); // <- do this
-    // add(xa, fac3dtdt, Base_::aa, fixed_point_tmp_xa_);
-    // // va.Add(fac4_ * dt, aa); // <- do this
-    // add(va, fac4dt, Base_::aa, fixed_point_tmp_va_);
-
-    // // extrapolate using temp vectors
-    // x *= 1.0 - 1.0 / fac1_;
-    // x.Add(1.0 / fac1_, fixed_point_tmp_xa_);
-
-    // dxdt *= 1.0 - 1.0 / fac1_;
-    // dxdt.Add(1.0 / fac1_, fixed_point_tmp_va_);
-
     const double prev_fac = 1. - fac1_inv_;
+
     double* x_ptr = x.GetData();
     double* v_ptr = dxdt.GetData();
     const double* xa_ptr = xa.GetData();
@@ -269,20 +250,6 @@ public:
   virtual void
   AdvanceTime2(mfem::Vector& x, mfem::Vector& dxdt, double& t, double& dt) {
     MIMI_FUNC()
-
-    // // Correct alpha levels
-    // xa.Add(fac3_ * dt * dt, aa);
-    // va.Add(fac4_ * dt, aa);
-
-    // // Extrapolate
-    // x *= 1.0 - 1.0 / fac1_;
-    // x.Add(1.0 / fac1_, xa);
-
-    // dxdt *= 1.0 - 1.0 / fac1_;
-    // dxdt.Add(1.0 / fac1_, va);
-
-    // d2xdt2 *= 1.0 - 1.0 / fac5_;
-    // d2xdt2.Add(1.0 / fac5_, aa);
 
     // do what's above in one loop
     const double prev_fac = 1. - fac1_inv_;
@@ -307,7 +274,7 @@ public:
 
     t += dt;
 
-    // now xa and va should be changing
+    // now xa and va should be changed
     fixed_point_predict_alpha_level_ = true;
 
     // apply BC again
