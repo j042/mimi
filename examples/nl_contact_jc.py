@@ -8,7 +8,7 @@ sp.settings.NTHREADS = 4
 tic = gus.utils.tictoc.Tic()
 
 # init, read mesh
-le = mimi.NonlinearViscoSolid()
+le = mimi.NonlinearSolid()
 le.read_mesh("tests/data/sqn.mesh")
 
 # refine
@@ -37,9 +37,8 @@ mat.hardening = hardening
 le.set_material(mat)
 
 # create splinepy partner
-s = sp.NURBS(**le.nurbs())
-to_m, to_s = sp.io.mfem.dof_mapping(s)
-s.cps[:] = s.cps[to_s]
+s, to_m, to_s = mimi.to_splinepy(le)
+o_cps = s.cps.copy()
 
 # set bc
 curv = sp.Bezier(
@@ -69,7 +68,7 @@ tic.toc()
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("nonlinear_visco_solid", 1e-14, 1e-8, 20, False)
+le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
 
 tic.toc("bilinear, linear forms assembly")
 
@@ -77,14 +76,14 @@ tic.toc("bilinear, linear forms assembly")
 le.time_step_size = 0.0005
 
 # get view of solution, displacement
-x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
 s.show_options["resolutions"] = [100, 50]
 s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
-s.cps[:] = x[to_s]
+s.cps[:] = u[to_s] + o_cps
 
 tic.summary(print_=True)
 
@@ -114,7 +113,7 @@ def adv():
 
 
 def show():
-    s.cps[:] = x[to_s]
+    s.cps[:] = u[to_s] + o_cps
     gus.show(
         [
             str(i) + " " + str(ni.gap_norm()),

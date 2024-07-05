@@ -26,9 +26,8 @@ mat.set_young_poisson(1e10, 0.3)
 le.set_material(mat)
 
 # create splinepy partner
-s = sp.NURBS(**le.nurbs())
-to_m, to_s = sp.io.mfem.dof_mapping(s)
-s.cps[:] = s.cps[to_s]
+s, to_m, to_s = mimi.to_splinepy(le)
+o_cps = s.cps.copy()
 
 # set bc
 curv = sp.Bezier(
@@ -65,14 +64,14 @@ tic.toc("bilinear, linear forms assembly")
 le.time_step_size = 0.005
 
 # get view of solution, displacement
-x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
 s.show_options["resolutions"] = [100, 30]
 s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
-s.cps[:] = x[to_s]
+s.cps[:] = u[to_s] + o_cps
 
 tic.summary(print_=True)
 
@@ -101,7 +100,7 @@ def adv():
 
 
 def show():
-    s.cps[:] = x[to_s]
+    s.cps[:] = u[to_s] + o_cps
     gus.show(
         [
             str(i) + " " + str(j) + " " + str(ab) + " " + str(ni.gap_norm()),

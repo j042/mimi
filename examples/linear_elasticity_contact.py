@@ -18,9 +18,8 @@ le.elevate_degrees(2)
 le.subdivide(2)
 
 # create splinepy partner
-s = sp.NURBS(**le.nurbs())
-to_m, to_s = sp.io.mfem.dof_mapping(s)
-s.cps[:] = s.cps[to_s]
+s, to_m, to_s = mimi.to_splinepy(le)
+o_cps = s.cps.copy()
 
 # set bc
 curv = sp.Bezier(
@@ -57,21 +56,21 @@ tic.toc("bilinear, linear forms assembly")
 le.time_step_size = 0.001
 
 # get view of solution, displacement
-x = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
 s.show_options["control_point_ids"] = False
 s.show_options["resolutions"] = 100
 s.show_options["control_points"] = False
-s.cps[:] = x[to_s]
+s.cps[:] = u[to_s] + o_cps
 
 tic.summary(print_=True)
 # initialize a plotter
 plt = gus.show([s, curv], close=False)
 for i in range(10000):
     tic.toc("stepped")
-    s.cps[:] = x[to_s]
+    s.cps[:] = u[to_s] + o_cps
     gus.show(
         [s, curv],
         vedoplot=plt,

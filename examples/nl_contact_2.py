@@ -26,9 +26,8 @@ mat.sigma_y = 1e7
 le.set_material(mat)
 
 # create splinepy partner
-s = sp.NURBS(**le.nurbs())
-to_m, to_s = sp.io.mfem.dof_mapping(s)
-s.cps[:] = s.cps[to_s]
+s, to_m, to_s = mimi.to_splinepy(le)
+o_cps = s.cps.copy()
 
 # set bc
 curv = sp.Bezier(
@@ -67,13 +66,13 @@ le.time_step_size = 0.001
 
 # get view of solution, displacement
 u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
-x_ref = le.solution_view("displacement", "x_ref").reshape(-1, le.mesh_dim())
+u_ref = le.solution_view("displacement", "x_ref").reshape(-1, le.mesh_dim())
 
 tic.summary(print_=True)
 # set visualization options
 s.show_options["resolutions"] = [100, 30]
 curv.show_options["control_points"] = False
-s.cps[:] = x_ref[to_s]
+s.cps[:] = u[to_s] + o_cps
 
 tic.summary(print_=True)
 
@@ -88,7 +87,7 @@ def move():
 
 
 def show():
-    s.cps[:] = (x_ref + u)[to_s]
+    s.cps[:] = u[to_s] + o_cps
     gus.show(
         [
             str(i),

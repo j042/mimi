@@ -8,7 +8,7 @@ import numpy as np
 sp.settings.NTHREADS = 4
 
 #  create nl solid
-nl = mimi.NonlinearViscoSolid()
+nl = mimi.NonlinearSolid()
 nl.read_mesh("tests/data/balken.mesh")
 # refine
 nl.elevate_degrees(1)
@@ -40,9 +40,8 @@ mat.hardening.m = 1.3558
 nl.set_material(mat)
 
 # create splinepy nurbs to show
-s = sp.NURBS(**nl.nurbs())
-to_m, to_s = sp.io.mfem.dof_mapping(s)
-s.cps[:] = s.cps[to_s]
+s, to_m, to_s = mimi.to_splinepy(nl)
+o_cps = s.cps.copy()
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(2, 0).dirichlet(2, 1)
@@ -56,18 +55,18 @@ nl.configure_newton("nonlinear_solid", 1e-7, 1e-9, 20, False)
 rhs = nl.linear_form_view2("rhs")
 
 nl.time_step_size = 0.005
-x_ref = nl.solution_view("displacement", "x_ref").reshape(-1, nl.mesh_dim())
-x = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
-v = nl.solution_view("displacement", "x_dot").reshape(-1, nl.mesh_dim())
+u_ref = nl.solution_view("displacement", "x_ref").reshape(-1, nl.mesh_dim())
+u = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
+u = nl.solution_view("displacement", "x_dot").reshape(-1, nl.mesh_dim())
 s.show_options["control_point_ids"] = False
 s.show_options["control_points"] = False
 s.show_options["resolutions"] = 50
-s.cps[:] = x[to_s]
+s.cps[:] = u[to_s] + o_cps
 
 plt = gus.show(s, close=False)
 for i in range(10000):
     if True:
-        s.cps[:] = x[to_s]
+        s.cps[:] = u[to_s] + o_cps
         gus.show(
             [str(i), s],
             vedoplot=plt,
@@ -76,6 +75,6 @@ for i in range(10000):
         )
 
     nl.step_time2()
-    print(i, np.linalg.norm(x - x_ref))
+    print(i, np.linalg.norm(u - u_ref))
 
 gus.show(s, vedoplot=plt, interactive=True)
