@@ -4,7 +4,7 @@
 
 #include <mfem.hpp>
 
-#include "mimi/operators/linear_elasticity.hpp"
+#include "mimi/operators/base.hpp"
 #include "mimi/utils/containers.hpp"
 
 namespace mimi::operators {
