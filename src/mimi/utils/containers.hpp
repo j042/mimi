@@ -8,15 +8,6 @@
 
 namespace mimi::utils {
 
-template<typename T, typename IndexType>
-void AddDiagonal(T* data, const T fac, const IndexType dim) {
-  MIMI_FUNC()
-
-  for (IndexType i{}; i < dim; ++i) {
-    data[(dim + 1) * i] += fac;
-  }
-}
-
 /// Adapted from a post from Casey
 /// http://stackoverflow.com/a/21028912/273767
 /// mentioned in `Note` at
@@ -65,6 +56,13 @@ public:
 /// @tparam Type
 template<typename Type>
 using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
+
+template<typename MatrixType, typename VectorType, typename ScalarType>
+struct DataSeries {
+  Vector<MatrixType> matrices_;
+  Vector<VectorType> vectors_;
+  Vector<ScalarType> scalars_;
+}
 
 /// @brief Fully dynamic array that can view another data. Equipped with basic
 /// math operations.
@@ -555,5 +553,27 @@ public:
     return std::sqrt(norm);
   }
 };
+
+template<typename T, typename IndexType>
+void AddDiagonal(T* data, const T fac, const IndexType dim) {
+  MIMI_FUNC()
+
+  for (IndexType i{}; i < dim; ++i) {
+    data[(dim + 1) * i] += fac;
+  }
+}
+
+template<typename T>
+Vector_<T> Arange(const T from, const T to) {
+  MIMI_FUNC()
+  static_assert(std::is_integral_v<T>, "T should be an integral type.");
+  assert(to > from);
+  Vector_<T> arange(to - from);
+  // same as std::iota
+  for (T i{from}, j{}; i < to; ++i, ++j) {
+    arange[j] = i;
+  }
+  return arange;
+}
 
 } // namespace mimi::utils

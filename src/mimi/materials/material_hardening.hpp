@@ -2,11 +2,9 @@
 
 #include <cmath>
 
-#include <mfem.hpp>
-
 #include "mimi/utils/ad.hpp"
 
-namespace mimi::integrators {
+namespace mimi::materials {
 
 struct HardeningBase {
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
@@ -20,7 +18,7 @@ struct HardeningBase {
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("HardeningBase::Evaluate not overriden");
+    mimi::utils::PrintAndThrowError("HardeningBase::Evaluate not implemented");
     return {};
   }
 
@@ -29,7 +27,7 @@ struct HardeningBase {
            const double& equivalent_plastic_strain_rate) const {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError(
-        "HardeningBase::Evaluate (rate-dependent) not overriden");
+        "HardeningBase::Evaluate (rate-dependent) not implemented");
     return {};
   }
 
@@ -38,13 +36,13 @@ struct HardeningBase {
                              const double& temperature) const {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError(
-        "HardeningBase::Evaluate (thermo-rate-dependent) not overriden");
+        "HardeningBase::Evaluate (thermo-rate-dependent) not implemented");
     return {};
   }
 
   virtual double SigmaY() const {
     MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("HardeningBase::SigmaY not overriden");
+    mimi::utils::PrintAndThrowError("HardeningBase::SigmaY not implemented");
     return -1.0;
   }
 
@@ -52,14 +50,14 @@ struct HardeningBase {
   ViscoContribution(const double equivalent_plastic_strain_rate) const {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError(
-        "HardeningBase::ViscoContribution  not overriden");
+        "HardeningBase::ViscoContribution not implemented");
     return {};
   }
 
   virtual double ThermoContribution(const double temperature) const {
     MIMI_FUNC()
     mimi::utils::PrintAndThrowError(
-        "HardeningBase::ThermoContribution  not overriden");
+        "HardeningBase::ThermoContribution not implemented");
     return {};
   }
 };
@@ -337,4 +335,4 @@ struct JohnsonCookAdiabaticRateDependentHardening
   }
 };
 
-} // namespace mimi::integrators
+} // namespace mimi::materials

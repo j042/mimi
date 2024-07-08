@@ -6,6 +6,7 @@
 #include <mfem.hpp>
 
 #include "mimi/integrators/material_hardening.hpp"
+#include "mimi/integrators/material_state.hpp"
 #include "mimi/integrators/material_utils.hpp"
 #include "mimi/integrators/nonlinear_base.hpp"
 #include "mimi/solvers/newton.hpp"
@@ -13,17 +14,7 @@
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
 
-namespace mimi::integrators {
-
-template<typename T>
-using Vector_ = mimi::utils::Vector<T>;
-
-/// saves material state at quadrature point
-struct MaterialState {
-  Vector_<mfem::DenseMatrix> matrices_;
-  Vector_<mfem::Vector> vectors_;
-  Vector_<double> scalars_;
-};
+namespace mimi::materials {
 
 /// Material base.
 /// We can either define material or material state (in this case one material)
@@ -1449,4 +1440,4 @@ public:
   }
 };
 
-} // namespace mimi::integrators
+} // namespace mimi::materials
