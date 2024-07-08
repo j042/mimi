@@ -6,6 +6,7 @@
 
 #include <mfem.hpp>
 
+#include "mimi/materials/material_state.hpp"
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/mfem_ext.hpp"
 #include "mimi/utils/n_thread_exe.hpp"
@@ -53,18 +54,79 @@ CreateFaceTransformation() {
   return std::make_shared<mimi::utils::FaceElementTransformationsExt>();
 }
 
+struct QuadDataExt {};
+
+struct QuadData {
+  double integration_weight_;
+  double det_dX_dxi_;
+  mfem::Vector N_;
+  /// basis derivative - this is usally relevant to boundary (dof x dim)
+  mfem::DenseMatrix dN_dxi_;
+  /// basis  this is usually relevant to domain (dof x dim)
+  mfem::DenseMatrix dN_dX_;
+
+  std::shared_ptr<mimi::utils::MaterialState> material_state_;
+  std::shared_ptr<QuadDataExt> ext_;
+};
+
+struct ElementDataExt {};
+
+struct ElementData {
+  int geometry_type_;
+  int n_dof_;
+  int n_tdof_;
+  int i_thread_;
+  int id_;
+  bool is_bdr_;
+
+  mfem::Array<int> dofs_;
+  mfem::Array<int> v_dofs_;
+  mimi::utils::Vector<int> A_ids_; // id to matrix entry
+
+  std::shared_ptr<mfem::NURBSFiniteElement> element_;
+
+  /// in case of boundary, this may be
+  /// `mimi::utils::FaceElementTransformationsExt`
+  std::shared_ptr<mfem::IsoparametricTransformation> element_trans_;
+  std::shared_ptr<ElementDataExt> ext_;
+};
+
+/// holds element and quad data together
+struct ElementQuadData {
+  int quadrature_order_;
+  int n_quad_;
+
+  std::shared_ptr<ElementData> element_data_;
+  Vector_<QuadData> quad_data_;
+
+  ElementData& ElementData() {
+    assert(element_data_);
+    return *element_data_;
+  };
+
+  const ElementData& ElementData() const {
+    assert(element_data_);
+    return *element_data_;
+  };
+
+  Vector_<QuadData>& QuadData() { return quad_data_; }
+
+  const Vector_<QuadData>& QuadData() const { return quad_data_; }
+}
+
 /// base class for precomputed data
 class PrecomputedData {
 public:
   template<typename T>
   using Vector_ = mimi::utils::Vector<T>;
 
-  int n_threads_{1};
-  int n_elements_{1};
-  int n_b_elements_{1};
-  int n_v_dofs_{1};
-  int n_dofs_{1};
-  int dim_{1};
+  int n_threads_{-1};
+  int n_elements_{-1};
+  int n_b_elements_{-1};
+  int n_v_dofs_{-1};
+  int n_dofs_{-1};
+  int dim_{-1};
+  int v_dim_{-1};
 
   // duplicates to help thread safety
 
@@ -86,134 +148,31 @@ public:
   /// @brief size == nthreads, can share as long as they are same geometry
   Vector_<std::shared_ptr<mfem::NURBSFECollection>> fe_collections_;
 
-  /// @brief size == n_elem, harmless share
-  Vector_<std::shared_ptr<mfem::Array<int>>> v_dofs_;
+  /// @brief domain element data. We keep shared pointer, so that
+  /// element_quad_data can take any subset if needed
+  Vector<std::shared_ptr<ElementData>> domain_element_data_;
 
-  /// @brief size == n_elem, harmless share
-  Vector_<std::shared_ptr<mfem::Array<int>>> boundary_v_dofs_;
+  /// @brief boundary element data. We keep shared pointer, so that
+  /// element_quad_data can take any subset if needed
+  Vector<std::shared_ptr<ElementData>> boundary_element_data_;
 
-  /// @brief size == n_elem, harmless share. boundary elements will also refer
-  /// to this elem.
-  Vector_<std::shared_ptr<mfem::NURBSFiniteElement>> elements_;
+  /// @brief map containig quad data. decoupled with element data so that one
+  /// element data can be associated with many different quadrature data
+  std::unordered_map<std::string, Vector_<ElementQuadData>> element_quad_data_;
 
-  /// @brief size == n_b_elem, harmless share. boundary elements will also refer
-  /// to this elem.
-  Vector_<std::shared_ptr<mfem::NURBSFiniteElement>> boundary_elements_;
-
-  /// @brief size == n_elem, can share as long as each are separately accessed
-  /// wording:
-  /// target -> stress free
-  /// reference -> quadrature
-  /// physical -> current
-  Vector_<std::shared_ptr<mfem::IsoparametricTransformation>>
-      reference_to_target_element_trans_;
-
-  /// @brief size == n_elem, can share as long as each are separately accessed
-  Vector_<std::shared_ptr<mimi::utils::FaceElementTransformationsExt>>
-      reference_to_target_boundary_trans_;
-
-  // compute direct access of sorted A
+  // sparsity pattern for v_dofs
   std::shared_ptr<mfem::SparseMatrix> sparsity_pattern_;
-  Vector_<std::shared_ptr<Vector_<int>>> domain_A_ids_;
-  Vector_<std::shared_ptr<Vector_<int>>> boundary_A_ids_;
-
-  /// @brief
-  std::unordered_map<std::string, Vector_<Vector_<double>>> scalars_;
-
-  /// @brief size == {n_elem; n_patch} x n_quad. each integrator can have its
-  /// own.
-  std::unordered_map<std::string, Vector_<Vector_<mfem::Vector>>> vectors_;
-
-  /// @brief meant to hold jacobians per whatever
-  std::unordered_map<std::string, Vector_<Vector_<mfem::DenseMatrix>>>
-      matrices_;
-
-  /// @brief relevant markers for nonlinear boundary integrations
-  /// this is integrator dependant
-  std::unordered_map<std::string, std::shared_ptr<mfem::Array<int>>>
-      boundary_attr_markers_;
-
-  /// precomputed keep a pointer to stress free x
-  mfem::GridFunction* x_ref_; // this should be always original size
 
   PrecomputedData() = default;
   virtual ~PrecomputedData() = default;
 
-  virtual mfem::GridFunction& StressFreeX() {
-    if (!x_ref_) {
-      mimi::utils::PrintAndThrowError("StressFreeX (x_ref_) does not exist.");
-    }
-    return *x_ref_;
-  }
-
-  virtual const mfem::GridFunction& StressFreeX() const {
-    if (!x_ref_) {
-      mimi::utils::PrintAndThrowError("StressFreeX (x_ref_) does not exist.");
-    }
-    return *x_ref_;
-  }
-
-  virtual void Clear() {
-    int_rules_.clear();
-    int_rule_.clear();
-    fe_spaces_.clear();
-    meshes_.clear();
-    fe_collections_.clear();
-    v_dofs_.clear();
-    elements_.clear();
-    reference_to_target_element_trans_.clear();
-    reference_to_target_boundary_trans_.clear();
-
-    scalars_.clear();
-    vectors_.clear();
-    matrices_.clear();
-
-    boundary_attr_markers_.clear();
-
-    n_threads_ = -1;
-  }
-
-  /// @brief pastes shareable properties
-  virtual void PasteCommonTo(std::shared_ptr<PrecomputedData>& other) {
-    MIMI_FUNC()
-
-    other->int_rules_ =
-        Vector_<mfem::IntegrationRules>(int_rules_.size(),
-                                        mfem::IntegrationRules());
-    other->fe_spaces_ = fe_spaces_;
-    other->meshes_ = meshes_;
-    other->fe_collections_ = fe_collections_;
-    other->v_dofs_ = v_dofs_;
-    other->boundary_v_dofs_ = boundary_v_dofs_;
-    other->elements_ = elements_;
-    other->boundary_elements_ = boundary_elements_;
-    other->reference_to_target_element_trans_ =
-        reference_to_target_element_trans_;
-    other->reference_to_target_boundary_trans_ =
-        reference_to_target_boundary_trans_;
-    other->domain_A_ids_ = domain_A_ids_;
-    other->boundary_A_ids_ = boundary_A_ids_;
-    other->sparsity_pattern_ = sparsity_pattern_;
-
-    other->n_elements_ = n_elements_;
-    other->n_threads_ = n_threads_;
-    other->n_b_elements_ = n_b_elements_;
-    other->n_v_dofs_ = n_v_dofs_;
-    other->n_dofs_ = n_dofs_;
-    other->dim_ = dim_;
-    other->x_ref_ = x_ref_;
-  }
-
-  // virtual void Setup(const mfem::FiniteElementSpace& fe_space,
-  virtual void Setup(mfem::FiniteElementSpace& fe_space, const int nthreads) {
+  void PrepareThreadSafety(mfem::FiniteElementSpace& fe_space,
+                           const int nthreads) {
     MIMI_FUNC()
 
     if (nthreads < 0) {
       mimi::utils::PrintAndThrowError(nthreads, " is invalid nthreads input.");
     }
-
-    // reset first
-    Clear();
 
     // create for each threads
     mimi::utils::PrintDebug(
@@ -221,52 +180,44 @@ public:
         "FiniteElementSpace for each thread");
     for (int i{}; i < nthreads; ++i) {
       // create int rules
-      mimi::utils::PrintDebug(i, "IntegrationRules");
       int_rules_.emplace_back(mfem::IntegrationRules{});
 
       // deep copy mesh
-      mimi::utils::PrintDebug(i, "MeshExt");
       meshes_.emplace_back(
           std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(), true));
 
       // create fe_collection
-      mimi::utils::PrintDebug(i, "NURBSFECollection");
       fe_collections_.emplace_back(
           std::make_shared<mfem::NURBSFECollection>()); // default is varing
                                                         // degrees
 
       // create fe spaces
-      mimi::utils::PrintDebug(i, "FiniteElementSpace");
       fe_spaces_.emplace_back(
           std::make_shared<mfem::FiniteElementSpace>(fe_space,
                                                      meshes_[i].get(),
                                                      fe_collections_[i].get()));
     }
 
-    const int n_elem = fe_space.GetNE();
-    const int n_b_elem = fe_space.GetNBE();
-    const int dim = fe_space.GetMesh()->Dimension();
-    // save values
     n_threads_ = nthreads;
-    n_elements_ = n_elem;
-    n_b_elements_ = n_b_elem;
-    mimi::utils::PrintDebug("Mesh",
-                            fe_space.GetMesh()->GetNodes()->Size(),
-                            "Nodes x dim and VSize is",
-                            fe_space.GetVSize());
-    n_v_dofs_ = fe_space.GetVSize();
-    dim_ = dim;
-    n_dofs_ = n_v_dofs_ / dim;
+  }
 
-    // allocate vectors
-    v_dofs_.resize(n_elem);
-    boundary_v_dofs_.resize(n_b_elem);
-    elements_.resize(n_elem);
-    boundary_elements_.resize(n_b_elem);
-    reference_to_target_element_trans_.resize(n_elem);
-    reference_to_target_boundary_trans_.resize(n_b_elem);
-    domain_A_ids_.resize(n_elem);
-    boundary_A_ids_.resize(n_b_elem);
+  void PrepareElementData() {
+    MIMI_FUNC()
+
+    ThreadSafe();
+
+    mfem::FiniteElementSpace& fe_space = *fe_spaces_[0];
+
+    n_elements_ = fe_space.GetNE();
+    n_b_elements_ = fe_space.GetNBE();
+    dim_ = fe_space.GetMesh()->Dimnension();
+    // these are global size
+    n_v_dofs_ = fe_space.GetVSize();
+    n_dofs_ = fe_space.GetNDofs();
+    v_dim_ = fe_space.GetVDim();
+
+    domain_element_data_.resize(n_elem);
+    boundary_element_data_.resize(n_b_elem);
 
     auto process_elems =
         [&](const int begin, const int end, const int i_thread) {
@@ -274,100 +225,110 @@ public:
           auto& fes = *fe_spaces_[i_thread];
 
           for (int i{begin}; i < end; ++i) {
+            // get elem data
+            auto& el_data = domain_element_data_[i];
+            el_data = std::make_shared<ElementData>();
             // we will create elements and v dof trans (dof trans is used in
             // case of prolongation, but not used here.)
             // 1. create element
-            auto& elem = elements_[i];
-            elem = CreatFiniteElement(dim); // make_shared
+            el_data.element_ = CreatFiniteElement(dim_); // make_shared
+            // 2. el trans
+            el_data.element_trans_ = CreateTransformation(); // make_shared
 
-            auto& e_tr = reference_to_target_element_trans_[i];
-            e_tr = CreateTransformation(); // make_shared
-
-            // process/set FE
-            mimi::utils::PrintDebug("Getting FE", i);
-            fes.GetNURBSext()->LoadFE(i, elem.get());
-
-            // prepare transformation - we could just copy paste the code, and
-            // this will save GetElementVDofs, but let's not go too crazy
-            mimi::utils::PrintDebug("Getting ElTrans", i);
-            fes.GetElementTransformation(i, e_tr.get());
+            // process / fill each data
+            fes.GetNURBSext()->LoadFE(i, el_data.element_.get());
+            fes.GetElementTransformation(i, el_data.element_trans_.get());
             // however, we do need to set FE to this newly created, as it is a
             // ptr to internal obj
-            e_tr->SetFE(elem.get());
+            el_data.element_trans_->SetFE(elem.get());
 
-            // is there a dof trans? I am pretty sure not
+            // for our application there's no dof transformation.
             // if so, we can extend here
-            mimi::utils::PrintDebug("Getting ElementVDofs for formality", i);
-            auto& v_dof = v_dofs_[i];
-            v_dof = std::make_shared<mfem::Array<int>>();
-            mfem::DofTransformation* doftrans = fes.GetElementVDofs(i, *v_dof);
+            mfem::DofTransformation* doftrans =
+                fes.GetElementDofs(i, el_data.dofs_);
+            doftrans = fes.GetElementVDofs(i, el_data.v_dofs_);
 
             if (doftrans) {
               mimi::utils::PrintAndThrowError(
                   "There's doftrans. There shouldn't be one according to the "
                   "documentations.");
             }
+
+            // set properties
+            el_data.geometry_type_ = el_data.element_->GetGeomType();
+            el_data.n_dof_ = el_data.element_->GetDof();
+            el_data.n_t_dof_ = el_data.n_dof_ * v_dim_;
+            el_data.i_thread_ =
+                i_thread; // this is a help value, don't rely on this
+            el_data.id_ = i;
           }
         };
 
-    auto process_boundary_elems = [&](const int begin,
-                                      const int end,
-                                      const int i_thread) {
-      auto& mesh = *meshes_[i_thread];
-      auto& fes = *fe_spaces_[i_thread];
-      for (int i{begin}; i < end; ++i) {
-        // create element,
-        auto& b_el = boundary_elements_[i];
-        b_el = CreatFiniteFaceElement(dim);
-        // get bdr element
-        fes.GetNURBSext()->LoadBE(i, b_el.get());
+    auto process_boundary_elems =
+        [&](const int begin, const int end, const int i_thread) {
+          auto& mesh = *meshes_[i_thread];
+          auto& fes = *fe_spaces_[i_thread];
+          for (int i{begin}; i < end; ++i) {
+            // get bdr elem data
+            auto& bel_data = boundary_element_data_[i];
+            bel_data = std::make_shared<ElementData>();
+            bel_data.element_ = CreatFiniteFaceElement(dim_);
+            bel_data.element_trans_ = CreateFaceTransformation();
 
-        auto& b_tr = reference_to_target_boundary_trans_[i];
-        b_tr = CreateFaceTransformation();
+            fes.GetNURBSext()->LoadBE(i, bel_data.element_.get());
+            mesh.GetBdrFaceTransformations(i, bel_data.element_trans_.get());
 
-        // this is extended function mainly to
-        mesh.GetBdrFaceTransformations(i, b_tr.get());
+            // we overwrite some pointers to our own copies
+            // this is mask 1 - related elem
+            bel_data.element_trans_->Elem1 =
+                domain_element_data_[bel_data.element_trans_->Elem1No]
+                    .element_trans_.get();
+            // this is mask 16 - related face elem
+            bel_data.element_trans_->SetFE(bel_data.element_.get());
 
-        // we overwrite some pointers to our own copies
-        // this is mask 1 - related elem
-        // set
-        b_tr->Elem1 = reference_to_target_element_trans_[b_tr->Elem1No].get();
+            mfem::DofTransformation* doftrans =
+                fes.GetBdrElementVDofs(i, bel_data.dofs_);
+            dof_trans = fed.GetBdrElementVDofs(i, bel_data.v_dofs_);
 
-        // this is mask 16 - related face elem
-        // we need to create b_elem of our own
-        fes.GetNURBSext()->LoadBE(i, b_el.get());
-        b_tr->SetFE(b_el.get());
+            if (doftrans) {
+              mimi::utils::PrintAndThrowError(
+                  "There's doftrans. There shouldn't be one according to the "
+                  "documentations.");
+            }
 
-        // is there a dof trans? I am pretty sure not
-        // if so, we can extend here
-        auto& boundary_v_dof = boundary_v_dofs_[i];
-        boundary_v_dof = std::make_shared<mfem::Array<int>>();
-        mfem::DofTransformation* doftrans =
-            fes.GetBdrElementVDofs(i, *boundary_v_dof);
+            // set properties
+            bel_data.geometry_type_ = el_data.element_->GetGeomType();
+            bel_data.n_dof_ = bel_data.element_->GetDof();
+            bel_data.n_t_dof_ = bel_data.n_dof_ * v_dim_;
+            bel_data.i_thread_ =
+                i_thread; // this is a help value, don't rely on this
+            bel_data.id_ = i;
+          }
+        };
 
-        if (doftrans) {
-          mimi::utils::PrintAndThrowError(
-              "There's doftrans. There shouldn't be one according to the "
-              "documentations.");
-        }
-      }
-    };
+    mimi::utils::NThreadExe(process_elems, n_elements_, n_threads_);
+    mimi::utils::NThreadExe(process_boundary_elems, n_b_elements_, n_threads_);
+  }
 
-    mimi::utils::NThreadExe(process_elems, n_elem, nthreads);
-    mimi::utils::NThreadExe(process_boundary_elems, n_b_elem, nthreads);
+  void PrepareSparsity() {
+    MIMI_FUNC()
 
-    // we do one serial assembly as bilinear would only allocate scalar fields
-    // (we need vector field)
-    sparsity_pattern_ =
-        std::make_shared<mfem::SparseMatrix>(fe_space.GetVSize());
+    ThreadSafe();
+    if (domain_element_data_.size < 1) {
+      PrepareElementData();
+    }
+
+    mfem::FiniteElementSpace& fe_space = *fe_spaces_[0];
+    sparsity_pattern_ = std::make_shared<mfem::SparseMatrix>(n_v_dofs_);
     mfem::SparseMatrix& sparse = *sparsity_pattern_;
+
     // dummy sparsity pattern creation
     mfem::DenseMatrix dum;
-    for (const auto& v_dof : v_dofs_) {
-      auto& vd = *v_dof;
+    for (const auto& el_data : domain_element_data_) {
+      auto& vd = *el_data.v_dofs_;
       dum.SetSize(vd.Size(), vd.Size());
       dum = 1.0;
-      sparse.AddSubMatrix(vd, vd, dum, 0);
+      sparse.AddSubMatrix(vd, vd, dum, 0 /* (no) skip_zeros */);
     }
 
     // finalize / sort -> get nice A
@@ -381,56 +342,165 @@ public:
       a[i] = static_cast<double>(i);
     }
 
+    // get direct data access ids to A
     mfem::DenseMatrix sub_mat;
-    for (int i{}; i < n_elem; ++i) {
-      const auto& vd = *v_dofs_[i];
+    for (const auto& el_data : domain_element_data_) {
+      const auto& vd = *el_data.v_dofs_[i];
       const int vd_size = vd.Size();
       const int mat_size = vd_size * vd_size;
-
-      auto& Aij_ptr = domain_A_ids_[i];
-      Aij_ptr = std::make_shared<mimi::utils::Vector<int>>();
-      auto& Aij = *Aij_ptr;
-      Aij.resize(mat_size);
 
       sub_mat.SetSize(vd_size, vd_size);
       sparse.GetSubMatrix(vd, vd, sub_mat);
 
+      el_data.A_ids_.resize(mat_size);
       const double* sm_data = sub_mat.GetData();
       for (int j{}; j < mat_size; ++j) {
         // WARNING mfem uses int, we use int, if this is a problem, we
         // have a problem
-        Aij[j] = static_cast<int>(std::lround(sm_data[j]));
+        el_data.A_ids_[j] = static_cast<int>(std::lround(sm_data[j]));
       }
     }
 
-    for (int i{}; i < n_b_elem; ++i) {
-      const auto& vd = *boundary_v_dofs_[i];
+    for (const auto& bel_data : boundary_element_data_) {
+      const auto& vd = *bel_data.v_dofs_[i];
       const int vd_size = vd.Size();
       const int mat_size = vd_size * vd_size;
-
-      auto& Aij_ptr = boundary_A_ids_[i];
-      Aij_ptr = std::make_shared<mimi::utils::Vector<int>>();
-      auto& Aij = *Aij_ptr;
-      Aij.resize(mat_size);
 
       sub_mat.SetSize(vd_size, vd_size);
       sparse.GetSubMatrix(vd, vd, sub_mat);
 
+      bel_data.A_ids_.resize(mat_size);
       const double* sm_data = sub_mat.GetData();
       for (int j{}; j < mat_size; ++j) {
         // WARNING mfem uses int, we use int, if this is a problem, we
         // have a problem
-        Aij[j] = static_cast<int>(std::lround(sm_data[j]));
+        bel_data.A_ids_[j] = static_cast<int>(std::lround(sm_data[j]));
       }
     }
   }
-};
 
-class PrecomputedElementData : public PrecomputedData {
-public:
-  using Base_ = PrecomputedData;
+  /// given mask, we will iterate and prepare quad data. using this, you can use
+  /// PrecomputeElementQuadData. Pointer here, as one can have different type of
+  /// containers for masks. for nullptr input of mask, we create for all
+  Vector_<ElementQuadData>& CreateElementQuadData(const std::string name,
+                                                  int* mask = nullptr,
+                                                  int mask_size = -1) {
+    MIMI_FUNC()
+    Vector_<int> arange;
+    if (!mask) {
+      arange = Arange(0, n_elements_);
+      mask = arange.data();
+      mask_size = n_elements_;
+    }
+    assert(mask_size > 0);
 
-  using Base_::Base_;
+    Vector_<ElementQuadData>& eq_data = element_quad_data_[name];
+    eq_data.resize(mask_size);
+    for (int i{}; i < mask_size; ++i) {
+      ElementQuadData& eqd = eq_data[i];
+      eqd.element_data_ = domain_element_data_[mask[i]];
+    }
+  }
+
+  Vector_<ElementQuadData>&
+  CreateBoundaryElementQuadData(const std::string name,
+                                int* mask = nullptr,
+                                int mask_size = -1) {
+    MIMI_FUNC()
+
+    Vector_<int> arange;
+    if (!mask) {
+      arange = Arange(0, n_b_elements_);
+      mask = arange.data();
+      mask_size = n_b_elements_;
+    }
+
+    Vector_<ElementQuadData>& beq_data = element_quad_data_[name];
+    beq_data.resize(mask_size);
+    for (int i{}; i < mask_size; ++i) {
+      ElementQuadData& beqd = beq_data[i];
+      beqd.element_data_ = boundary_element_data_[mask[i]];
+    }
+  }
+
+  void PrecomputeElementQuadData(const std::string name,
+                                 const int quadrature_order,
+                                 const bool dN_dX) {
+    MIMI_FUNC()
+
+    Vector_<ElementQuadData>& eq_data = element_quad_data_.at(name);
+
+    // info check
+    if (eq_data.at(0).quad_data_.size() > 0) {
+      mimi::utils::PrintWarning("QuadData already exists for",
+                                name,
+                                "re-accessing");
+    }
+
+    auto precompute = [&](const int begin, const int end, const int i_thread) {
+      mfem::IntegrationRules& int_rules = int_rules_[i_thread];
+      mfem::DenseMatrix dxi_dX(dim_, dim_); // should be used for domain only
+      for (int i{begin}; i < end; ++i) {
+        ElementQuadData& eqd = element_quad_data_[i];
+        ElementData& e_data = eqd.ElementData();
+        eqd.quadrature_order_ = (quadrature_order < 0)
+                                    ? e_data.element_->GetOrder() * 2 + 3
+                                    : quadrature_order;
+
+        // prepare quadrature point loop
+        const mfem::IntegrationRule& ir =
+            int_rules.Get(e_data.geometry_type_, eqd.quadrature_order_);
+
+        eqd.n_quad_ = ir.GetNPoints();
+        eqd.quad_data_.resize(eqd.n_quad_);
+        for (int j{}; j < eqd.n_quad_; ++j) {
+          const mfem::IntegrationPoint& ip = ir.IntPoint(j);
+          e_data.element_trans_->SetIntPoint(&ip);
+
+          QuadData& q_data = eqd.quad_data_[j];
+          // weights
+          q_data.integration_weight_ = ip.weight;
+          q_data.det_dX_dxi_ = e_data.element_trans_->Weight();
+
+          // basis
+          q_data.N_.SetSize(e_data.n_dof_);
+          e_data.element_->CalcShape(ip, q_data.N_);
+
+          // basis derivative
+          q_data.dN_dxi_.SetSize(e_data.n_dof_, e_data.element_->GetDim());
+          e_data.element_->CalcDShape(ip, q_data.dN_dxi_);
+
+          // this is often used in
+          if (dN_dX) {
+            const int ref_dim = e_data.element_->GetDim();
+            if (ref_dim != dim_) {
+              mimi::utils::PrintWarning(
+                  "Non-Square Jacobian detected for dN_dX computation");
+            }
+            q_data.dN_dX_.SetSize(e_data.n_dof_, ref_dim);
+            dxi_dX.SetSize(dim_, ref_dim);
+            mfem::CalcInverse(e_data.element_trans_->Jacobian(), dxi_dX);
+            mfem::Mult(q_data.dN_dxi_, dxi_dX, q_data.dN_dX_);
+          }
+        }
+      }
+    };
+
+    mimi::utils::NThreadExe(precompute,
+                            static_cast<int>(eq_data.size()),
+                            n_threads_);
+  }
+
+protected:
+  void ThreadSafe() const {
+    if (n_threads_ > 0 && int_rules_.size() > 0 && meshes_.size() > 0
+        && fe_collections_.size() > 0 && fe_spaces_.size() > 0) {
+      // all good. exit
+      return;
+    }
+    mimi::utils::PrintAndThrowError("Please set number of threads and fespace "
+                                    "with CreateThreadSafeCopies()");
+  }
 };
 
 } // namespace mimi::utils
