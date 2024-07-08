@@ -5,7 +5,6 @@ set(SRCS
     py/py_nearest_distance.cpp
     py/py_material.cpp
     py/py_nonlinear_solid.cpp
-    py/py_nonlinear_visco_solid.cpp
     py/py_ad.cpp
     py/py_runtime_communication.cpp
     py/mimi_core.cpp)
