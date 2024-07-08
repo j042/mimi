@@ -1,7 +1,7 @@
 #pragma once
 
-#include "mimi/integrators/materials.hpp"
 #include "mimi/integrators/nonlinear_base.hpp"
+#include "mimi/materials/materials.hpp"
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/n_thread_exe.hpp"
 
