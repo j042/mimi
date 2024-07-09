@@ -5,10 +5,10 @@
 
 #include <mfem.hpp>
 
+#include "mimi/integrators/nonlinear_base.hpp"
 #include "mimi/materials/material_hardening.hpp"
 #include "mimi/materials/material_state.hpp"
 #include "mimi/materials/material_utils.hpp"
-#include "mimi/integrators/nonlinear_base.hpp"
 #include "mimi/solvers/newton.hpp"
 #include "mimi/utils/ad.hpp"
 #include "mimi/utils/containers.hpp"

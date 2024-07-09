@@ -2,12 +2,11 @@
 
 #include <memory>
 
-#include "mimi/materials/materials.hpp"
+#include <mfem.hpp>
+
+#include "mimi/integrators/mortar_contact.hpp"
 #include "mimi/integrators/nonlinear_solid.hpp"
-// #include "mimi/integrators/penalty_contact.hpp"
-#include "mimi/integrators/averaged_penalty_contact.hpp"
-#include "mimi/integrators/vector_diffusion.hpp"
-#include "mimi/integrators/vector_mass.hpp"
+#include "mimi/materials/materials.hpp"
 #include "mimi/operators/nonlinear_solid.hpp"
 #include "mimi/py/py_solid.hpp"
 
@@ -16,7 +15,7 @@ namespace mimi::py {
 class PyNonlinearSolid : public PySolid {
 public:
   using Base_ = PySolid;
-  using MaterialPointer_ = std::shared_ptr<mimi::integrators::MaterialBase>;
+  using MaterialPointer_ = std::shared_ptr<mimi::materials::MaterialBase>;
 
   MaterialPointer_ material_;
 
@@ -146,7 +145,7 @@ public:
     disp_fes.precomputed_ = std::make_shared<mimi::utils::PrecomputedData>();
 
     mimi::utils::PrintDebug("Setup PrecomputedData");
-    disp_fes.precomputed_->PrepareThreadSafety(*disp_fes.fe_space, n_theads);
+    disp_fes.precomputed_->PrepareThreadSafety(*disp_fes.fe_space_, n_threads);
     disp_fes.precomputed_->PrepareElementData();
     disp_fes.precomputed_->PrepareSparsity();
     // let's process boundaries
@@ -183,7 +182,7 @@ public:
 
     // create integrator using density
     // this is owned by bilinear form, so do that first before we forget
-    mfem::ContantCoefficient rho(material_->density_);
+    mfem::ConstantCoefficient rho(material_->density_);
     mass->AddDomainIntegrator(new mfem::VectorMassIntegrator(rho));
     mass->Assemble(0);
     mass->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
@@ -202,8 +201,8 @@ public:
 
       // create integrator using viscosity
       // and add it to bilinear form
-      mfem::ConstantCoefficient visc(material_->viscosity_);
-      visc->AddDomainIntegrator(new mfem::VectorDiffusionIntegrator(visc));
+      mfem::ConstantCoefficient v_coef(material_->viscosity_);
+      visc->AddDomainIntegrator(new mfem::VectorDiffusionIntegrator(v_coef));
       visc->Assemble(0);
       visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
     }
@@ -224,7 +223,7 @@ public:
     nonlinear_solid_integ->runtime_communication_ = RuntimeCommunication();
     // we precompute for nonlinear solid
     const int default_solid_q =
-        RuntimeCommuniaction()->GetInteger("nonlinear_solid_quadrature_order",
+        RuntimeCommunication()->GetInteger("nonlinear_solid_quadrature_order",
                                            -1);
     disp_fes.precomputed_->PrecomputeElementQuadData("domain",
                                                      default_solid_q,
@@ -305,24 +304,36 @@ public:
             Base_::boundary_conditions_->CurrentConfiguration().contact_;
         contact.size() != 0) {
 
-      auto contact_precomputed =
-          std::make_shared<mimi::utils::PrecomputedData>();
-      bilinear_precomputed->PasteCommonTo(contact_precomputed);
-
       auto nl_form =
           std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
       nl_oper->AddNonlinearForm("contact", nl_form);
       for (const auto& [bid, nd_coeff] : contact) {
         // initialzie integrator with nearest distance coeff (splinepy splines)
-        auto contact_integ =
-            std::make_shared<mimi::integrators::MortarContact>(
-                nd_coeff,
-                std::to_string(bid),
-                contact_precomputed);
+        auto contact_integ = std::make_shared<mimi::integrators::MortarContact>(
+            nd_coeff,
+            "contact" + std::to_string(bid),
+            disp_fes.precomputed_);
+
         contact_integ->runtime_communication_ = RuntimeCommunication();
+
+        // let's get marked boundaries to create EQData
+        contact_integ->SetBoundaryMarker(&Base_::boundary_markers_[bid]);
+        mimi::utils::Vector<int>& marked_bdr =
+            contact_integ->MarkedBoundaryElements();
+
+        // precompute
+        disp_fes.precomputed_->CreateBoundaryElementQuadData(
+            contact_integ->Name(),
+            marked_bdr.data(),
+            static_cast<int>(marked_bdr.size()));
+        const int default_contact_q =
+            RuntimeCommunication()->GetInteger("contact_quadrature_order", -1);
+        disp_fes.precomputed_->PrecomputeElementQuadData(contact_integ->Name(),
+                                                         default_contact_q,
+                                                         false /* dNdX*/);
+
         // set the same boundary marker. It will be internally used for nthread
         // assemble of marked boundaries
-        contact_integ->SetBoundaryMarker(&Base_::boundary_markers_[bid]);
         // precompute basis and recurring options.
         contact_integ->Prepare();
 

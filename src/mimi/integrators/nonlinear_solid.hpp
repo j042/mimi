@@ -4,6 +4,7 @@
 #include "mimi/materials/materials.hpp"
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/n_thread_exe.hpp"
+#include "mimi/utils/precomputed.hpp"
 
 namespace mimi::integrators {
 
@@ -31,7 +32,6 @@ protected:
   /// number of threads for this system
   int n_threads_;
   int n_elements_;
-  mutable int A_nnz_;
   /// material related
   std::shared_ptr<mimi::materials::MaterialBase> material_;
   // no plan for mixed material, so we can have this flag in integrator level
@@ -99,7 +99,7 @@ public:
   }
 
   /// reusable element assembly routine. Make sure CurrentElementSolutionCopy is
-  /// called beforehand. Specify residual destination to enabl
+  /// called beforehand. Specify residual destination to enable fd
   template<bool accumulate_state_only = false>
   void ElementResidual(std::conditional_t<accumulate_state_only,
                                           Vector_<QuadData_>,
@@ -186,23 +186,8 @@ public:
     mimi::utils::NThreadExe(thread_local_residual, n_elements_, n_threads_);
   }
 
-  void AddThreadLocalResidual(mfem::Vector& residual) const {
-    auto global_push = [&](const int begin, const int end, const int i_thread) {
-      double* destination_begin = residual.GetData() + begin;
-      const int size = end - begin;
-      // we can make this more efficient by excatly figuring out the support
-      // range. currently loop all
-      for (const TemporaryData& tmp : temporary_data_) {
-        const double* tl_begin = tmp.thread_local_residual_.GetData() + begin;
-        for (int j{}; j < size; ++j) {
-          destination_begin[j] += tl_begin[j];
-        }
-      }
-    };
-    mimi::utils::NThreadExe(global_push, residual.Size(), n_threads_);
-  }
-
-  void ThreadLocalResidualAndGrad(const mfem::Vector& current_x) const {
+  void ThreadLocalResidualAndGrad(const mfem::Vector& current_x,
+                                  const int A_nnz) const {
     auto thread_local_residual_and_grad =
         [&](const int begin, const int end, const int i_thread) {
           // deref relavant resources
@@ -213,7 +198,7 @@ public:
           // initialize thread local residual
           tmp.thread_local_residual_.SetSize(current_x.Size());
           tmp.thread_local_residual_ = 0.0;
-          tmp.thread_local_A_.SetSize(A_nnz_);
+          tmp.thread_local_A_.SetSize(A_nnz);
           tmp.thread_local_A_ = 0.0;
 
           tmp.GradAssembly(false);
@@ -246,40 +231,6 @@ public:
                             n_threads_);
   }
 
-  void AddThreadLocalResidualAndGrad(mfem::Vector& residual,
-                                     const double grad_factor,
-                                     mfem::SparseMatrix& grad) const {
-
-    auto global_push = [&](const int, const int, const int i_thread) {
-      int res_b, res_e, grad_b, grad_e;
-      mimi::utils::ChunkRule(residual.Size(),
-                             n_threads_,
-                             i_thread,
-                             res_b,
-                             res_e);
-      mimi::utils::ChunkRule(A_nnz_, n_threads_, i_thread, grad_b, grad_e);
-
-      double* destination_residual = residual.GetData() + res_b;
-      const int residual_size = res_e - res_b;
-      double* destination_grad = grad.GetData() + grad_b;
-      const int grad_size = grad_e - grad_b;
-      // we can make this more efficient by excatly figuring out the support
-      // range. currently loop all
-      for (const TemporaryData& tmp : temporary_data_) {
-        const double* tl_res_begin =
-            tmp.thread_local_residual_.GetData() + res_b;
-        for (int j{}; j < residual_size; ++j) {
-          destination_residual[j] += tl_res_begin[j];
-        }
-        const double* tl_grad_begin = tmp.thread_local_A_.GetData() + grad_b;
-        for (int j{}; j < grad_size; ++j) {
-          destination_grad[j] += grad_factor * tl_grad_begin[j];
-        }
-      }
-    };
-    mimi::utils::NThreadExe(global_push, residual.Size(), n_threads_);
-  }
-
   virtual void AddDomainResidual(const mfem::Vector& current_x,
                                  mfem::Vector& residual) const {
     // pass time stepping info to material
@@ -288,7 +239,7 @@ public:
     material_->second_effective_dt_ = second_effective_dt_;
 
     ThreadLocalResidual(current_x);
-    AddThreadLocalResidual(residual);
+    AddThreadLocalResidual(temporary_data_, n_threads_, residual);
   }
 
   virtual void AddDomainGrad(const mfem::Vector& current_x,
@@ -307,9 +258,12 @@ public:
     material_->first_effective_dt_ = first_effective_dt_;
     material_->second_effective_dt_ = second_effective_dt_;
 
-    A_nnz_ = grad.NumNonZeroElems();
-    ThreadLocalResidualAndGrad(current_x);
-    AddThreadLocalResidualAndGrad(residual, grad_factor, grad);
+    ThreadLocalResidualAndGrad(current_x, grad.NumNonZeroElems());
+    AddThreadLocalResidualAndGrad(temporary_data_,
+                                  n_threads_,
+                                  residual,
+                                  grad_factor,
+                                  grad);
   }
 
   virtual void DomainPostTimeAdvance(const mfem::Vector& current_x) {

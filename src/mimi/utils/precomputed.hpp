@@ -69,8 +69,6 @@ struct QuadData {
   std::shared_ptr<QuadDataExt> ext_;
 };
 
-struct ElementDataExt {};
-
 struct ElementData {
   int geometry_type_;
   int n_dof_;
@@ -88,7 +86,6 @@ struct ElementData {
   /// in case of boundary, this may be
   /// `mimi::utils::FaceElementTransformationsExt`
   std::shared_ptr<mfem::IsoparametricTransformation> element_trans_;
-  std::shared_ptr<ElementDataExt> ext_;
 };
 
 /// holds element and quad data together
@@ -98,6 +95,11 @@ struct ElementQuadData {
 
   std::shared_ptr<ElementData> element_data_;
   Vector<QuadData> quad_data_;
+
+  // some optional spaces for indices. used in contact, for example.
+  Vector<mfem::Array<int>> arrays_;
+  Vector<mfem::Vector> vectors_;
+  Vector<mfem::DenseMatrix> matrices_;
 
   ElementData& GetElementData() {
     assert(element_data_);
@@ -112,6 +114,20 @@ struct ElementQuadData {
   Vector<QuadData>& GetQuadData() { return quad_data_; }
 
   const Vector<QuadData>& GetQuadData() const { return quad_data_; }
+
+  void MakeArrays(const int n) { arrays_.resize(n); }
+
+  mfem::Array<int>& GetArray(const int i) { return arrays_[i]; }
+  const mfem::Array<int>& GetArray(const int i) const { return arrays_[i]; }
+
+  void MakeVectors(const int n) { vectors_.resize(n); }
+
+  mfem::Vector& GetVector(const int i) { return vectors_[i]; }
+
+  void MakeMatrices(const int n) { matrices_.resize(n); }
+
+  mfem::DenseMatrix& GetMatrix(const int i) { return matrices_[i]; }
+  const mfem::DenseMatrix& GetMatrix(const int i) const { return matrices_[i]; }
 };
 
 /// base class for precomputed data

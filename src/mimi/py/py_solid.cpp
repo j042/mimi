@@ -59,23 +59,9 @@ void init_py_solid(py::module_& m) {
            py::arg("max_iter"),
            py::arg("iterative_mode"))
       .def("newton_final_norms", &PySolid::NewtonFinalNorms)
-      .def("update_contact_lagrange", &PySolid::UpdateContactLagrange)
-      .def("fill_contact_lagrange",
-           &PySolid::FillContactLagrange,
-           py::arg("value"))
       .def("fixed_point_solve2", &PySolid::FixedPointSolve2)
       .def("fixed_point_advance2",
            py::overload_cast<>(&PySolid::FixedPointAdvance2))
-      .def("fixed_point_alm_solve2",
-           &PySolid::FixedPointALMSolve2,
-           py::arg("n_outer"),
-           py::arg("n_inner"),
-           py::arg("n_final"),
-           py::arg("final_penalty_scale"),
-           py::arg("rel_tol"),
-           py::arg("abs_tol"),
-           py::arg("gap_tol"),
-           py::arg("restart_augmentation"))
       .def("fixed_point_advanced_vector_views",
            &PySolid::FixedPointAdvancedVectorViews)
       .def("advance_time2", &PySolid::AdvanceTime2);
