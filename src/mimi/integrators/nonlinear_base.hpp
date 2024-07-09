@@ -16,18 +16,9 @@ namespace mimi::integrators {
 class NonlinearBase : public mfem::NonlinearFormIntegrator {
 public:
   std::shared_ptr<mimi::utils::PrecomputedData> precomputed_;
-  std::unique_ptr<mimi::utils::Data<mfem::Vector>> element_vectors_;
-  std::unique_ptr<mimi::utils::Data<mfem::Vector>> boundary_element_vectors_;
-  std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>> element_matrices_;
-  std::unique_ptr<mimi::utils::Data<mfem::DenseMatrix>>
-      boundary_element_matrices_;
-
   std::shared_ptr<mimi::utils::RuntimeCommunication> runtime_communication_;
 
   std::string name_;
-
-  /// flag to know when to assemble grad.
-  bool assemble_grad_{false};
 
   /// time step size, in case you need them
   /// nonlinear forms will set them
@@ -40,16 +31,6 @@ public:
 
   /// ids of contributing boundary elements, extracted based on boundary_marker_
   mimi::utils::Vector<int> marked_boundary_elements_;
-
-  /// decided to ask for intrules all the time. but since we don't wanna call
-  /// the geometry type all the time, we save this just once.
-  mfem::Geometry::Type geometry_type_;
-
-  /// see geometry_type_
-  mfem::Geometry::Type boundary_geometry_type_;
-
-  /// convenient constants - space dim
-  int dim_;
 
   /// basic ctor saved ptr to precomputed and name to use as key in precomputed
   NonlinearBase(
@@ -78,19 +59,16 @@ public:
   };
 
   virtual void AddDomainResidual(const mfem::Vector& current_x,
-                                 const int nthreads,
                                  mfem::Vector& residual) const {
     mimi::utils::PrintAndThrowError("AddDomainResidual not implemented");
   };
 
   virtual void AddDomainGrad(const mfem::Vector& current_x,
-                             const int nthreads,
                              mfem::SparseMatrix& grad) const {
     mimi::utils::PrintAndThrowError("AddDomainGrad not implemented");
   };
 
   virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
-                                        const int nthreads,
                                         const double grad_factor,
                                         mfem::Vector& residual,
                                         mfem::SparseMatrix& grad) const {
@@ -102,19 +80,16 @@ public:
   }
 
   virtual void AddBoundaryResidual(const mfem::Vector& current_x,
-                                   const int nthreads,
                                    mfem::Vector& residual) {
     mimi::utils::PrintAndThrowError("AddBoundaryResidual not implemented");
   };
 
   virtual void AddBoundaryGrad(const mfem::Vector& current_x,
-                               const int nthreads,
                                mfem::SparseMatrix& grad) {
     mimi::utils::PrintAndThrowError("AddBoundaryGrad not implemented");
   };
 
   virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
-                                          const int nthreads,
                                           const double grad_factor,
                                           mfem::Vector& residual,
                                           mfem::SparseMatrix& grad) {
@@ -208,12 +183,21 @@ public:
 /// Stores values required for material, quad point and element data,
 /// temporarily
 struct TemporaryData {
+  // basic info. used to compute tdofs
   int dim_;
+  int n_dof_;
+
+  // help info for thread local to global push
+  int support_start_;
+  int support_end_;
 
   // state variable
   double det_F_{};
   bool has_det_F_{false};
   bool has_F_inv_{false};
+
+  /// flag to inform residual destination
+  bool assembling_grad_{false};
 
   // general assembly items
   mfem::Vector element_x_;
@@ -234,6 +218,10 @@ struct TemporaryData {
   mfem::DenseMatrix alternative_stress_;           // for conversion
   mimi::utils::Vector<mfem::Vector> aux_vec_;      // for computation
   mimi::utils::Vector<mfem::DenseMatrix> aux_mat_; // for computation
+
+  // this is global sized local residual / grad entries
+  mfem::Vector thread_local_residual_;
+  mfem::Vector thread_local_A_;
 
   /// this can be called once at Prepare()
   void SetDim(const int dim) {
@@ -256,11 +244,18 @@ struct TemporaryData {
   void SetDof(const int n_dof) {
     MIMI_FUNC()
 
+    n_dof_ = n_dof;
     element_x_.SetSize(n_dof * dim_); // will be resized in getsubvector
     element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
     forward_residual_.SetSize(n_dof, dim_);
     local_residual_.SetSize(n_dof, dim_);
     local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
+  }
+
+  int GetTDof() const {
+    MIMI_FUNC()
+
+    return dim_ * n_dof_;
   }
 
   // computes F and resets flags
@@ -301,6 +296,26 @@ struct TemporaryData {
 
     current_all.GetSubVector(vdofs, element_x_);
     return element_x_mat_;
+  }
+
+  mfem::DenseMatrix& CurrentSolution() {
+    MIMI_FUNC()
+
+    return element_x_mat_;
+  }
+
+  void GradAssembly(bool state) {
+    MIMI_FUNC()
+
+    assembling_grad_ = state;
+  }
+
+  mfem::DenseMatrix& ResidualMatrix() {
+    MIMI_FUNC()
+    if (assembling_grad_) {
+      return forward_residual_;
+    }
+    return local_residual_;
   }
 };
 

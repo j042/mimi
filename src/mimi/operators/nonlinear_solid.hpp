@@ -42,11 +42,6 @@ protected:
   double abs_tol_{1e-12};
   int max_iter_{1000};
 
-  // As stiffness  in linear elasticity expects pure difference,
-  // we want to keep a pointer to initial condition and
-  // temporary vector to hold difference before calling mult
-  mfem::GridFunction* x_ref_;
-
   // internal values - to set params for each implicit term
   const mfem::Vector* x_;
   const mfem::Vector* v_;
@@ -67,10 +62,9 @@ protected:
 
 public:
   /// This is same as Base_'s ctor
-  NonlinearSolid(mfem::FiniteElementSpace& fe_space, mfem::GridFunction* x_ref)
+  NonlinearSolid(mfem::FiniteElementSpace& fe_space)
       : MimiBase_(fe_space),
-        MfemBase_(fe_space.GetTrueVSize(), 0.0),
-        x_ref_(x_ref) {
+        MfemBase_(fe_space.GetTrueVSize(), 0.0) {
     MIMI_FUNC()
   }
 

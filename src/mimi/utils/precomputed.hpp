@@ -166,6 +166,14 @@ public:
   PrecomputedData() = default;
   virtual ~PrecomputedData() = default;
 
+  Vector_<ElementQuadData>& GetElementQuadData(std::string&& name) {
+    return element_quad_data_.at(name);
+  }
+
+  const Vector_<ElementQuadData>& GetElementQuadData(std::string&& name) const {
+    return element_quad_data_.at(name);
+  }
+
   void PrepareThreadSafety(mfem::FiniteElementSpace& fe_space,
                            const int nthreads) {
     MIMI_FUNC()

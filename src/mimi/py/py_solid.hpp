@@ -63,9 +63,7 @@ protected:
     std::map<int, std::map<int, mfem::Array<int>>> boundary_dof_ids_;
     std::unordered_map<std::string, mfem::GridFunction> grid_functions_;
     mfem::Array<int> zero_dofs_;
-    std::unordered_map<std::string,
-                       std::shared_ptr<mimi::utils::PrecomputedData>>
-        precomputed_;
+    std::shared_ptr < mimi::utils::PrecomputedData >> precomputed_;
   };
 
   // there can be multiple fe spaces
