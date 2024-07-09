@@ -315,7 +315,7 @@ public:
       for (const auto& [bid, nd_coeff] : contact) {
         // initialzie integrator with nearest distance coeff (splinepy splines)
         auto contact_integ =
-            std::make_shared<mimi::integrators::AveragedPenaltyContact>(
+            std::make_shared<mimi::integrators::MortarContact>(
                 nd_coeff,
                 std::to_string(bid),
                 contact_precomputed);

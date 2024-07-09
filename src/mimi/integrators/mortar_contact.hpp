@@ -69,9 +69,10 @@ ComputeUnitNormal(const DerivativeContainer& first_derivatives,
 }
 
 /// implements normal contact methods presented in "De Lorenzis.
-// A large deformation frictional contact formulation using NURBS-based
-// isogeometric analysis"
-class AveragedPenaltyContact : public NonlinearBase {
+/// A large deformation frictional contact formulation using NURBS-based
+/// isogeometric analysis"
+/// Currently implements normal contact
+class MortarContact : public NonlinearBase {
 public:
   using Base_ = NonlinearBase;
   template<typename T>
@@ -287,7 +288,7 @@ protected:
   Vector_<TemporaryData> temporary_data_;
 
 public:
-  AveragedPenaltyContact(
+  MortarContact(
       const std::shared_ptr<mimi::coefficients::NearestDistanceBase>&
           nearest_distance_coeff,
       const std::string& name,
