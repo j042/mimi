@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "mimi/integrators/materials.hpp"
+#include "mimi/materials/materials.hpp"
 #include "mimi/integrators/nonlinear_solid.hpp"
 // #include "mimi/integrators/penalty_contact.hpp"
 #include "mimi/integrators/averaged_penalty_contact.hpp"

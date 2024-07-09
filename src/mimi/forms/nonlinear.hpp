@@ -60,7 +60,7 @@ public:
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
-      domain_integ->AddDomainResidual(current_x, -1, residual);
+      domain_integ->AddDomainResidual(current_x, residual);
     }
 
     // boundary
@@ -68,7 +68,7 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AddBoundaryResidual(current_x, -1, residual);
+      boundary_integ->AddBoundaryResidual(current_x, residual);
     }
 
     // set true dofs - if we have time, we could use nthread this.
@@ -89,7 +89,6 @@ public:
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
       domain_integ->AddDomainResidualAndGrad(current_x,
-                                             nthread,
                                              grad_factor,
                                              residual,
                                              grad);
@@ -101,7 +100,6 @@ public:
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
       boundary_integ->AddBoundaryResidualAndGrad(current_x,
-                                                 nthread,
                                                  grad_factor,
                                                  residual,
                                                  grad);
@@ -148,7 +146,7 @@ public:
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
-      domain_integ->AddDomainGrad(current_x, -1, *Base_::Grad);
+      domain_integ->AddDomainGrad(current_x, *Base_::Grad);
     }
 
     // boundary
@@ -156,7 +154,7 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AddBoundaryGrad(current_x, -1, *Base_::Grad);
+      boundary_integ->AddBoundaryGrad(current_x, *Base_::Grad);
     }
 
     if (!Base_::Grad->Finalized()) {

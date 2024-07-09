@@ -62,7 +62,7 @@ struct DataSeries {
   Vector<MatrixType> matrices_;
   Vector<VectorType> vectors_;
   Vector<ScalarType> scalars_;
-}
+};
 
 /// @brief Fully dynamic array that can view another data. Equipped with basic
 /// math operations.
@@ -564,11 +564,11 @@ void AddDiagonal(T* data, const T fac, const IndexType dim) {
 }
 
 template<typename T>
-Vector_<T> Arange(const T from, const T to) {
+Vector<T> Arange(const T from, const T to) {
   MIMI_FUNC()
   static_assert(std::is_integral_v<T>, "T should be an integral type.");
   assert(to > from);
-  Vector_<T> arange(to - from);
+  Vector<T> arange(to - from);
   // same as std::iota
   for (T i{from}, j{}; i < to; ++i, ++j) {
     arange[j] = i;

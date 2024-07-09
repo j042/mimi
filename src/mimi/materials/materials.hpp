@@ -5,9 +5,9 @@
 
 #include <mfem.hpp>
 
-#include "mimi/integrators/material_hardening.hpp"
-#include "mimi/integrators/material_state.hpp"
-#include "mimi/integrators/material_utils.hpp"
+#include "mimi/materials/material_hardening.hpp"
+#include "mimi/materials/material_state.hpp"
+#include "mimi/materials/material_utils.hpp"
 #include "mimi/integrators/nonlinear_base.hpp"
 #include "mimi/solvers/newton.hpp"
 #include "mimi/utils/ad.hpp"
@@ -22,6 +22,7 @@ namespace mimi::materials {
 class MaterialBase {
 public:
   using MaterialStatePtr_ = std::shared_ptr<MaterialState>;
+  using TemporaryData_ = mimi::integrators::TemporaryData;
 
   double dt_;
   double first_effective_dt_;
@@ -86,7 +87,7 @@ public:
                            K_);
   }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("AllocateAux not implemented for", Name());
@@ -106,7 +107,7 @@ public:
   /// @param state
   /// @param sigma
   virtual void EvaluateCauchy(const MaterialStatePtr_& state,
-                              TemporaryData& tmp,
+                              TemporaryData_& tmp,
                               mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
@@ -123,7 +124,7 @@ public:
   /// transform if none of stress is implemented, you will be stuck in a
   /// neverending loop current implementation is not so memory efficient
   virtual void EvaluatePK1(const MaterialStatePtr_& state,
-                           TemporaryData& tmp,
+                           TemporaryData_& tmp,
                            mfem::DenseMatrix& P) const {
     MIMI_FUNC()
 
@@ -136,7 +137,7 @@ public:
   }
 
   /// state accumulating version
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError("Accumulate() not implemented for", Name());
@@ -157,14 +158,14 @@ protected:
 public:
   virtual std::string Name() const { return "StVenantKirchhoff"; }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     tmp.aux_mat_.resize(3, mfem::DenseMatrix(dim_, dim_));
   }
 
   virtual void EvaluatePK1(const MaterialStatePtr_& state,
-                           TemporaryData& tmp,
+                           TemporaryData_& tmp,
                            mfem::DenseMatrix& P) const {
     MIMI_FUNC()
 
@@ -202,7 +203,7 @@ protected:
 public:
   virtual std::string Name() const { return "CompressibleOdgenNeoHookean"; }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     tmp.aux_mat_.resize(1, mfem::DenseMatrix(dim_, dim_));
@@ -210,7 +211,7 @@ public:
 
   /// mu / det(F) * (B - I) + lambda * (det(F) - 1) I
   virtual void EvaluateCauchy(const MaterialStatePtr_& state,
-                              TemporaryData& tmp,
+                              TemporaryData_& tmp,
                               mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
@@ -275,7 +276,7 @@ protected:
 public:
   virtual std::string Name() const { return "J2"; }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     tmp.aux_mat_.resize(3, mfem::DenseMatrix(dim_, dim_));
@@ -300,7 +301,7 @@ public:
   void PlasticStress(std::conditional_t<accumulate,
                                         MaterialStatePtr_,
                                         const MaterialStatePtr_>& state,
-                     TemporaryData& tmp,
+                     TemporaryData_& tmp,
                      mfem::DenseMatrix& sigma) const {
     // get aux
     mfem::DenseMatrix& eps = tmp.aux_mat_[k_eps];
@@ -348,13 +349,13 @@ public:
   }
 
   virtual void EvaluateCauchy(const MaterialStatePtr_& state,
-                              TemporaryData& tmp,
+                              TemporaryData_& tmp,
                               mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData_& tmp) const {
     MIMI_FUNC()
     PlasticStress<true>(state, tmp, tmp.stress_ /* unused */);
   }
@@ -403,7 +404,7 @@ protected:
 public:
   virtual std::string Name() const { return "J2NonlinearIsotropic"; }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     tmp.aux_mat_.resize(3, mfem::DenseMatrix(dim_, dim_));
@@ -428,7 +429,7 @@ public:
   void PlasticStress(std::conditional_t<accumulate,
                                         MaterialStatePtr_,
                                         const MaterialStatePtr_>& state,
-                     TemporaryData& tmp,
+                     TemporaryData_& tmp,
                      mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
@@ -498,13 +499,13 @@ public:
   }
 
   virtual void EvaluateCauchy(const MaterialStatePtr_& state,
-                              TemporaryData& tmp,
+                              TemporaryData_& tmp,
                               mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData_& tmp) const {
     MIMI_FUNC()
     PlasticStress<true>(state, tmp, tmp.stress_ /* unused */);
   }
@@ -573,7 +574,7 @@ public:
     }
   }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     tmp.aux_mat_.resize(3, mfem::DenseMatrix(dim_, dim_));
@@ -598,7 +599,7 @@ public:
   void PlasticStress(std::conditional_t<accumulate,
                                         MaterialStatePtr_,
                                         const MaterialStatePtr_>& state,
-                     TemporaryData& tmp,
+                     TemporaryData_& tmp,
                      mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
@@ -667,14 +668,14 @@ public:
   }
 
   virtual void EvaluateCauchy(const MaterialStatePtr_& state,
-                              TemporaryData& tmp,
+                              TemporaryData_& tmp,
                               mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder*/);
@@ -768,7 +769,7 @@ public:
             ->melting_temperature_;
   }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     tmp.aux_mat_.resize(4, mfem::DenseMatrix(dim_, dim_));
@@ -896,7 +897,7 @@ public:
   void PlasticStress(std::conditional_t<accumulate,
                                         MaterialStatePtr_,
                                         const MaterialStatePtr_>& state,
-                     TemporaryData& tmp,
+                     TemporaryData_& tmp,
                      mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
@@ -991,14 +992,14 @@ public:
   }
 
   virtual void EvaluateCauchy(const MaterialStatePtr_& state,
-                              TemporaryData& tmp,
+                              TemporaryData_& tmp,
                               mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
@@ -1078,7 +1079,7 @@ public:
             ->melting_temperature_;
   }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     tmp.aux_mat_.assign(k_n_aux_mat, mfem::DenseMatrix(dim_, dim_));
@@ -1109,7 +1110,7 @@ public:
   void PlasticStress(std::conditional_t<accumulate,
                                         MaterialStatePtr_,
                                         const MaterialStatePtr_>& state,
-                     TemporaryData& tmp,
+                     TemporaryData_& tmp,
                      mfem::DenseMatrix& P) const {
     MIMI_FUNC()
     using Mat = mfem::DenseMatrix;
@@ -1241,14 +1242,14 @@ public:
   }
 
   virtual void EvaluatePK1(const MaterialStatePtr_& state,
-                           TemporaryData& tmp,
+                           TemporaryData_& tmp,
                            mfem::DenseMatrix& P) const {
     MIMI_FUNC()
 
     PlasticStress<false>(state, tmp, P);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
@@ -1279,7 +1280,7 @@ public:
 
   virtual std::string Name() const { return "J2AdiabaticViscoLogStrain"; }
 
-  virtual void AllocateAux(TemporaryData& tmp) const {
+  virtual void AllocateAux(TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     // eps, s, N_p, a misc work array, eigen vectors/work2
@@ -1314,7 +1315,7 @@ public:
   void PlasticStress(std::conditional_t<accumulate,
                                         MaterialStatePtr_,
                                         const MaterialStatePtr_>& state,
-                     TemporaryData& tmp,
+                     TemporaryData_& tmp,
                      mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
@@ -1426,14 +1427,14 @@ public:
   }
 
   virtual void EvaluateCauchy(const MaterialStatePtr_& state,
-                              TemporaryData& tmp,
+                              TemporaryData_& tmp,
                               mfem::DenseMatrix& sigma) const {
     MIMI_FUNC()
 
     PlasticStress<false>(state, tmp, sigma);
   }
 
-  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData& tmp) const {
+  virtual void Accumulate(MaterialStatePtr_& state, TemporaryData_& tmp) const {
     MIMI_FUNC()
 
     PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);

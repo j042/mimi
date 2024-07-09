@@ -31,9 +31,9 @@ protected:
   /// number of threads for this system
   int n_threads_;
   int n_elements_;
-  int A_nnz_;
+  mutable int A_nnz_;
   /// material related
-  std::shared_ptr<MaterialBase> material_;
+  std::shared_ptr<mimi::materials::MaterialBase> material_;
   // no plan for mixed material, so we can have this flag in integrator level
   bool has_states_;
 
@@ -43,7 +43,7 @@ private:
 public:
   NonlinearSolid(
       const std::string& name,
-      const std::shared_ptr<MaterialBase>& material,
+      const std::shared_ptr<mimi::materials::MaterialBase>& material,
       const std::shared_ptr<mimi::utils::PrecomputedData>& precomputed)
       : NonlinearBase(name, precomputed),
         material_{material} {}
@@ -60,7 +60,7 @@ public:
       Vector_<ElementQuadData_>& element_quad_data_vec =
           precomputed_->GetElementQuadData("domain");
       for (ElementQuadData_& eqd : element_quad_data_vec) {
-        for (QuadData_& qd : eqd.QuadData()) {
+        for (QuadData_& qd : eqd.GetQuadData()) {
           qd.material_state_ = material_->CreateState();
         }
       }
@@ -69,24 +69,9 @@ public:
     // allocate temporary data
     temporary_data_.resize(n_threads_);
     for (auto& td : temporary_data_) {
-      td.SetDim(dim_);
+      td.SetDim(precomputed_->dim_);
       material_->AllocateAux(td);
     }
-
-    // this can be perhaps done in other level
-    // get support range for each thread
-    auto determine_support =
-        [&](const int begin, const int end, const int i_thread) {
-          // deref relavant resources
-          Vector_<ElementQuadData_>& element_quad_data_vec =
-              precomputed_->GetElementQuadData("domain");
-          int min_support{std::numeric_limits<int>::max()};
-          max_support{};
-          for (int i{begin}; i < end; ++i) {
-            const ElementData_& ed = element_quad_data_vec[i].ElementData();
-            min_support = std::min(min_support)
-          }
-        };
   }
 
   /// This one needs / stores
@@ -101,7 +86,7 @@ public:
     n_threads_ = precomputed_->n_threads_;
 
     // setup material
-    material_->Setup(dim_);
+    material_->Setup(precomputed_->dim_);
     // set flag for this integrator
     if (material_->CreateState()) {
       // not a nullptr -> has states
@@ -116,13 +101,16 @@ public:
   /// reusable element assembly routine. Make sure CurrentElementSolutionCopy is
   /// called beforehand. Specify residual destination to enabl
   template<bool accumulate_state_only = false>
-  void ElementResidual(const QuadData_& q_data, TemporaryData& tmp) const {
+  void ElementResidual(std::conditional_t<accumulate_state_only,
+                                          Vector_<QuadData_>,
+                                          const Vector_<QuadData_>>& q_data,
+                       TemporaryData& tmp) const {
     MIMI_FUNC()
 
     tmp.ResidualMatrix() = 0.0;
 
     // quad loop - we assume tmp.element_x_mat_ is prepared
-    for (const QuadData& q : q_data) {
+    for (auto& q : q_data) {
       tmp.ComputeF(q.dN_dX_);
       if constexpr (!accumulate_state_only) {
         material_->EvaluatePK1(q.material_state_, tmp, tmp.stress_);
@@ -138,12 +126,12 @@ public:
 
   /// reusable element residual and jacobian assembly. Make sure
   /// CurrentElementSolutionCopy is called beforehand
-  void ElementResidualAndGrad(const ElementQuadData_& q_data,
+  void ElementResidualAndGrad(const Vector_<QuadData_>& q_data,
                               TemporaryData& tmp) const {
     MIMI_FUNC()
 
     tmp.GradAssembly(false);
-    ElementResidual(eq_data, tmp);
+    ElementResidual(q_data, tmp);
 
     // now, forward fd
     tmp.GradAssembly(true);
@@ -161,7 +149,7 @@ public:
       const double diff_step_inv = 1. / diff_step;
 
       with_respect_to = orig_wrt + diff_step;
-      ElementResidual(qd_data, tmp);
+      ElementResidual(q_data, tmp);
       for (int j{}; j < n_t_dof; ++j) {
         *grad_data++ = (fd_forward_data[j] - residual_data[j]) * diff_step_inv;
       }
@@ -169,7 +157,7 @@ public:
     }
   }
 
-  void ThreadLocalResidual(const mfem::Vector& current_x) {
+  void ThreadLocalResidual(const mfem::Vector& current_x) const {
     auto thread_local_residual =
         [&](const int begin, const int end, const int i_thread) {
           // deref relavant resources
@@ -185,10 +173,10 @@ public:
           // assemble to thread local
           for (int i{begin}; i < end; ++i) {
             const ElementQuadData_& eqd = element_quad_data_vec[i];
-            const ElementData_& ed = eqd.ElementData();
+            const ElementData_& ed = eqd.GetElementData();
             tmp.SetDof(ed.n_dof_);
             tmp.CurrentElementSolutionCopy(current_x, ed.v_dofs_);
-            ElementResidual<false>(eqd.QuadData(), tmp);
+            ElementResidual<false>(eqd.GetQuadData(), tmp);
             tmp.thread_local_residual_.AddElementVector(
                 ed.v_dofs_,
                 tmp.local_residual_.GetData());
@@ -198,7 +186,7 @@ public:
     mimi::utils::NThreadExe(thread_local_residual, n_elements_, n_threads_);
   }
 
-  void AddThreadLocalResidual(mfem::Vector& residual) {
+  void AddThreadLocalResidual(mfem::Vector& residual) const {
     auto global_push = [&](const int begin, const int end, const int i_thread) {
       double* destination_begin = residual.GetData() + begin;
       const int size = end - begin;
@@ -211,10 +199,10 @@ public:
         }
       }
     };
-    mimi::utils::NThreadExe(global_push, residual.GetSize(), n_threads_);
+    mimi::utils::NThreadExe(global_push, residual.Size(), n_threads_);
   }
 
-  void ThreadLocalResidualAndGrad(const mfem::Vector& current_x) {
+  void ThreadLocalResidualAndGrad(const mfem::Vector& current_x) const {
     auto thread_local_residual_and_grad =
         [&](const int begin, const int end, const int i_thread) {
           // deref relavant resources
@@ -225,8 +213,8 @@ public:
           // initialize thread local residual
           tmp.thread_local_residual_.SetSize(current_x.Size());
           tmp.thread_local_residual_ = 0.0;
-          tmp.thread_local_A_data_.SetSize(A_nnz_);
-          tmp.thread_local_A_data_ = 0.0;
+          tmp.thread_local_A_.SetSize(A_nnz_);
+          tmp.thread_local_A_ = 0.0;
 
           tmp.GradAssembly(false);
 
@@ -234,12 +222,12 @@ public:
           for (int i{begin}; i < end; ++i) {
             // prepare assembly
             const ElementQuadData_& eqd = element_quad_data_vec[i];
-            const ElementData_& ed = eqd.ElementData();
+            const ElementData_& ed = eqd.GetElementData();
             tmp.SetDof(ed.n_dof_);
             tmp.CurrentElementSolutionCopy(current_x, ed.v_dofs_);
 
             // assemble
-            ElementResidualAndGrad(eqd.QuadData(), tmp);
+            ElementResidualAndGrad(eqd.GetQuadData(), tmp);
 
             // push
             tmp.thread_local_residual_.AddElementVector(
@@ -260,7 +248,7 @@ public:
 
   void AddThreadLocalResidualAndGrad(mfem::Vector& residual,
                                      const double grad_factor,
-                                     mfem::SparseMatrix& grad) {
+                                     mfem::SparseMatrix& grad) const {
 
     auto global_push = [&](const int, const int, const int i_thread) {
       int res_b, res_e, grad_b, grad_e;
@@ -289,7 +277,7 @@ public:
         }
       }
     };
-    mimi::utils::NThreadExe(global_push, residual.GetSize(), n_threads_);
+    mimi::utils::NThreadExe(global_push, residual.Size(), n_threads_);
   }
 
   virtual void AddDomainResidual(const mfem::Vector& current_x,
@@ -336,11 +324,11 @@ public:
           Vector_<ElementQuadData_>& element_quad_data_vec =
               precomputed_->GetElementQuadData("domain");
           for (int i{begin}; i < end; ++i) {
-            const ElementQuadData_& eqd = element_quad_data_vec[i];
-            const ElementData_& ed = eqd.ElementData();
+            ElementQuadData_& eqd = element_quad_data_vec[i];
+            const ElementData_& ed = eqd.GetElementData();
             tmp.SetDof(ed.n_dof_);
             tmp.CurrentElementSolutionCopy(current_x, ed.v_dofs_);
-            ElementResidual<true>(eqd.QuadData(), tmp);
+            ElementResidual<true>(eqd.GetQuadData(), tmp);
           }
         };
     mimi::utils::NThreadExe(accumulate_states, n_elements_, n_threads_);
