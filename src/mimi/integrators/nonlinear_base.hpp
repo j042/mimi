@@ -181,6 +181,7 @@ public:
       const int residual_size = res_e - res_b;
       double* destination_grad = grad.GetData() + grad_b;
       const int grad_size = grad_e - grad_b;
+
       // we can make this more efficient by excatly figuring out the support
       // range. currently loop all
       for (const auto& tmp : t_data_vec) {

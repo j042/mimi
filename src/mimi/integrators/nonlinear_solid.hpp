@@ -143,9 +143,8 @@ public:
     for (int i{}; i < n_t_dof; ++i) {
       double& with_respect_to = *solution_data++;
       const double orig_wrt = with_respect_to;
-      const double diff_step = std::abs(orig_wrt) * 1.0e-8;
-      // a safer option is: (orig_wrt != 0.0) ? std::abs(orig_wrt) * 1.0e-8
-      // : 1.0e-8;
+      const double diff_step =
+          (orig_wrt != 0.0) ? std::abs(orig_wrt) * 1.0e-8 : 1.0e-10;
       const double diff_step_inv = 1. / diff_step;
 
       with_respect_to = orig_wrt + diff_step;
@@ -213,7 +212,6 @@ public:
 
             // assemble
             ElementResidualAndGrad(eqd.GetQuadData(), tmp);
-
             // push
             tmp.thread_local_residual_.AddElementVector(
                 ed.v_dofs_,

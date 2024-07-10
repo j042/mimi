@@ -14,7 +14,7 @@ void ChunkRule(const IndexT total,
                const IndexT nthread,
                const IndexT ithread,
                IndexT& from,
-               IndexT to) {
+               IndexT& to) {
   const IndexT chunk_size = (total + nthread - 1) / nthread;
   if (ithread < nthread - 1) {
     from = ithread * chunk_size;
