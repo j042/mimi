@@ -77,7 +77,8 @@ class MortarContact : public NonlinearBase {
 protected:
   static const int kDof{0};
   static const int kVDof{1};
-  static const int kXRef{1};
+
+  static const int kXRef{0};
 
 public:
   using Base_ = NonlinearBase;
@@ -373,7 +374,7 @@ public:
             eqd.MakeArrays(2);
             mfem::Array<int>& local_dofs = eqd.GetArray(kDof);
             mfem::Array<int>& local_vdofs = eqd.GetArray(kVDof);
-            local_dofs.SetSize(ed.n_tdof_);
+            local_dofs.SetSize(ed.n_dof_);
             local_vdofs.SetSize(ed.n_tdof_);
             for (int i{}; i < ed.n_tdof_; ++i) {
               if (i < ed.n_dof_) {
@@ -454,6 +455,7 @@ public:
   /// Computes average gap. This loops over the whole boundary as in our
   /// application, we need to compute current area and it's done here.
   void ComputePressure(const mfem::Vector& current_u, double& area) {
+    MIMI_FUNC()
 
     // first assemble thread locally
     std::mutex gap_mutex;
@@ -529,6 +531,7 @@ public:
                        mimi::utils::Data<double>& force /* only if applicable*/,
                        double& pressure_integral) const {
     MIMI_FUNC()
+    tmp.ResidualMatrix() = 0.0;
     const double penalty = nearest_distance_coeff_->coefficient_;
     double* residual_d = tmp.ResidualMatrix().GetData();
 
@@ -601,6 +604,7 @@ public:
   virtual void AddBoundaryResidual(const mfem::Vector& current_u,
                                    mfem::Vector& residual) {
     MIMI_FUNC()
+
     last_area_ = 0.0;
     ComputePressure(current_u, last_area_);
     last_force_.Fill(0.0);
@@ -632,7 +636,6 @@ public:
         // continue with assembly
         ElementData_& bed = beqd.GetElementData();
         tmp.SetDof(bed.n_dof_);
-        tmp.local_residual_ = 0.0;
 
         tmp.CurrentElementSolutionCopy(current_u, beqd);
         ElementResidual<true>(beqd.GetQuadData(),
@@ -670,6 +673,8 @@ public:
                                           const double grad_factor,
                                           mfem::Vector& residual,
                                           mfem::SparseMatrix& grad) {
+    MIMI_FUNC()
+
     last_area_ = 0.0;
     ComputePressure(current_u, last_area_);
     last_force_.Fill(0.0);
@@ -697,7 +702,6 @@ public:
 
             ElementData_& bed = beqd.GetElementData();
             tmp.SetDof(bed.n_dof_);
-            tmp.local_residual_ = 0.0;
 
             // get current element solution as matrix
             tmp.CurrentElementSolutionCopy(current_u, beqd);
