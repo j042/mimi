@@ -3,8 +3,8 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
-#include "mimi/integrators/material_utils.hpp"
-#include "mimi/integrators/materials.hpp"
+#include "mimi/materials/material_utils.hpp"
+#include "mimi/materials/materials.hpp"
 
 namespace mimi::py {
 
@@ -17,27 +17,26 @@ T* Ptr(const py::array_t<T>& arr) {
 
 void init_py_material(py::module_& m) {
   /// material laws
-  using MaterialBase = mimi::integrators::MaterialBase;
-  using StVK = mimi::integrators::StVenantKirchhoff;
-  using CompOgdenNH = mimi::integrators::CompressibleOgdenNeoHookean;
-  using J2 = mimi::integrators::J2;
-  using J2NonlinIso = mimi::integrators::J2NonlinearIsotropic;
-  using J2NonlinVisco = mimi::integrators::J2NonlinearVisco;
-  using J2NonlinAdiabaticVisco = mimi::integrators::J2AdiabaticVisco;
-  using J2NonlinAdiabaticViscoLarge = mimi::integrators::J2AdiabaticViscoLarge;
-  using J2NonlinAdiabaticViscoLog =
-      mimi::integrators::J2AdiabaticViscoLogStrain;
+  using MaterialBase = mimi::materials::MaterialBase;
+  using StVK = mimi::materials::StVenantKirchhoff;
+  using CompOgdenNH = mimi::materials::CompressibleOgdenNeoHookean;
+  using J2 = mimi::materials::J2;
+  using J2NonlinIso = mimi::materials::J2NonlinearIsotropic;
+  using J2NonlinVisco = mimi::materials::J2NonlinearVisco;
+  using J2NonlinAdiabaticVisco = mimi::materials::J2AdiabaticVisco;
+  using J2NonlinAdiabaticViscoLarge = mimi::materials::J2AdiabaticViscoLarge;
+  using J2NonlinAdiabaticViscoLog = mimi::materials::J2AdiabaticViscoLogStrain;
 
   /// hardening laws
-  using HardeningBase = mimi::integrators::HardeningBase;
-  using PowerLawHardening = mimi::integrators::PowerLawHardening;
-  using VoceHardening = mimi::integrators::VoceHardening;
-  using JCHardening = mimi::integrators::JohnsonCookHardening;
-  using JCViscoHardening = mimi::integrators::JohnsonCookRateDependentHardening;
+  using HardeningBase = mimi::materials::HardeningBase;
+  using PowerLawHardening = mimi::materials::PowerLawHardening;
+  using VoceHardening = mimi::materials::VoceHardening;
+  using JCHardening = mimi::materials::JohnsonCookHardening;
+  using JCViscoHardening = mimi::materials::JohnsonCookRateDependentHardening;
   using JCConstTemperatureHardening =
-      mimi::integrators::JohnsonCookConstantTemperatureHardening;
+      mimi::materials::JohnsonCookConstantTemperatureHardening;
   using JCThermoViscoHardening =
-      mimi::integrators::JohnsonCookAdiabaticRateDependentHardening;
+      mimi::materials::JohnsonCookAdiabaticRateDependentHardening;
 
   /// input type
   using ADScalar = typename HardeningBase::ADScalar_;
@@ -204,23 +203,22 @@ void init_py_material(py::module_& m) {
     return py::make_tuple(e_val, e_vec, adat);
   });
 
-  m.def(
-      "log_strain",
-      [](const py::array_t<double>& F, const py::array_t<double>& state) {
-        py::array_t<double> out(F.size());
-        const int d0{(int) F.shape(0)}, d1{(int) F.shape(1)};
-        mimi::integrators::TemporaryData tmp;
-        tmp.aux_mat_.assign(2, mfem::DenseMatrix(d0, d0));
-        tmp.aux_vec_.assign(1, mfem::Vector(d0));
-        mfem::DenseMatrix& state_mat = tmp.stress_; // use any matrix
-        mfem::DenseMatrix& out_mat = tmp.F_dot_;
-        tmp.SetDim(d0);
-        tmp.F_.UseExternalData(Ptr(F), d0, d1);
-        state_mat.UseExternalData(Ptr(state), d0, d1);
-        out_mat.UseExternalData(Ptr(out), d0, d1);
-        mimi::integrators::LogarithmicStrain<0, 1, 0>(state_mat, tmp, out_mat);
-        return out;
-      });
+  m.def("log_strain",
+        [](const py::array_t<double>& F, const py::array_t<double>& state) {
+          py::array_t<double> out(F.size());
+          const int d0{(int) F.shape(0)}, d1{(int) F.shape(1)};
+          mimi::integrators::TemporaryData tmp;
+          tmp.aux_mat_.assign(2, mfem::DenseMatrix(d0, d0));
+          tmp.aux_vec_.assign(1, mfem::Vector(d0));
+          mfem::DenseMatrix& state_mat = tmp.stress_; // use any matrix
+          mfem::DenseMatrix& out_mat = tmp.F_dot_;
+          tmp.SetDim(d0);
+          tmp.F_.UseExternalData(Ptr(F), d0, d1);
+          state_mat.UseExternalData(Ptr(state), d0, d1);
+          out_mat.UseExternalData(Ptr(out), d0, d1);
+          mimi::materials::LogarithmicStrain<0, 1, 0>(state_mat, tmp, out_mat);
+          return out;
+        });
 }
 
 } // namespace mimi::py

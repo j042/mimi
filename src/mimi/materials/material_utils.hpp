@@ -9,7 +9,7 @@
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/print.hpp"
 
-namespace mimi::integrators {
+namespace mimi::materials {
 
 template<typename T>
 bool AlmostZero(const T value) {
@@ -352,4 +352,4 @@ inline void IsotropicStress(const double lambda,
   }
 }
 
-} // namespace mimi::integrators
+} // namespace mimi::materials

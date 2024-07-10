@@ -2,14 +2,10 @@ set(SRCS
     solvers/newton.cpp
     py/py_boundary_conditions.cpp
     py/py_solid.cpp
-    py/py_linear_elasticity.cpp
     py/py_nearest_distance.cpp
-    py/py_nonlinear_form.cpp
     py/py_material.cpp
     py/py_nonlinear_solid.cpp
-    py/py_nonlinear_visco_solid.cpp
     py/py_ad.cpp
-    py/py_nonlinear_integrator.cpp
     py/py_runtime_communication.cpp
     py/mimi_core.cpp)
 

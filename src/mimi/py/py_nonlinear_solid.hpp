@@ -2,12 +2,11 @@
 
 #include <memory>
 
-#include "mimi/integrators/materials.hpp"
+#include <mfem.hpp>
+
+#include "mimi/integrators/mortar_contact.hpp"
 #include "mimi/integrators/nonlinear_solid.hpp"
-// #include "mimi/integrators/penalty_contact.hpp"
-#include "mimi/integrators/averaged_penalty_contact.hpp"
-#include "mimi/integrators/vector_diffusion.hpp"
-#include "mimi/integrators/vector_mass.hpp"
+#include "mimi/materials/materials.hpp"
 #include "mimi/operators/nonlinear_solid.hpp"
 #include "mimi/py/py_solid.hpp"
 
@@ -16,7 +15,7 @@ namespace mimi::py {
 class PyNonlinearSolid : public PySolid {
 public:
   using Base_ = PySolid;
-  using MaterialPointer_ = std::shared_ptr<mimi::integrators::MaterialBase>;
+  using MaterialPointer_ = std::shared_ptr<mimi::materials::MaterialBase>;
 
   MaterialPointer_ material_;
 
@@ -142,23 +141,25 @@ public:
     // here, we only create one for bilinear. others are done below
     // note, for bilinear, nothing is really saved. just used for thread safety
     mimi::utils::PrintDebug("Creating PrecomputedData");
-    auto& bilinear_precomputed = disp_fes.precomputed_["bilinear_forms"];
-    // this is the first precomputed data which does all base work.
-    bilinear_precomputed = std::make_shared<mimi::utils::PrecomputedData>();
-    // this make x_ref_ available for all the integrators through StressFreeX()
-    bilinear_precomputed->x_ref_ = &x_ref;
+    // create precomputed for this FESpace
+    disp_fes.precomputed_ = std::make_shared<mimi::utils::PrecomputedData>();
 
     mimi::utils::PrintDebug("Setup PrecomputedData");
-    bilinear_precomputed->Setup(*disp_fes.fe_space_, n_threads);
-
+    disp_fes.precomputed_->PrepareThreadSafety(*disp_fes.fe_space_, n_threads);
+    disp_fes.precomputed_->PrepareElementData();
+    disp_fes.precomputed_->PrepareSparsity();
     // let's process boundaries
     mimi::utils::PrintDebug("Find boundary dof ids");
     Base_::FindBoundaryDofIds();
 
+    // create element data - simple domain precompute
+    disp_fes.precomputed_->CreateElementQuadData("domain", nullptr);
+    // once we have parallel bilinear form assembly we can re directly cal;
+    // precompute
+
     // creating operators
     auto nl_oper =
-        std::make_unique<mimi::operators::NonlinearSolid>(*disp_fes.fe_space_,
-                                                          &x_ref);
+        std::make_unique<mimi::operators::NonlinearSolid>(*disp_fes.fe_space_);
 
     // let's setup the system
     // create dummy sparse matrix - mfem just sets referencee, so no copies are
@@ -171,21 +172,20 @@ public:
 
     // create density coeff for mass integrator
     assert(material_->density_ > 0.0);
-    auto& density = Base_::coefficients_["density"];
-    density = std::make_shared<mfem::ConstantCoefficient>(material_->density_);
+
+    // temporarily disable custom parallel integrators
+    // TODO: task force!
+    // auto& density = Base_::coefficients_["density"];
+    // density =
+    // std::make_shared<mfem::ConstantCoefficient>(material_->density_); auto*
+    // mass_integ = new mimi::integrators::VectorMass(density);
 
     // create integrator using density
     // this is owned by bilinear form, so do that first before we forget
-    auto* mass_integ = new mimi::integrators::VectorMass(density);
-    mass->AddDomainIntegrator(mass_integ);
-
-    // precompute using nthread
-    mass_integ->ComputeElementMatrices(*bilinear_precomputed);
-
-    // assemble and form matrix with bc in mind
+    mfem::ConstantCoefficient rho(material_->density_);
+    mass->AddDomainIntegrator(new mfem::VectorMassIntegrator(rho));
     mass->Assemble(0);
     mass->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
-    mass_integ->element_matrices_.reset(); // release saved matrices
 
     // 2. damping / viscosity, as mfem calls it
     if (material_->viscosity_ > 0.0) {
@@ -194,30 +194,21 @@ public:
       nl_oper->AddBilinearForm("viscosity", visc);
 
       // create viscosity coeff
-      auto& visc_coeff = Base_::coefficients_["viscosity"];
-      visc_coeff =
-          std::make_shared<mfem::ConstantCoefficient>(material_->viscosity_);
+      // auto& visc_coeff = Base_::coefficients_["viscosity"];
+      // visc_coeff =
+      // std::make_shared<mfem::ConstantCoefficient>(material_->viscosity_);
+      // auto visc_integ = new mimi::integrators::VectorDiffusion(visc_coeff);
 
       // create integrator using viscosity
       // and add it to bilinear form
-      auto visc_integ = new mimi::integrators::VectorDiffusion(visc_coeff);
-      visc->AddDomainIntegrator(visc_integ);
-
-      // nthread assemble
-      visc_integ->ComputeElementMatrices(*bilinear_precomputed);
+      mfem::ConstantCoefficient v_coef(material_->viscosity_);
+      visc->AddDomainIntegrator(new mfem::VectorDiffusionIntegrator(v_coef));
       visc->Assemble(0);
       visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
-      visc_integ->element_matrices_.reset();
     }
 
     // 3. nonlinear stiffness
     // first pre-computed
-    auto& nonlinear_stiffness_precomputed =
-        disp_fes.precomputed_["nonlinear_stiffness"];
-    nonlinear_stiffness_precomputed =
-        std::make_shared<mimi::utils::PrecomputedData>();
-    bilinear_precomputed->PasteCommonTo(nonlinear_stiffness_precomputed);
-
     // nlform
     auto nonlinear_stiffness =
         std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
@@ -228,8 +219,15 @@ public:
         std::make_shared<mimi::integrators::NonlinearSolid>(
             material_->Name() + "-NonlinearSolid",
             material_,
-            nonlinear_stiffness_precomputed);
+            disp_fes.precomputed_);
     nonlinear_solid_integ->runtime_communication_ = RuntimeCommunication();
+    // we precompute for nonlinear solid
+    const int default_solid_q =
+        RuntimeCommunication()->GetInteger("nonlinear_solid_quadrature_order",
+                                           -1);
+    disp_fes.precomputed_->PrecomputeElementQuadData("domain",
+                                                     default_solid_q,
+                                                     true);
     nonlinear_solid_integ->Prepare();
     // add integrator to nl form
     nonlinear_stiffness->AddDomainIntegrator(nonlinear_solid_integ);
@@ -306,24 +304,36 @@ public:
             Base_::boundary_conditions_->CurrentConfiguration().contact_;
         contact.size() != 0) {
 
-      auto contact_precomputed =
-          std::make_shared<mimi::utils::PrecomputedData>();
-      bilinear_precomputed->PasteCommonTo(contact_precomputed);
-
       auto nl_form =
           std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
       nl_oper->AddNonlinearForm("contact", nl_form);
       for (const auto& [bid, nd_coeff] : contact) {
         // initialzie integrator with nearest distance coeff (splinepy splines)
-        auto contact_integ =
-            std::make_shared<mimi::integrators::AveragedPenaltyContact>(
-                nd_coeff,
-                std::to_string(bid),
-                contact_precomputed);
+        auto contact_integ = std::make_shared<mimi::integrators::MortarContact>(
+            nd_coeff,
+            "contact" + std::to_string(bid),
+            disp_fes.precomputed_);
+
         contact_integ->runtime_communication_ = RuntimeCommunication();
+
+        // let's get marked boundaries to create EQData
+        contact_integ->SetBoundaryMarker(&Base_::boundary_markers_[bid]);
+        mimi::utils::Vector<int>& marked_bdr =
+            contact_integ->MarkedBoundaryElements();
+
+        // precompute
+        disp_fes.precomputed_->CreateBoundaryElementQuadData(
+            contact_integ->Name(),
+            marked_bdr.data(),
+            static_cast<int>(marked_bdr.size()));
+        const int default_contact_q =
+            RuntimeCommunication()->GetInteger("contact_quadrature_order", -1);
+        disp_fes.precomputed_->PrecomputeElementQuadData(contact_integ->Name(),
+                                                         default_contact_q,
+                                                         false /* dNdX*/);
+
         // set the same boundary marker. It will be internally used for nthread
         // assemble of marked boundaries
-        contact_integ->SetBoundaryMarker(&Base_::boundary_markers_[bid]);
         // precompute basis and recurring options.
         contact_integ->Prepare();
 

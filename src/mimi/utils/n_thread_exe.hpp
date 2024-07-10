@@ -9,6 +9,22 @@
 
 namespace mimi::utils {
 
+template<typename IndexT>
+void ChunkRule(const IndexT total,
+               const IndexT nthread,
+               const IndexT ithread,
+               IndexT& from,
+               IndexT& to) {
+  const IndexT chunk_size = (total + nthread - 1) / nthread;
+  if (ithread < nthread - 1) {
+    from = ithread * chunk_size;
+    to = (ithread + 1) * chunk_size;
+  } else {
+    from = (nthread - 1) * chunk_size;
+    to = total;
+  }
+}
+
 /// @brief multi thread execution helper based on chunked batches
 /// @tparam Func
 /// @tparam IndexT

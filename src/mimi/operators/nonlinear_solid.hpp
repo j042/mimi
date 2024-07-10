@@ -4,21 +4,49 @@
 
 #include <mfem.hpp>
 
-#include "mimi/operators/linear_elasticity.hpp"
+#include "mimi/operators/base.hpp"
 #include "mimi/utils/containers.hpp"
 
 namespace mimi::operators {
 
-class NonlinearSolid : public LinearElasticity {
+class NonlinearSolid : public OperatorBase,
+                       public mfem::SecondOrderTimeDependentOperator {
 public:
-  using Base_ = LinearElasticity;
-  using MimiBase_ = Base_::MimiBase_;
-  using MfemBase_ = Base_::MfemBase_;
+  using MimiBase_ = OperatorBase;
+  using MfemBase_ = mfem::SecondOrderTimeDependentOperator;
+  using LinearFormPointer_ = MimiBase_::LinearFormPointer_;
+  using BilinearFormPointer_ = MimiBase_::BilinearFormPointer_;
   using NonlinearFormPointer_ = MimiBase_::NonlinearFormPointer_;
 
 protected:
-  // nonlinear stiffness -> Base_::stiffness_ ist left untouched here
+  // linear forms
+  LinearFormPointer_ rhs_;
+
+  // bilinear forms
+  BilinearFormPointer_ mass_;
+  BilinearFormPointer_ viscosity_;
+  BilinearFormPointer_ stiffness_;
+
+  // non linear forms
+  NonlinearFormPointer_ contact_;
+
+  // pure vertex-wise forces - usually from fsi
+  std::shared_ptr<mfem::Vector> rhs_vector_;
+  // nonlinear stiffness -> material/body behavior
   NonlinearFormPointer_ nonlinear_stiffness_;
+
+  // mass matrix inversion using krylov solver
+  mfem::CGSolver mass_inv_;
+  mfem::DSmoother mass_inv_prec_;
+  double rel_tol_{1e-8};
+  double abs_tol_{1e-12};
+  int max_iter_{1000};
+
+  // internal values - to set params for each implicit term
+  const mfem::Vector* x_;
+  const mfem::Vector* v_;
+  double fac0_;
+  double fac1_;
 
   // unlike base classes, we will keep one sparse matrix and initialize
   std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
@@ -30,10 +58,13 @@ protected:
   mutable mfem::Vector temp_x_;
   mutable mfem::Vector temp_v_;
 
+  mutable mfem::SparseMatrix* jacobian_ = nullptr;
+
 public:
   /// This is same as Base_'s ctor
-  NonlinearSolid(mfem::FiniteElementSpace& fe_space, mfem::GridFunction* x_ref)
-      : Base_(fe_space, x_ref) {
+  NonlinearSolid(mfem::FiniteElementSpace& fe_space)
+      : MimiBase_(fe_space),
+        MfemBase_(fe_space.GetTrueVSize(), 0.0) {
     MIMI_FUNC()
   }
 
@@ -62,26 +93,96 @@ public:
     dirichlet_dofs_ = &nonlinear_stiffness_->GetEssentialTrueDofs();
   }
 
+  virtual void SetRhsVector(const std::shared_ptr<mfem::Vector>& rhs_vector) {
+    MIMI_FUNC()
+
+    rhs_vector_ = rhs_vector;
+  }
+
+  virtual void SetupBilinearMassForm() {
+    MIMI_FUNC()
+    // setup mass matrix and inverter
+    // this is used once at the very beginning of implicit ode step
+    mass_ = MimiBase_::bilinear_forms_.at("mass");
+
+    // we will finalize here
+    mass_->Finalize(0); // skip_zero is 0, because there won't be zeros.
+    // we sort mass matrix for several reasons:
+    // 1. For derived (nonlinear) systems, we can take sparsity patterns
+    // directly from mass matrix
+    // 2. Mass matrix is not dependent in time (or at least for uniform
+    // density), meaning we can reset gradients at each iteration by copying A
+    // 3. UMFPack, solver we use, always expect sorted matrix and it's called at
+    // every iteration.
+    mass_->SpMat().SortColumnIndices();
+
+    // setup mass solver
+    mass_inv_.iterative_mode = false;
+    mass_inv_.SetRelTol(rel_tol_);
+    mass_inv_.SetAbsTol(abs_tol_);
+    mass_inv_.SetMaxIter(max_iter_);
+    mass_inv_.SetPrintLevel(mfem::IterativeSolver::PrintLevel()
+                                .Warnings()
+                                .Errors()
+                                .Summary()
+                                .FirstAndLast());
+    mass_inv_.SetPreconditioner(mass_inv_prec_);
+    mass_inv_.SetOperator(mass_->SpMat());
+  }
+
+  virtual void SetupNonlinearContactForm() {
+    MIMI_FUNC()
+
+    // contact
+    contact_ = MimiBase_::nonlinear_forms_["contact"];
+    if (contact_) {
+      mimi::utils::PrintInfo(Name(), "has contact term.");
+    }
+  }
+
+  virtual void SetupBilinearViscosityForm() {
+    MIMI_FUNC()
+
+    // viscosity
+    viscosity_ = MimiBase_::bilinear_forms_["viscosity"];
+    if (viscosity_) {
+      viscosity_->Finalize(0); // skip_zero is 0
+      // if this is sorted, we can just add A
+      viscosity_->SpMat().SortColumnIndices();
+      mimi::utils::PrintInfo(Name(), "has viscosity term.");
+    }
+  }
+
+  virtual void SetupLinearRhsForm() {
+    MIMI_FUNC()
+
+    // rhs linear form
+    rhs_ = MimiBase_::linear_forms_["rhs"];
+    if (rhs_) {
+      mimi::utils::PrintInfo(Name(), "has rhs linear form term");
+    }
+  }
+
   virtual void Setup() {
     MIMI_FUNC()
 
     // setup basics -> these finalizes sparse matrices for bilinear forms
-    Base_::SetupBilinearMassForm();
-    Base_::SetupNonlinearContactForm();
-    Base_::SetupBilinearViscosityForm();
-    Base_::SetupLinearRhsForm();
+    SetupBilinearMassForm();
+    SetupNonlinearContactForm();
+    SetupBilinearViscosityForm();
+    SetupLinearRhsForm();
 
     // make sure Sparse Matrix of BilinearForms are in CSR form
-    assert(Base_::mass_->SpMat().Finalized());
+    assert(mass_->SpMat().Finalized());
     // and sorted
-    assert(Base_::mass_->SpMat().ColumnsAreSorted());
+    assert(mass_->SpMat().ColumnsAreSorted());
     // take SpMat's pointers
-    mass_A_ = Base_::mass_->SpMat().GetData();
-    mass_n_nonzeros_ = Base_::mass_->SpMat().NumNonZeroElems();
-    if (Base_::viscosity_) {
+    mass_A_ = mass_->SpMat().GetData();
+    mass_n_nonzeros_ = mass_->SpMat().NumNonZeroElems();
+    if (viscosity_) {
       // same for viscosity_
-      assert(Base_::viscosity_->SpMat().Finalized());
-      assert(Base_::viscosity_->SpMat().ColumnsAreSorted());
+      assert(viscosity_->SpMat().Finalized());
+      assert(viscosity_->SpMat().ColumnsAreSorted());
     }
 
     nonlinear_stiffness_ =
@@ -96,7 +197,7 @@ public:
     // technically, it is okay to copy
     owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(mass_->SpMat());
     assert(owning_jacobian_->Finalized());
-    Base_::jacobian_ = owning_jacobian_.get();
+    jacobian_ = owning_jacobian_.get();
     // and initialize values with zero
     owning_jacobian_->operator=(0.0);
   }
