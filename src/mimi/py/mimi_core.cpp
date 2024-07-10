@@ -10,6 +10,7 @@ void init_py_hardening(py::module_&);
 void init_py_nonlinear_solid(py::module_&);
 void init_py_ad(py::module_&);
 void init_py_runtime_communication(py::module_&);
+void init_py_ex2(py::module_&);
 } // namespace mimi::py
 
 PYBIND11_MODULE(mimi_core, m) {
@@ -21,4 +22,5 @@ PYBIND11_MODULE(mimi_core, m) {
   mimi::py::init_py_nonlinear_solid(m);
   mimi::py::init_py_ad(m);
   mimi::py::init_py_runtime_communication(m);
+  mimi::py::init_py_ex2(m);
 }
