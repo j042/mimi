@@ -1,5 +1,3 @@
-#pragma once
-
 #include <mfem.hpp>
 /* pybind11 */
 #include <pybind11/numpy.h>
@@ -36,28 +34,44 @@ namespace mimi::py {
 //               meshes with curved elements, and the definition of piece-wise
 //               constant and vector coefficient objects. Static condensation is
 //               also illustrated.
+class PyLECantileverBeam{
+   std::string mesh_file;
+   std::string output_dir;
+   std::string sim_name;
 
-array<double, 2> calculate_volume_and_compliance(const char *mesh_file,
-                         const char *output_dir,
-                         const char *sim_name="Example2")
-{
+   GridFunction solution;
+   public:
+      double compliance;
+      double volume;
+      PyLECantileverBeam(std::string mesh_file,
+                 std::string output_dir,
+                 std::string sim_name="Example2"){
+         this->mesh_file = mesh_file;
+         this->output_dir = output_dir;
+         this->sim_name = sim_name;
+      }
+      void solve();
+      pybind11::array_t<double> get_solution();
+};
+
+void PyLECantileverBeam::solve(){
    int order = 1;
    bool static_cond = false;
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral or hexahedral elements with the same code.
-   Mesh *mesh = new Mesh(mesh_file, 1, 1);
+   Mesh *mesh = new Mesh(this->mesh_file, 1, 1);
    int dim = mesh->Dimension();
 
    if (mesh->bdr_attributes.Max() < 2)
    {
       cerr << "\nInput mesh should have at least "
-           << "two boundary attributes! (See schematic in ex2.cpp)\n"
-           << endl;
+         << "two boundary attributes! (See schematic in ex2.cpp)\n"
+         << endl;
    }
-
    // 3. Select the order of the finite element discretization space. For NURBS
    //    meshes, we increase the order by degree elevation.
+
    if (mesh->NURBSext)
    {
       mesh->DegreeElevate(order, order);
@@ -233,7 +247,7 @@ array<double, 2> calculate_volume_and_compliance(const char *mesh_file,
    {
       GridFunction *nodes = mesh->GetNodes();
       *nodes += x;
-      x *= -1;
+      // x *= -1; I don't know why they do this
       // ofstream mesh_ofs("displaced.mesh");
       // mesh_ofs.precision(8);
       // mesh->Print(mesh_ofs);
@@ -255,8 +269,8 @@ array<double, 2> calculate_volume_and_compliance(const char *mesh_file,
 
    {
       ParaViewDataCollection *pd = NULL;
-      pd = new ParaViewDataCollection(sim_name, mesh);
-      pd->SetPrefixPath(output_dir);
+      pd = new ParaViewDataCollection(this->sim_name, mesh);
+      pd->SetPrefixPath(this->output_dir);
       pd->RegisterField("solution", &x);
       pd->SetLevelsOfDetail(order);
       pd->SetDataFormat(VTKFormat::BINARY);
@@ -279,7 +293,17 @@ array<double, 2> calculate_volume_and_compliance(const char *mesh_file,
    }
    delete mesh;
 
-   return array<double, 2>{domain_volume, compliance};
+   this->compliance = compliance;
+   this->volume = domain_volume;
+   this->solution = x;
 }
 
+pybind11::array_t<double> PyLECantileverBeam::get_solution(){
+   // Get the solution as a numpy array
+   // Get the solution as a numpy array
+   int n = this->solution.Size();
+   double *data = this->solution.GetData();
+   pybind11::array_t<double> solution = pybind11::array_t<double>(n, data);
+   return solution;
+}
 } // namespace mimi::py
