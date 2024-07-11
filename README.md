@@ -1,5 +1,9 @@
 # mimi
-MFEM IGA solid MechanIcs
+`mimi` is IGA solid mechanics solver leveraging MFEM's NURBS discritization techniques.
+The key objective of this project is to investigate and prototype solid models in multiphysics scenarios, emphasizing fluid-structure-contact interaction.
+It implements implicit nonlinear structural dynamics and contact mechanics with a rigid body, with an option for shared memory parallelization.
+It also provides a thin python wrapper for easy data exchange, dynamic runtime controls, and interoperation with python scientific ecosystem.
+
 
 ## Install
 ```bash
@@ -25,5 +29,13 @@ python3 setup.py develop
 DEBUG=1 python3 setup.py develop
 
 # 4. try examples - currently those need to be called at mimi's root
-python3 examples/linear_elasticity_contact.py
+python3 examples/nonlinear_solid.py
 ```
+
+## Acknowledgement
+Some of the functions and implementations are motivated/adapted/extracted from following amazing open-source projects.
+Please check them out!
+- [MFEM](mfem.org)
+- [Serac](https://github.com/LLNL/serac)
+- [optimism](https://github.com/sandialabs/optimism)
+- [MOOSE](https://mooseframework.inl.gov)
