@@ -13,21 +13,8 @@ using namespace std;
 using namespace mfem;
 
 namespace mimi::py {
-//                                MFEM Example 2
-//
-// Compile with: make ex2
-//
-// Sample runs:  ex2 -m ../data/beam-tri.mesh
-//               ex2 -m ../data/beam-quad.mesh
-//               ex2 -m ../data/beam-tet.mesh
-//               ex2 -m ../data/beam-hex.mesh
-//               ex2 -m ../data/beam-wedge.mesh
-//               ex2 -m ../data/beam-quad.mesh -o 3 -sc
-//               ex2 -m ../data/beam-quad-nurbs.mesh
-//               ex2 -m ../data/beam-hex-nurbs.mesh
-//
 // Description:  This example code solves a simple linear elasticity problem
-//               describing a multi-material cantilever beam.
+//               describing a cantilever beam.
 //
 //               Specifically, we approximate the weak form of -div(sigma(u))=0
 //               where sigma(u)=lambda*div(u)*I+mu*(grad*u+u*grad) is the stress
@@ -39,18 +26,16 @@ namespace mimi::py {
 //               otherwise. The geometry of the domain is assumed to be as
 //               follows:
 //
-//                                 +----------+----------+
-//                    boundary --->| material | material |<--- boundary
-//                    attribute 1  |    1     |    2     |     attribute 2
-//                    (fixed)      +----------+----------+     (pull down)
+//                                 +--------------------+
+//                    boundary --->|                    |<--- boundary
+//                    attribute 1  |                    |     attribute 2
+//                    (fixed)      +--------------------+     (pull down)
 //
 //               The example demonstrates the use of high-order and NURBS vector
 //               finite element spaces with the linear elasticity bilinear form,
 //               meshes with curved elements, and the definition of piece-wise
 //               constant and vector coefficient objects. Static condensation is
 //               also illustrated.
-//
-//               We recommend viewing Example 1 before viewing this example.
 
 array<double, 2> calculate_volume_and_compliance(const char *mesh_file,
                          const char *output_dir,
