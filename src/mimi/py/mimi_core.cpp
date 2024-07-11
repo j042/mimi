@@ -13,7 +13,7 @@ void init_py_nonlinear_visco_solid(py::module_&);
 void init_py_ad(py::module_&);
 void init_py_nonlinear_base_integrator(py::module_&);
 void init_py_runtime_communication(py::module_&);
-void init_py_ex2(py::module_&);
+void init_py_le_cantilever_beam(py::module_&);
 } // namespace mimi::py
 
 PYBIND11_MODULE(mimi_core, m) {
@@ -28,5 +28,5 @@ PYBIND11_MODULE(mimi_core, m) {
   mimi::py::init_py_ad(m);
   mimi::py::init_py_nonlinear_base_integrator(m);
   mimi::py::init_py_runtime_communication(m);
-  mimi::py::init_py_ex2(m);
+  mimi::py::init_py_le_cantilever_beam(m);
 }
