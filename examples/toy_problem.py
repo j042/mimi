@@ -16,8 +16,7 @@ le.subdivide(3)
 # mat
 mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 4000
-# mat.viscosity = 10000
-mat.viscosity = -1
+mat.viscosity = 100
 mat.set_young_poisson(1e7, 0.3)
 le.set_material(mat)
 
@@ -152,13 +151,14 @@ le.boundary_condition = bc
 # setup needs to be called this assembles bilinear forms, linear forms
 le.setup(4)
 
-le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
+le.configure_newton("nonlinear_solid", 1e-10, 1e-8, 100, False)
 
 # set step size
 le.time_step_size = 0.0003
 
 # get view of solution, displacement
 u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+x_ref = le.solution_view("displacement", "x_ref").reshape(-1, le.mesh_dim())
 
 s.show_options["resolutions"] = [100, 30]
 s.show_options["control_points"] = False
@@ -178,32 +178,18 @@ cam = dict(
 
 def move():
     if i > int(ns - 1):
-        u[b3] = np.array([down[-1], *[mm[-1] for mm in mid], up[-1]])
+        u[b3] = (
+            np.array([down[-1], *[mm[-1] for mm in mid], up[-1]]) - x_ref[b3]
+        )
         return
-    u[b3] = np.array([down[i], *[mm[i] for mm in mid], up[i]])
+    u[b3] = np.array([down[i], *[mm[i] for mm in mid], up[i]]) - x_ref[b3]
     return
-
-
-def sol():
-    le.update_contact_lagrange()
-    le.fixed_point_solve2()
-
-
-def c_sol():
-    le.fixed_point_solve2()
-    print(gn())
-
-
-def adv():
-    le.advance_time2()
-    le.fill_contact_lagrange(0)
 
 
 def show():
     s.cps[:] = u[to_s] + o_cps
     gus.show(
-        # [str(i) + " " + str(j) + " " + str(ab) + " " + str(gn()), s, o, uu],
-        [str(i) + " " + str(gn()), s, o, uu],
+        [str(i), s, o, uu],
         vedoplot=plt,
         interactive=False,
         cam=cam,
@@ -212,49 +198,15 @@ def show():
     move()
 
 
-coe = 0.9e10
-le.fill_contact_lagrange(0)
+coe = 1e10
 # initialize a plotter
 plt = gus.show([s, o, uu], close=False)
-n = le.nonlinear_from2("contact")
-ni = n.boundary_integrator(0)
-ni2 = n.boundary_integrator(1)
 
-
-def gn():
-    return ni.gap_norm() + ni2.gap_norm()
-
-
-for i in range(10000):
+scene0.coefficient = coe
+scene1.coefficient = coe
+for i in range(600):
     move()
-    old = 1
-    b_old = 1
-    scene0.coefficient = coe
-    scene1.coefficient = coe
-    for j in range(20):
-        sol()
-        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 3, True)
-        rel, ab = le.newton_final_norms("nonlinear_solid")
-        bdr_norm = np.linalg.norm(n.boundary_residual())
-        print("augumenting")
-        print()
-        if gn() < 1e-5:
-            print(gn(), "exit!")
-            break
-    print("final solve!")
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True)
-    le.update_contact_lagrange()
-    scene0.coefficient = 0.0
-    scene1.coefficient = 0.0
-    c_sol()
-    rel, ab = le.newton_final_norms("nonlinear_solid")
-
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
-    scene0.coefficient = coe
-    scene1.coefficient = coe
-
-    adv()
+    le.step_time2()
     show()
-    plt.screenshot(f"es/{100000+i}.png")
 
 gus.show(s, vedoplot=plt, interactive=True)

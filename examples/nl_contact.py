@@ -1,32 +1,25 @@
 import splinepy as sp
 import mimi
-import gustaf as gus
-import numpy as np
 
 sp.settings.NTHREADS = 4
 
-tic = gus.utils.tictoc.Tic()
-
 # init, read mesh
-le = mimi.NonlinearSolid()
-le.read_mesh("tests/data/square-nurbs.mesh")
+nl = mimi.NonlinearSolid()
+nl.read_mesh("tests/data/square-nurbs.mesh")
 
 # refine
-le.elevate_degrees(1)
-le.subdivide(3)
+nl.elevate_degrees(1)
+nl.subdivide(3)
 
 # mat
 mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 7e4
 mat.viscosity = -1
 mat.set_young_poisson(1e10, 0.3)
-# mat.isotropic_hardening = 0
-# mat.kinematic_hardening = 0
-# mat.sigma_y = 1e4
-le.set_material(mat)
+nl.set_material(mat)
 
 # create splinepy partner
-s, to_m, to_s = mimi.to_splinepy(le)
+s, to_m, to_s = mimi.to_splinepy(nl)
 o_cps = s.cps.copy()
 
 # set bc
@@ -49,31 +42,24 @@ scene.coefficient = 0.5e11
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1)
 bc.current.contact(1, scene)
-le.boundary_condition = bc
-
-tic.toc()
+nl.boundary_condition = bc
 
 # setup needs to be called this assembles bilinear forms, linear forms
-le.setup(4)
+nl.setup(4)
 
-le.configure_newton("nonlinear_solid", 1e-14, 1e-8, 20, False)
-
-tic.toc("bilinear, linear forms assembly")
+nl.configure_newton("nonlinear_solid", 1e-10, 1e-8, 100, False)
 
 # set step size
-le.time_step_size = 0.005
+nl.time_step_size = 0.001
 
 # get view of solution, displacement
-u = le.solution_view("displacement", "x").reshape(-1, le.mesh_dim())
+u = nl.solution_view("displacement", "x").reshape(-1, nl.mesh_dim())
 
-tic.summary(print_=True)
 # set visualization options
 s.show_options["resolutions"] = [100, 30]
 s.show_options["control_points"] = False
 curv.show_options["control_points"] = False
 s.cps[:] = u[to_s] + o_cps
-
-tic.summary(print_=True)
 
 
 def move():
@@ -84,26 +70,11 @@ def move():
     scene.plant_kd_tree(10000, 4)
 
 
-def sol():
-    le.update_contact_lagrange()
-    le.fixed_point_solve2()
-
-
-def c_sol():
-    le.fixed_point_solve2()
-    print(ni.gap_norm())
-
-
-def adv():
-    le.advance_time2()
-    le.fill_contact_lagrange(0)
-
-
 def show():
     s.cps[:] = u[to_s] + o_cps
-    gus.show(
+    sp.show(
         [
-            str(i) + " " + str(j) + " " + str(ab) + " " + str(ni.gap_norm()),
+            str(i),
             s,
             curv,
         ],
@@ -112,38 +83,13 @@ def show():
     )
 
 
-coe = 1e10
+scene.coefficient = 1e11
+
 # initialize a plotter
-plt = gus.show([s, curv], close=False)
-n = le.nonlinear_from2("contact")
-ni = n.boundary_integrator(0)
+plt = sp.show([s, curv], close=False)
 for i in range(1000):
     move()
-    old = 1
-    b_old = 1
-    scene.coefficient = coe
-    for j in range(100):
-        sol()
-        le.configure_newton("nonlinear_solid", 1e-6, 1e-8, 3, True)
-        rel, ab = le.newton_final_norms("nonlinear_solid")
-        bdr_norm = np.linalg.norm(n.boundary_residual())
-        print("augumenting", bdr_norm)
-        print()
-        if ni.gap_norm() < 1e-5:
-            print(ni.gap_norm(), "exit!")
-            break
-    print("final solve!")
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-8, 20, True)
-    le.update_contact_lagrange()
-    scene.coefficient = 0.0
-    c_sol()
-    rel, ab = le.newton_final_norms("nonlinear_solid")
-
-    le.configure_newton("nonlinear_solid", 1e-8, 1e-10, 3, False)
-    scene.coefficient = coe
-    adv()
+    nl.step_time2()
     show()
 
-
-tic.summary(print_=True)
-gus.show(s, vedoplot=plt, interactive=True)
+sp.show(s, vedoplot=plt, interactive=True)
