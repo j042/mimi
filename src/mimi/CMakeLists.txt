@@ -1,6 +1,7 @@
 set(SRCS
     solvers/newton.cpp
     py/py_boundary_conditions.cpp
+    py/py_le_cantilever_beam.cpp
     py/py_solid.cpp
     py/py_nearest_distance.cpp
     py/py_material.cpp
