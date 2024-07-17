@@ -12,36 +12,28 @@ namespace mimi::operators {
 class IncompressibleFluid : public OperatorTwoBases {
 public:
   using MimiBase_ = OperatorTwoBases;
-//   using MfemBase_ = mfem::FirstOrderTimeDependentOperator;
   using LinearFormPointer_ = MimiBase_::LinearFormPointer_;
   using BilinearFormPointer_ = MimiBase_::BilinearFormPointer_;
-  using MixedBilinearFormPointer_ = MimiBase_::MixedBilinearFormPointer_;
 
 protected:
   // linear forms
   LinearFormPointer_ rhs_;
 
   // bilinear forms
-  // BilinearFormPointer_ mass_;
   BilinearFormPointer_ diffusion_;
-  MixedBilinearFormPointer_ conservation_;
+  BilinearFormPointer_ conservation_;
 
-  // pure vertex-wise forces - usually from fsi
   std::shared_ptr<mfem::Vector> rhs_vector_;
-  // nonlinear stiffness -> material/body behavior
 
   // internal values - to set params for each implicit term
   const mfem::Vector* vel_;
   const mfem::Vector* p_;
-  double fac0_;
-  double fac1_;
+
+  mutable mfem::Vector temp_res_vel_;
+  mutable mfem::Vector temp_res_p_;
 
   // unlike base classes, we will keep one sparse matrix and initialize
   std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
-
-  /// data to mass sparse matrix - A is mfem's notation of data array
-  // const double* mass_A_ = nullptr;
-  // int mass_n_nonzeros_ = -1;
 
   mutable mfem::Vector temp_vel_;
   mutable mfem::Vector temp_p_;
@@ -59,21 +51,13 @@ public:
 
   virtual std::string Name() const { return "IncompressibleFluid"; }
 
-  virtual void SetParameters(double const& fac0,
-                             double const& fac1,
-                             const mfem::Vector* vel,
+  virtual void SetParameters(const mfem::Vector* vel,
                              const mfem::Vector* p) {
     MIMI_FUNC()
 
     // this is from base
-    fac0_ = fac0;
-    fac1_ = fac1;
     vel_ = vel;
     p_ = p;
-
-    // nonlinear_stiffness_->dt_ = dt_;
-    // nonlinear_stiffness_->first_effective_dt_ = fac0;
-    // nonlinear_stiffness_->second_effective_dt_ = fac1;
   }
 
   // TODO: Surely wrong; check if this is right
@@ -106,12 +90,12 @@ public:
 
   // Bilinear form for the weak form of the pressure gradient and the mass conservation
   // TODO: check if it's correct
-  virtual void SetupMixedBilinearConservationForm() {
+  virtual void SetupBilinearConservationForm() {
     MIMI_FUNC()
 
-    conservation_ = MimiBase_::mixed_bilinear_forms_["conservation"];
+    conservation_ = MimiBase_::bilinear_forms_["conservation"];
     if (conservation_) {
-      mimi::utils::PrintAndThrowError("The conservation mixed bilinear form is not yet implemented!");
+      mimi::utils::PrintAndThrowError("The conservation bilinear form is not yet implemented!");
     }
 
   }
@@ -131,7 +115,7 @@ public:
 
     // setup basics -> these finalizes sparse matrices for bilinear forms
     SetupBilinearDiffusionForm();
-    SetupMixedBilinearConservationForm();
+    SetupBilinearConservationForm();
     SetupLinearRhsForm();
 
     if (diffusion_) {
@@ -158,11 +142,96 @@ public:
 
   // TODO: time dependent ODE solve
 
-  // TODO: Mult for solving nonlinear system
+  // TODO
+  /// @brief Implicit solver
+  virtual void ImplicitSolve(mfem::Vector& vel,
+                             mfem::Vector&p) {
+    MIMI_FUNC()
+
+    mimi::utils::PrintAndThrowError("Still unsure what implicit solve should output!");
+  }
+
+  // Mult for solving nonlinear system
+  // computes residual, which is used by Newton solver
+  // TODO: check Dirichlet Dofs
+  virtual void Mult(mfem::Vector& residual) const {
+    MIMI_FUNC()
+    temp_res_vel_.SetSize(vel_->Size());
+    temp_res_p_.SetSize(p_->Size());
+
+    // A v
+    diffusion_->AddMult(vel_, temp_res_vel_);
+
+    // should be right; otherwise just swap
+    // div(v) q
+    conservation_->AddMult(vel_, temp_res_vel_);
+    // div(w) p
+    conservation_->AddMultTranspose(p_, temp_res_p_);
+
+    // substract rhs
+    if (rhs_) {
+      residual.Add(-1.0, *rhs_);
+    }
+
+    // this is usually just for fsi
+    if (rhs_vector_) {
+      residual.Add(-1.0, *rhs_vector_);
+    }
+
+    // Set residual of Dirichlet DoFs to zero
+    for (const int i : *dirichlet_dofs_velocity_) {
+      temp_res_vel_[i] = 0.0;
+    }
+    const int n_vel_dofs = {fe_space_1_->GetNE()};
+    for (const int i : *dirichlet_dofs_pressure_) {
+      temp_res_p_[i] = 0.0;
+    }
+    // ------------
+    // TODO: declare ndofs: should be dofs vel + dofs p
+    // copy or move??? to residual vector???
+  }
 
   // TODO: GetGradient
+  virtual mfem::Operator& GetGradient() const {
+    MIMI_FUNC()
+
+    // TODO nothing more?
+
+    return *jacobian_;
+  }
 
   // TODO: ResidualAndGrad
+  virtual mfem::Operator* ResidualAndGrad(const int nthread, mfem::Vector& residual) const {
+    // Residual
+    // A v
+    diffusion_->AddMult(vel_, residual);
+
+    // should be right; otherwise just swap
+    // div(v) q
+    conservation_->AddMult(vel_, residual);
+    // div(w) p
+    conservation_->AddMultTranspose(p_, residual);
+
+    // substract rhs
+    if (rhs_) {
+      residual.Add(-1.0, *rhs_);
+    }
+
+    // this is usually just for fsi
+    if (rhs_vector_) {
+      residual.Add(-1.0, *rhs_vector_);
+    }
+
+    // Set residual of Dirichlet DoFs to zero
+    for (const int i : *dirichlet_dofs_velocity_) {
+      residual[i] = 0.0;
+    }
+    for (const int i : *dirichlet_dofs_pressure_) {
+      residual[i] = 0.0;
+    }
+
+    return jacobian_;
+  }
 };
 
 } // namespace mimi::operators
