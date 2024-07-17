@@ -223,4 +223,28 @@ protected:
   }
 };
 
+class FluidPrecomputedData {
+protected:
+  std::unordered_map<std::string, std::shared_ptr<PrecomputedData>> data_;
+
+public:
+  std::unique_ptr<mfem::SparseMatrix> mono_sparsity_pattern_;
+
+  void SetVelocity(std::shared_ptr<PrecomputedData> vel) {
+    MIMI_FUNC()
+
+    data_["velocity"] = vel;
+  }
+
+  void SetPressure(std::shared_ptr<PrecomputedData> pres) {
+    MIMI_FUNC()
+
+    data_["pressure"] = pres;
+  }
+
+  /// computes mono sparsity for fluid problems and update support ids for both
+  /// vel and pressure data
+  void ComputeMonoSparsityAndUpdateIds() { MIMI_FUNC() }
+};
+
 } // namespace mimi::utils

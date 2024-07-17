@@ -227,7 +227,7 @@ public:
   /// @param oper
   /// @param ode
   virtual void SetDynamicSystem(mfem::TimeDependentOperator* oper,
-                                 mimi::solvers::OdeBase* ode) {
+                                mimi::solvers::OdeBase* ode) {
 
     MIMI_FUNC()
 

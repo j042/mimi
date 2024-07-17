@@ -1,8 +1,11 @@
 #pragma once
 
+#include <memory>
+
 #include <mfem.hpp>
 
 #include "mimi/py/py_solid.hpp"
+#include "mimi/utils/precomputed.hpp"
 
 namespace mimi::py {
 
@@ -14,6 +17,9 @@ public:
   MaterialPointer_ material_;
   // we create one more mesh that
   std::unique_ptr<mfem::Mesh> vel_mesh_;
+
+  // we work with a mono system instead of block structure
+  std::shared_ptr<mimi::utils::FluidPrecomputedData> fluid_precomputed_data_;
 
   PyStokes() = default;
 
@@ -92,14 +98,19 @@ public:
     // here, we only create one for bilinear. others are done below
     // note, for bilinear, nothing is really saved. just used for thread safety
     mimi::utils::PrintDebug("Creating PrecomputedData");
-    velocity_fes.precomputed_ = std::make_shared<mimi::utils::PrecomputedData>();
-    pressure_fes.precomputed_ = std::make_shared<mimi::utils::PrecomputedData>();
+    velocity_fes.precomputed_ =
+        std::make_shared<mimi::utils::PrecomputedData>();
+    pressure_fes.precomputed_ =
+        std::make_shared<mimi::utils::PrecomputedData>();
 
     mimi::utils::PrintDebug("Setup PrecomputedData");
-    velocity_fes.precomputed_->PrepareThreadSafety(*velocity_fes.fe_space_, n_threads);
+    // first compute sparcity of each block
+    velocity_fes.precomputed_->PrepareThreadSafety(*velocity_fes.fe_space_,
+                                                   n_threads);
     velocity_fes.precomputed_->PrepareElementData();
     velocity_fes.precomputed_->PrepareSparsity();
-    pressure_fes.precomputed_->PrepareThreadSafety(*pressure_fes.fe_space_, n_threads);
+    pressure_fes.precomputed_->PrepareThreadSafety(*pressure_fes.fe_space_,
+                                                   n_threads);
     pressure_fes.precomputed_->PrepareElementData();
     pressure_fes.precomputed_->PrepareSparsity();
     // let's process boundaries
@@ -112,12 +123,12 @@ public:
     // once we have parallel bilinear form assembly we can re directly cal;
     // precompute
 
+    // create FluidPrecomputedData and get sparsity
+
     // creating operators
-    auto fluid_oper =
-        std::make_unique<mimi::operators::IncompressibleFluid>(
-          *velocity_fes.fe_space_,
-          *pressure_fes.fe_space_
-        );
+    auto fluid_oper = std::make_unique<mimi::operators::IncompressibleFluid>(
+        *velocity_fes.fe_space_,
+        *pressure_fes.fe_space_);
 
     // let's setup the system
     // create dummy sparse matrix - mfem just sets referencee, so no copies are
@@ -126,7 +137,8 @@ public:
     mfem::SparseMatrix tmp_rect;
 
     // 1. velocity diffusion
-    auto vel_diffusion = std::make_shared<mfem::BilinearForm(velocity_fes.fe_space_.get());
+    auto vel_diffusion =
+        std::make_shared < mfem::BilinearForm(velocity_fes.fe_space_.get());
     fluid_oper->AddBilinearForm("vel_diffusion", vel_diffusion);
     assert(material_->density_ > 0.0);
 
@@ -150,11 +162,9 @@ public:
 
     // 2. presure gradient and mass conservation
     if (material_->viscosity_ > 0.0) {
-      auto conservation =
-          std::make_shared<mfem::MixedBilinearForm>(
-            velocity_fes.fe_space_.get(),
-            pressure_fes.fe_space_.get()
-          );
+      auto conservation = std::make_shared<mfem::MixedBilinearForm>(
+          velocity_fes.fe_space_.get(),
+          pressure_fes.fe_space_.get());
       fluid_oper->AddMixedBilinearForm("conservation", conservation);
 
       // create viscosity coeff
@@ -166,11 +176,9 @@ public:
       // create integrator and add to mixed bilinear form
       visc->AddDomainIntegrator(new mfem::VectorDivergenceIntegrator());
       visc->Assemble(0);
-      visc->FormRectangularSystemMatrix(
-        velocity_fes.zero_dofs_,
-        pressure_fes.zero_dofs_,
-        tmp_rect
-      );
+      visc->FormRectangularSystemMatrix(velocity_fes.zero_dofs_,
+                                        pressure_fes.zero_dofs_,
+                                        tmp_rect);
     }
 
     // 4. linear form

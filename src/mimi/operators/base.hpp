@@ -32,7 +32,8 @@ public:
   /// @brief container to hold any necessary / related bilinear forms
   std::unordered_map<std::string, BilinearFormPointer_> bilinear_forms_{};
   /// @brief container to hold any necessary / related mixed bilinear forms
-  std::unordered_map<std::string, MixedBilinearFormPointer_> mixed_bilinear_forms_{};
+  std::unordered_map<std::string, MixedBilinearFormPointer_>
+      mixed_bilinear_forms_{};
   /// @brief container to hold any necessary / related nonlinear forms
   std::unordered_map<std::string, NonlinearFormPointer_> nonlinear_forms_{};
 
@@ -69,7 +70,7 @@ public:
   /// @param key
   /// @param mbf
   virtual void AddMixedBilinearForm(std::string const& key,
-                               const MixedBilinearFormPointer_& mbf) {
+                                    const MixedBilinearFormPointer_& mbf) {
     MIMI_FUNC();
 
     mixed_bilinear_forms_[key] = mbf;
@@ -122,7 +123,8 @@ public:
   /// @brief container to hold any necessary / related bilinear forms
   std::unordered_map<std::string, BilinearFormPointer_> bilinear_forms_{};
   /// @brief container to hold any necessary / related mixed bilinear forms
-  std::unordered_map<std::string, MixedBilinearFormPointer_> mixed_bilinear_forms_{};
+  std::unordered_map<std::string, MixedBilinearFormPointer_>
+      mixed_bilinear_forms_{};
   /// @brief container to hold any necessary / related nonlinear forms
   std::unordered_map<std::string, NonlinearFormPointer_> nonlinear_forms_{};
 
@@ -131,12 +133,10 @@ public:
 
   /// @brief ctor
   /// @param fe_space
-  OperatorBase(
-    mfem::FiniteElementSpace& fe_space_1,
-    mfem::FiniteElementSpace& fe_space_2
-  ) : fe_space_1_(fe_space_1), fe_space_2_(fe_space_2) {}
-
-  
+  OperatorBase(mfem::FiniteElementSpace& fe_space_1,
+               mfem::FiniteElementSpace& fe_space_2)
+      : fe_space_1_(fe_space_1),
+        fe_space_2_(fe_space_2) {}
 
   /// @brief adds linear form
   /// @param key
@@ -162,7 +162,7 @@ public:
   /// @param key
   /// @param mbf
   virtual void AddMixedBilinearForm(std::string const& key,
-                               const MixedBilinearFormPointer_& mbf) {
+                                    const MixedBilinearFormPointer_& mbf) {
     MIMI_FUNC();
 
     mixed_bilinear_forms_[key] = mbf;
@@ -187,7 +187,7 @@ public:
     newton_solver_ = newton_solver;
   }
 
-  // TODO: 
+  // TODO:
   virtual void PostTimeAdvance(const mfem::Vector& v,
                                const mfem::Vector& protected) = 0;
 

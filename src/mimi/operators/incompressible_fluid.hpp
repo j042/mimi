@@ -42,17 +42,15 @@ protected:
 
 public:
   /// This is same as Base_'s ctor
-  IncompressibleFluid(
-    mfem::FiniteElementSpace& fe_space_velocity,
-    mfem::FiniteElementSpace& fe_space_pressure
-    ) : MimiBase_(fe_space_velocity, fe_space_pressure) {
+  IncompressibleFluid(mfem::FiniteElementSpace& fe_space_velocity,
+                      mfem::FiniteElementSpace& fe_space_pressure)
+      : MimiBase_(fe_space_velocity, fe_space_pressure) {
     MIMI_FUNC()
   }
 
   virtual std::string Name() const { return "IncompressibleFluid"; }
 
-  virtual void SetParameters(const mfem::Vector* vel,
-                             const mfem::Vector* p) {
+  virtual void SetParameters(const mfem::Vector* vel, const mfem::Vector* p) {
     MIMI_FUNC()
 
     // this is from base
@@ -78,7 +76,7 @@ public:
   virtual void SetupBilinearDiffusionForm() {
     MIMI_FUNC()
 
-    // Diffusion 
+    // Diffusion
     diffusion_ = MimiBase_::bilinear_forms_["diffusion"];
     if (diffusion_) {
       diffusion_->Finalize(0); // skip_zero is 0
@@ -88,16 +86,17 @@ public:
     }
   }
 
-  // Bilinear form for the weak form of the pressure gradient and the mass conservation
+  // Bilinear form for the weak form of the pressure gradient and the mass
+  // conservation
   // TODO: check if it's correct
   virtual void SetupBilinearConservationForm() {
     MIMI_FUNC()
 
     conservation_ = MimiBase_::bilinear_forms_["conservation"];
     if (conservation_) {
-      mimi::utils::PrintAndThrowError("The conservation bilinear form is not yet implemented!");
+      mimi::utils::PrintAndThrowError(
+          "The conservation bilinear form is not yet implemented!");
     }
-
   }
 
   virtual void SetupLinearRhsForm() {
@@ -144,11 +143,11 @@ public:
 
   // TODO
   /// @brief Implicit solver
-  virtual void ImplicitSolve(mfem::Vector& vel,
-                             mfem::Vector&p) {
+  virtual void ImplicitSolve(mfem::Vector& vel, mfem::Vector& p) {
     MIMI_FUNC()
 
-    mimi::utils::PrintAndThrowError("Still unsure what implicit solve should output!");
+    mimi::utils::PrintAndThrowError(
+        "Still unsure what implicit solve should output!");
   }
 
   // Mult for solving nonlinear system
@@ -201,7 +200,8 @@ public:
   }
 
   // TODO: ResidualAndGrad
-  virtual mfem::Operator* ResidualAndGrad(const int nthread, mfem::Vector& residual) const {
+  virtual mfem::Operator* ResidualAndGrad(const int nthread,
+                                          mfem::Vector& residual) const {
     // Residual
     // A v
     diffusion_->AddMult(vel_, residual);
