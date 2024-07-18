@@ -44,6 +44,7 @@ public:
 
   /// @brief results of nearest distance query
   class Results {
+  public:
     // query
     mimi::utils::Data<double> parametric_;
     mimi::utils::Data<double> physical_;

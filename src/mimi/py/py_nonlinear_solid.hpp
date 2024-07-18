@@ -388,7 +388,7 @@ public:
              .constant_velocity_.empty()) {
       auto dynamic_dirichlet = std::make_shared<
           mimi::utils::TimeDependentDirichletBoundaryCondition>();
-      dynamic_dirichlet->boundary_dof_ids = &disp_fes.boundary_dof_ids;
+      dynamic_dirichlet->boundary_dof_ids_ = &disp_fes.boundary_dof_ids;
       dynamic_dirichlet->dynamic_bc_ = Base_::boundary_conditions_.get();
       odesolver->dynamic_dirichlet_ = dynamic_dirichlet;
     }

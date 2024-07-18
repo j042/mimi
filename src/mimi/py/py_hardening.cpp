@@ -2,7 +2,7 @@
 
 #include <pybind11/pybind11.h>
 
-#include "mimi/materials/materials_hardening.hpp"
+#include "mimi/materials/material_hardening.hpp"
 
 namespace mimi::py {
 

@@ -103,6 +103,7 @@ public:
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
   class TemporaryData {
+  public:
     mfem::Vector element_x_;
     mfem::DenseMatrix element_x_mat_;
     mfem::DenseMatrix J_;
@@ -378,9 +379,9 @@ public:
             local_vdofs.SetSize(ed.n_tdof);
             for (int i{}; i < ed.n_tdof; ++i) {
               if (i < ed.n_dof) {
-                local_dofs[i] = local_marked_dofs_[ed.v_dofs_[i] / dim_];
+                local_dofs[i] = local_marked_dofs_[ed.v_dofs[i] / dim_];
               }
-              local_vdofs[i] = local_marked_v_dofs_[ed.v_dofs_[i]];
+              local_vdofs[i] = local_marked_v_dofs_[ed.v_dofs[i]];
             }
           }
           TemporaryData& tmp = temporary_data_[i_thread];
@@ -581,7 +582,7 @@ public:
     double* grad_data = tmp.local_grad_.GetData();
     double* solution_data = tmp.CurrentSolution().GetData();
     const double* residual_data = tmp.local_residual_.GetData();
-    const double* fd_forward_data = tmp.forward_residual.GetData();
+    const double* fd_forward_data = tmp.forward_residual_.GetData();
     const int n_t_dof = tmp.GetTDof();
     for (int i{}; i < n_t_dof; ++i) {
       double& with_respect_to = *solution_data++;

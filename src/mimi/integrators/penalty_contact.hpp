@@ -137,8 +137,8 @@ public:
     /// wraps forward_residual data
     mfem::DenseMatrix forward_residual;
 
-    mimi::coefficients::NearestDistanceBase::Query distance_query_;
-    mimi::coefficients::NearestDistanceBase::Results distance_results_;
+    mimi::coefficients::NearestDistanceBase::Query distance_query;
+    mimi::coefficients::NearestDistanceBase::Results distance_results;
 
     int dim{-1};
 
@@ -148,8 +148,8 @@ public:
       dim = dim_in;
       assert(dim > 0);
 
-      distance_query_.SetSize(dim);
-      distance_results_.SetSize(dim - 1, dim);
+      distance_query.SetSize(dim);
+      distance_results.SetSize(dim - 1, dim);
     }
 
     void SetDof(const int n_dof) {
@@ -423,13 +423,13 @@ public:
     double* residual_begin = residual_matrix.GetData();
     for (QuadData& q : q_data) {
       // get current position and F
-      x.MultTranspose(q.N, tmp.distance_query_.query_.data());
+      x.MultTranspose(q.N, tmp.distance_query.query_.data());
 
       // nearest distance query
-      nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
-                                               tmp.distance_results_);
-      tmp.distance_results_.ComputeNormal<true>(); // unit normal
-      const double g = tmp.distance_results_.NormalGap();
+      nearest_distance_coeff_->NearestDistance(tmp.distance_query,
+                                               tmp.distance_results);
+      tmp.distance_results.ComputeNormal<true>(); // unit normal
+      const double g = tmp.distance_results.NormalGap();
       // for some reason, some query hit right at the very very end
       // and returned super big number / small number
       // Practical solution was to plant the tree with an odd number.
@@ -452,7 +452,7 @@ public:
         constexpr const double angle_tol = 1.e-5;
         if (g > 0.
             || std::acos(
-                   std::min(1., std::abs(g) / tmp.distance_results_.distance_))
+                   std::min(1., std::abs(g) / tmp.distance_results.distance_))
                    > angle_tol) {
           q.Record(keep_record, det_J, 0.0, g, false);
           continue;
@@ -486,12 +486,12 @@ public:
       AddMult_a_VWt(q.integration_weight * det_J * p,
                     q.N.begin(),
                     q.N.end(),
-                    tmp.distance_results_.normal_.begin(),
-                    tmp.distance_results_.normal_.end(),
+                    tmp.distance_results.normal_.begin(),
+                    tmp.distance_results.normal_.end(),
                     residual_begin);
       if (keep_record) {
         force.Add(p * det_J * q.integration_weight,
-                  tmp.distance_results_.normal_.begin());
+                  tmp.distance_results.normal_.begin());
       }
     }
 
@@ -765,12 +765,12 @@ public:
         for (const QuadData& q : bed.quad_data) {
           // get current position and F
           current_element_x.MultTranspose(q.N,
-                                          tmp.distance_query_.query_.data());
+                                          tmp.distance_query.query_.data());
           // query
-          nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
-                                                   tmp.distance_results_);
-          tmp.distance_results_.ComputeNormal<true>(); // unit normal
-          const double g = tmp.distance_results_.NormalGap();
+          nearest_distance_coeff_->NearestDistance(tmp.distance_query,
+                                                   tmp.distance_results);
+          tmp.distance_results.ComputeNormal<true>(); // unit normal
+          const double g = tmp.distance_results.NormalGap();
           if (g < 0.0) {
             local_g_squared_sum += g * g;
           }

@@ -281,8 +281,8 @@ public:
 
             // set properties
             el_data.geometry_type = el_data.element->GetGeomType();
-            el_data.n_dof_ = el_data.element->GetDof();
-            el_data.n_tdof = el_data.n_dof_ * v_dim_;
+            el_data.n_dof = el_data.element->GetDof();
+            el_data.n_tdof = el_data.n_dof * v_dim_;
             el_data.i_thread =
                 i_thread; // this is a help value, don't rely on this
             el_data.id = i;
@@ -327,8 +327,8 @@ public:
 
             // set properties
             bel_data.geometry_type = bel_data.element->GetGeomType();
-            bel_data.n_dof_ = bel_data.element->GetDof();
-            bel_data.n_tdof = bel_data.n_dof_ * v_dim_;
+            bel_data.n_dof = bel_data.element->GetDof();
+            bel_data.n_tdof = bel_data.n_dof * v_dim_;
             bel_data.i_thread =
                 i_thread; // this is a help value, don't rely on this
             bel_data.id = i;
@@ -494,11 +494,11 @@ public:
           q_data.det_dX_dxi = e_data.element_trans->Weight();
 
           // basis
-          q_data.N_.SetSize(e_data.n_dof_);
-          e_data.element->CalcShape(ip, q_data.N_);
+          q_data.N.SetSize(e_data.n_dof);
+          e_data.element->CalcShape(ip, q_data.N);
 
           // basis derivative
-          q_data.dN_dxi.SetSize(e_data.n_dof_, e_data.element->GetDim());
+          q_data.dN_dxi.SetSize(e_data.n_dof, e_data.element->GetDim());
           e_data.element->CalcDShape(ip, q_data.dN_dxi);
 
           // this is often used in
@@ -508,7 +508,7 @@ public:
               mimi::utils::PrintWarning(
                   "Non-Square Jacobian detected for dN_dX computation");
             }
-            q_data.dN_dX.SetSize(e_data.n_dof_, ref_dim);
+            q_data.dN_dX.SetSize(e_data.n_dof, ref_dim);
             dxi_dX.SetSize(dim_, ref_dim);
             mfem::CalcInverse(e_data.element_trans->Jacobian(), dxi_dX);
             mfem::Mult(q_data.dN_dxi, dxi_dX, q_data.dN_dX);

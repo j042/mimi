@@ -293,7 +293,7 @@ public:
       mat = 0.;
     }
     // one scalar, also zero
-    state->scalars_.resize(state->k_state_scalars, 0.);
+    state->scalars.resize(state->k_state_scalars, 0.);
     return state;
   }
 
@@ -312,7 +312,7 @@ public:
     auto& beta = state->matrices[State::k_beta];
     auto& plastic_strain = state->matrices[State::k_plastic_strain];
     auto& accumulated_plastic_strain =
-        state->scalars_[State::k_accumulated_plastic_strain];
+        state->scalars[State::k_accumulated_plastic_strain];
 
     // precompute aux values
     // eps, p, s, eta, q, phi
@@ -421,7 +421,7 @@ public:
       mat = 0.;
     }
     // one scalar, also zero
-    state->scalars_.resize(state->k_state_scalars, 0.);
+    state->scalars.resize(state->k_state_scalars, 0.);
     return state;
   };
 
@@ -440,7 +440,7 @@ public:
     // get states - will get corresponding const-ness
     auto& plastic_strain = state->matrices[State::k_plastic_strain];
     auto& accumulated_plastic_strain =
-        state->scalars_[State::k_accumulated_plastic_strain];
+        state->scalars[State::k_accumulated_plastic_strain];
 
     // precompute aux values
     // eps, p, s, eta, q, phi
@@ -615,10 +615,10 @@ public:
       mat = 0.;
     }
     // one scalar, also zero
-    state->scalars_.resize(state->k_state_scalars, 0.);
+    state->scalars.resize(state->k_state_scalars, 0.);
 
     // set initial temp
-    state->scalars_[State::k_temperature] = initial_temperature_;
+    state->scalars[State::k_temperature] = initial_temperature_;
     return state;
   };
 
@@ -739,8 +739,8 @@ public:
     // get states
     auto& plastic_strain = state->matrices[State::k_plastic_strain];
     auto& accumulated_plastic_strain =
-        state->scalars_[State::k_accumulated_plastic_strain];
-    auto& temperature = state->scalars_[State::k_temperature];
+        state->scalars[State::k_accumulated_plastic_strain];
+    auto& temperature = state->scalars[State::k_temperature];
     auto& previous_eps = state->matrices[State::k_elastic_strain];
 
     // precompute aux values
@@ -928,10 +928,10 @@ public:
     state->matrices[State::k_F_old].Diag(1., dim_);
 
     // one scalar, also zero
-    state->scalars_.assign(state->k_state_scalars, 0.);
+    state->scalars.assign(state->k_state_scalars, 0.);
 
     // set initial temp
-    state->scalars_[State::k_temperature] = initial_temperature_;
+    state->scalars[State::k_temperature] = initial_temperature_;
     return state;
   };
 
@@ -952,8 +952,8 @@ public:
     // get states
     // scalars
     auto& accumulated_plastic_strain =
-        state->scalars_[State::k_accumulated_plastic_strain];
-    auto& temperature = state->scalars_[State::k_temperature];
+        state->scalars[State::k_accumulated_plastic_strain];
+    auto& temperature = state->scalars[State::k_temperature];
     // matrix
     auto& F_old = state->matrices[State::k_F_old];
     auto& be_old = state->matrices[State::k_be_old];
@@ -1117,10 +1117,10 @@ public:
     state->matrices[State::k_plastic_strain].Diag(1., dim_);
 
     // one scalar, also zero
-    state->scalars_.resize(state->k_state_scalars, 0.);
+    state->scalars.resize(state->k_state_scalars, 0.);
 
     // set initial temp
-    state->scalars_[State::k_temperature] = initial_temperature_;
+    state->scalars[State::k_temperature] = initial_temperature_;
     return state;
   }
 
@@ -1140,9 +1140,9 @@ public:
     // get states
     auto& plastic_strain = state->matrices[State::k_plastic_strain];
     auto& accumulated_plastic_strain =
-        state->scalars_[State::k_accumulated_plastic_strain];
-    auto& temperature = state->scalars_[State::k_temperature];
-    auto& eqps = state->scalars_[State::k_eqps];
+        state->scalars[State::k_accumulated_plastic_strain];
+    auto& temperature = state->scalars[State::k_temperature];
+    auto& eqps = state->scalars[State::k_eqps];
 
     // precompute aux values
     LogarithmicStrain(plastic_strain, tmp, eps);

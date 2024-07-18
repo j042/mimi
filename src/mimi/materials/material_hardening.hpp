@@ -7,6 +7,7 @@
 namespace mimi::materials {
 
 class HardeningBase {
+public:
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
 
   virtual std::string Name() const { return "HardeningBase"; }
@@ -63,6 +64,7 @@ class HardeningBase {
 };
 
 class PowerLawHardening : public HardeningBase {
+public:
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -83,6 +85,7 @@ class PowerLawHardening : public HardeningBase {
 };
 
 class VoceHardening : public HardeningBase {
+public:
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -105,6 +108,7 @@ class VoceHardening : public HardeningBase {
 };
 
 class JohnsonCookHardening : public HardeningBase {
+public:
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -128,6 +132,7 @@ class JohnsonCookHardening : public HardeningBase {
 };
 
 class JohnsonCookRateDependentHardening : public JohnsonCookHardening {
+public:
   using Base_ = JohnsonCookHardening;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -174,6 +179,7 @@ class JohnsonCookRateDependentHardening : public JohnsonCookHardening {
 
 class JohnsonCookConstantTemperatureHardening
     : public JohnsonCookRateDependentHardening {
+public:
   using Base_ = JohnsonCookRateDependentHardening;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -261,6 +267,7 @@ class JohnsonCookConstantTemperatureHardening
 
 class JohnsonCookAdiabaticRateDependentHardening
     : public JohnsonCookRateDependentHardening {
+public:
   using Base_ = JohnsonCookRateDependentHardening;
   using JCBase_ = Base_::Base_;
   using ADScalar_ = Base_::ADScalar_;
