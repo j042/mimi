@@ -210,19 +210,14 @@ public:
   }
 };
 
-/// Currently, we don't split hpp and cpp, so we move nested structure to a
-/// mutual place, here.
-/// temporary containers required in element assembly. one for each thread
-/// Stores values required for material, quad point and element data,
-/// temporarily
-struct TemporaryData {
+/// Temporary containers required in element assembly. One for each thread will
+/// be created. Stores values required for material, quad point and element
+/// data.
+class NonlinearSolidWorkData {
+public:
   // basic info. used to compute tdofs
   int dim_;
   int n_dof_;
-
-  // help info for thread local to global push
-  int support_start_;
-  int support_end_;
 
   // state variable
   double det_F_{};
@@ -246,7 +241,7 @@ struct TemporaryData {
   mfem::DenseMatrix F_dot_; // for visco but put it here for easier visibility
 
   // used in materials - materials will visit and initiate those in
-  // PrepareTemporaryData
+  // PrepareWorkData
   mfem::DenseMatrix I_;
   mfem::DenseMatrix alternative_stress_;           // for conversion
   mimi::utils::Vector<mfem::Vector> aux_vec_;      // for computation
@@ -285,13 +280,14 @@ struct TemporaryData {
     local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
   }
 
+  /// Number of true dof based on dim and n_dof values
   int GetTDof() const {
     MIMI_FUNC()
 
     return dim_ * n_dof_;
   }
 
-  // computes F and resets flags
+  /// computes F, deformation gradient, and resets flags
   void ComputeF(const mfem::DenseMatrix& dNdX) {
     MIMI_FUNC()
     has_det_F_ = false;
@@ -301,6 +297,7 @@ struct TemporaryData {
     mimi::utils::AddDiagonal(F_.GetData(), 1.0, dim_);
   }
 
+  /// Returns inverse of F. For consecutive calls, it will return stored value
   mfem::DenseMatrix& FInv() {
     MIMI_FUNC()
     if (has_F_inv_) {
@@ -312,6 +309,7 @@ struct TemporaryData {
     return F_inv_;
   }
 
+  /// determinant of F
   double DetF() {
     MIMI_FUNC()
     if (has_det_F_) {
@@ -323,6 +321,8 @@ struct TemporaryData {
     return det_F_;
   }
 
+  /// Given global state vector and support ids, copies element vector and
+  /// returns matrix form.
   mfem::DenseMatrix& CurrentElementSolutionCopy(const mfem::Vector& current_all,
                                                 const mfem::Array<int>& vdofs) {
     MIMI_FUNC()
@@ -337,12 +337,15 @@ struct TemporaryData {
     return element_x_mat_;
   }
 
+  /// hint flag to inform current action. influences return value for
+  /// ResidualMatrix()
   void GradAssembly(bool state) {
     MIMI_FUNC()
 
     assembling_grad_ = state;
   }
 
+  /// Returns destination matrix for assembly. This maybe for residual or FD.
   mfem::DenseMatrix& ResidualMatrix() {
     MIMI_FUNC()
     if (assembling_grad_) {

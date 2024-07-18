@@ -207,7 +207,7 @@ void init_py_material(py::module_& m) {
         [](const py::array_t<double>& F, const py::array_t<double>& state) {
           py::array_t<double> out(F.size());
           const int d0{(int) F.shape(0)}, d1{(int) F.shape(1)};
-          mimi::integrators::TemporaryData tmp;
+          mimi::integrators::NonlinearSolidWorkData tmp;
           tmp.aux_mat_.assign(2, mfem::DenseMatrix(d0, d0));
           tmp.aux_vec_.assign(1, mfem::Vector(d0));
           mfem::DenseMatrix& state_mat = tmp.stress_; // use any matrix
