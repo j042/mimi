@@ -8,7 +8,6 @@ namespace mimi::py {
 
 namespace py = pybind11;
 
-
 void init_py_hardening(py::module_& m) {
   /// hardening laws
   using HardeningBase = mimi::materials::HardeningBase;
