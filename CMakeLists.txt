@@ -3,14 +3,16 @@ cmake_minimum_required(VERSION 3.12.0)
 project(mimi)
 
 option(MIMI_COMPILE_SPLINEPY "compile splinepy" OFF)
-
-list(APPEND CMAKE_PREFIX_PATH /Users/j/sw /opt/homebrew/lib
-     /opt/homebrew/opt/libomp)
-
 option(MIMI_USE_OMP "Use openmp. else std::thread" ON)
 
+# frequently used path during development
+list(APPEND CMAKE_PREFIX_PATH /opt/homebrew/lib)
+if(MIMI_USE_OMP)
+  list(APPEND CMAKE_PREFIX_PATH /opt/homebrew/opt/libomp)
+endif()
+
 # we need to set `-fPIC` flag to any dependency that we build with mimi this
-# include mfem.
+# including mfem.
 set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} -fPIC)
 set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -fPIC)
 
