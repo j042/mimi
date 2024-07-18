@@ -189,8 +189,7 @@ public:
 
     // 2. damping / viscosity, as mfem calls it
     if (material_->viscosity_ > 0.0) {
-      auto visc =
-          std::make_shared<mfem::BilinearForm>(disp_fes.fe_space.get());
+      auto visc = std::make_shared<mfem::BilinearForm>(disp_fes.fe_space.get());
       nl_oper->AddBilinearForm("viscosity", visc);
 
       // create viscosity coeff
@@ -226,8 +225,8 @@ public:
         RuntimeCommunication()->GetInteger("nonlinear_solid_quadrature_order",
                                            -1);
     disp_fes.precomputed->PrecomputeElementQuadData("domain",
-                                                     default_solid_q,
-                                                     true);
+                                                    default_solid_q,
+                                                    true);
     nonlinear_solid_integ->Prepare();
     // add integrator to nl form
     nonlinear_stiffness->AddDomainIntegrator(nonlinear_solid_integ);
@@ -329,8 +328,8 @@ public:
         const int default_contact_q =
             RuntimeCommunication()->GetInteger("contact_quadrature_order", -1);
         disp_fes.precomputed->PrecomputeElementQuadData(contact_integ->Name(),
-                                                         default_contact_q,
-                                                         false /* dNdX*/);
+                                                        default_contact_q,
+                                                        false /* dNdX*/);
 
         // set the same boundary marker. It will be internally used for nthread
         // assemble of marked boundaries

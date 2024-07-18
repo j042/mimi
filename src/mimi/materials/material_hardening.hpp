@@ -65,6 +65,14 @@ public:
     return 1.;
   }
 
+  /// @brief Overload function with ADScalar input types. It will just extract
+  /// value from it and call the function with double input
+  /// @param eqps_r
+  /// @return
+  virtual double RateContribution(const ADScalar_& eqps_r) const {
+    return RateContribution(eqps_r.GetValue());
+  }
+
   /// Returns Thermo contribution. By default this will return 1.
   virtual double ThermoContribution(const double temperature) const {
     MIMI_FUNC()
@@ -213,7 +221,7 @@ public:
   /// @brief  this is a long name for a hardening model
   /// @return
   virtual std::string Name() const {
-    return "JohnsonCookAdiabaticRateDependentHardening";
+    return "JohnsonCookTemperatureAndRateDependentHardening";
   }
 
   virtual bool IsRateDependent() const { return true; }

@@ -243,51 +243,50 @@ public:
     domain_element_data_.resize(n_elements_);
     boundary_element_data_.resize(n_b_elements_);
 
-    auto process_elems =
-        [&](const int begin, const int end, const int i_thread) {
-          auto& mesh = *meshes_[i_thread];
-          auto& fes = *fe_spaces_[i_thread];
+    auto process_elems = [&](const int begin,
+                             const int end,
+                             const int i_thread) {
+      auto& mesh = *meshes_[i_thread];
+      auto& fes = *fe_spaces_[i_thread];
 
-          for (int i{begin}; i < end; ++i) {
-            // get elem data
-            auto& el_data_ptr = domain_element_data_[i];
-            el_data_ptr = std::make_shared<ElementData>();
-            auto& el_data = *el_data_ptr;
-            // we will create elements and v dof trans (dof trans is used in
-            // case of prolongation, but not used here.)
-            // 1. create element
-            el_data.element = CreatFiniteElement(dim_); // make_shared
-            // 2. el trans
-            el_data.element_trans = CreateTransformation(); // make_shared
+      for (int i{begin}; i < end; ++i) {
+        // get elem data
+        auto& el_data_ptr = domain_element_data_[i];
+        el_data_ptr = std::make_shared<ElementData>();
+        auto& el_data = *el_data_ptr;
+        // we will create elements and v dof trans (dof trans is used in
+        // case of prolongation, but not used here.)
+        // 1. create element
+        el_data.element = CreatFiniteElement(dim_); // make_shared
+        // 2. el trans
+        el_data.element_trans = CreateTransformation(); // make_shared
 
-            // process / fill each data
-            fes.GetNURBSext()->LoadFE(i, el_data.element.get());
-            fes.GetElementTransformation(i, el_data.element_trans.get());
-            // however, we do need to set FE to this newly created, as it is a
-            // ptr to internal obj
-            el_data.element_trans->SetFE(el_data.element.get());
+        // process / fill each data
+        fes.GetNURBSext()->LoadFE(i, el_data.element.get());
+        fes.GetElementTransformation(i, el_data.element_trans.get());
+        // however, we do need to set FE to this newly created, as it is a
+        // ptr to internal obj
+        el_data.element_trans->SetFE(el_data.element.get());
 
-            // for our application there's no dof transformation.
-            // if so, we can extend here
-            mfem::DofTransformation* doftrans =
-                fes.GetElementDofs(i, el_data.dofs);
-            doftrans = fes.GetElementVDofs(i, el_data.v_dofs);
+        // for our application there's no dof transformation.
+        // if so, we can extend here
+        mfem::DofTransformation* doftrans = fes.GetElementDofs(i, el_data.dofs);
+        doftrans = fes.GetElementVDofs(i, el_data.v_dofs);
 
-            if (doftrans) {
-              mimi::utils::PrintAndThrowError(
-                  "There's doftrans. There shouldn't be one according to the "
-                  "documentations.");
-            }
+        if (doftrans) {
+          mimi::utils::PrintAndThrowError(
+              "There's doftrans. There shouldn't be one according to the "
+              "documentations.");
+        }
 
-            // set properties
-            el_data.geometry_type = el_data.element->GetGeomType();
-            el_data.n_dof = el_data.element->GetDof();
-            el_data.n_tdof = el_data.n_dof * v_dim_;
-            el_data.i_thread =
-                i_thread; // this is a help value, don't rely on this
-            el_data.id = i;
-          }
-        };
+        // set properties
+        el_data.geometry_type = el_data.element->GetGeomType();
+        el_data.n_dof = el_data.element->GetDof();
+        el_data.n_tdof = el_data.n_dof * v_dim_;
+        el_data.i_thread = i_thread; // this is a help value, don't rely on this
+        el_data.id = i;
+      }
+    };
 
     auto process_boundary_elems =
         [&](const int begin, const int end, const int i_thread) {
@@ -475,8 +474,8 @@ public:
         ElementQuadData& eqd = eq_data[i];
         ElementData& e_data = eqd.GetElementData();
         eqd.quadrature_order = (quadrature_order < 0)
-                                    ? e_data.element->GetOrder() * 2 + 3
-                                    : quadrature_order;
+                                   ? e_data.element->GetOrder() * 2 + 3
+                                   : quadrature_order;
 
         // prepare quadrature point loop
         const mfem::IntegrationRule& ir =

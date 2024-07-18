@@ -248,8 +248,7 @@ public:
     n_marked_boundaries_ = Base_::marked_boundary_elements_.size();
 
     // extract boundary geometry type
-    boundary_geometry_type =
-        precomputed_->boundary_elements_[0]->GetGeomType();
+    boundary_geometry_type = precomputed_->boundary_elements_[0]->GetGeomType();
 
     boundary_element_data_.resize(n_marked_boundaries_);
 
@@ -293,8 +292,8 @@ public:
 
         // let's prepare quad loop
         i_bed.quadrature_order = (default_q_order < 0)
-                                      ? i_bed.element->GetOrder() * 2 + 3
-                                      : default_q_order;
+                                     ? i_bed.element->GetOrder() * 2 + 3
+                                     : default_q_order;
 
         const mfem::IntegrationRule& ir = i_bed.GetIntRule(int_rules);
         i_bed.n_quad = ir.GetNPoints();

@@ -301,8 +301,8 @@ public:
 
           // query
           fes.fe_space->GetEssentialTrueDofs(bdr_id_query,
-                                              fes.boundary_dof_ids[i][j],
-                                              j);
+                                             fes.boundary_dof_ids[i][j],
+                                             j);
         }
       }
     }

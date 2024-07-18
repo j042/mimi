@@ -13,12 +13,11 @@ void init_py_hardening(py::module_& m) {
   using HardeningBase = mimi::materials::HardeningBase;
   using PowerLawHardening = mimi::materials::PowerLawHardening;
   using VoceHardening = mimi::materials::VoceHardening;
-  using JCHardening = mimi::materials::JohnsonCookHardening;
-  using JCViscoHardening = mimi::materials::JohnsonCookRateDependentHardening;
-  using JCConstTemperatureHardening =
-      mimi::materials::JohnsonCookConstantTemperatureHardening;
-  using JCThermoViscoHardening =
-      mimi::materials::JohnsonCookAdiabaticRateDependentHardening;
+  using JC = mimi::materials::JohnsonCookHardening;
+  using JC_R = mimi::materials::JohnsonCookRateDependentHardening;
+  using JC_RT =
+      mimi::materials::JohnsonCookTemperatureAndRateDependentHardening;
+  using JC_RConstT = mimi::materials::JohnsonCookConstantTemperatureHardening;
 
   /// input type
   using ADScalar = typename HardeningBase::ADScalar_;
@@ -56,36 +55,31 @@ void init_py_hardening(py::module_& m) {
       .def_readwrite("sigma_sat", &VoceHardening::sigma_sat_)
       .def_readwrite("strain_constant", &VoceHardening::strain_constant_);
 
-  py::class_<JCHardening, std::shared_ptr<JCHardening>, HardeningBase> jc_h(
+  py::class_<JC, std::shared_ptr<JC>, HardeningBase> jc_h(
       m,
       "JohnsonCookHardening");
   jc_h.def(py::init<>())
-      .def_readwrite("A", &JCHardening::A_)
-      .def_readwrite("B", &JCHardening::B_)
-      .def_readwrite("n", &JCHardening::n_);
+      .def_readwrite("A", &JC::A_)
+      .def_readwrite("B", &JC::B_)
+      .def_readwrite("n", &JC::n_);
 
-  py::class_<JCConstTemperatureHardening,
-             std::shared_ptr<JCConstTemperatureHardening>,
-             JCViscoHardening>
+  py::class_<JC_R, std::shared_ptr<JC_R>, JC> jc_r(
+      m,
+      "JohnsonCookRateDependentHardening");
+  jc_r.def(py::init<>())
+      .def_readwrite("effective_plastic_strain_rate",
+                     &JC_R::effective_plastic_strain_rate_);
+
+  py::class_<JC_RT, std::shared_ptr<JC_RT>, JC_R> jc_rt(
+      m,
+      "JohnsonCookTemperatureAndRateDependentHardening");
+  jc_rt.def(py::init<>())
+      .def_readwrite("reference_temperature", &JC_RT::reference_temperature_)
+      .def_readwrite("m", &JC_RT::m_);
+
+  py::class_<JC_RConstT, std::shared_ptr<JC_RConstT>, JC_RT>
       jc_visco_const_temp(m, "JohnsonCookViscoConstantTemperatureHardening");
-  jc_visco_const_temp.def(py::init<>())
-      .def_readwrite("reference_temperature",
-                     &JCConstTemperatureHardening::reference_temperature_)
-      .def_readwrite("melting_temperature",
-                     &JCConstTemperatureHardening::melting_temperature_)
-      .def_readwrite("m", &JCConstTemperatureHardening::m_)
-      .def_readwrite("temperature", &JCConstTemperatureHardening::temperature_);
-
-  py::class_<JCThermoViscoHardening,
-             std::shared_ptr<JCThermoViscoHardening>,
-             JCViscoHardening>
-      jc_thermo_visco(m, "JohnsonCookThermoViscoHardening");
-  jc_thermo_visco.def(py::init<>())
-      .def_readwrite("reference_temperature",
-                     &JCThermoViscoHardening::reference_temperature_)
-      .def_readwrite("melting_temperature",
-                     &JCThermoViscoHardening::melting_temperature_)
-      .def_readwrite("m", &JCThermoViscoHardening::m_);
+  jc_visco_const_temp.def(py::init<>());
 }
 
 } // namespace mimi::py

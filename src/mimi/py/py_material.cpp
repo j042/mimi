@@ -20,13 +20,10 @@ void init_py_material(py::module_& m) {
   using MaterialBase = mimi::materials::MaterialBase;
   using StVK = mimi::materials::StVenantKirchhoff;
   using CompOgdenNH = mimi::materials::CompressibleOgdenNeoHookean;
-  using J2 = mimi::materials::J2Linear;
-  using J2 = mimi::materials::J2Nonlinear;
-  using J2Simo = mimi::materials::J2Simo;
-  using J2Log = mimi::materials::J2Log;
-
-  /// input type
-  using ADScalar = typename HardeningBase::ADScalar_;
+  using mimi::materials::J2;
+  using mimi::materials::J2Linear;
+  using mimi::materials::J2Log;
+  using mimi::materials::J2Simo;
 
   py::class_<MaterialBase, std::shared_ptr<MaterialBase>> klasse(m, "Material");
 

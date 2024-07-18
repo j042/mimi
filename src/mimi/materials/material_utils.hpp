@@ -99,10 +99,7 @@ inline void LogarithmicStrain(const mfem::DenseMatrix& F_e,
   const int dim = tmp.dim_;
 
   mfem::DenseMatrix& C_e = tmp.aux_mat_[mat0];
-
-  // get C_e
-  mfem::DenseMatrix& C_e = Fp_inv; // use work1 as Ce
-  mfem::MultAtB(F_el, F_el, C_e);  // this is symmetric
+  mfem::MultAtB(F_e, F_e, C_e); // this is symmetric
 
   // eigen decomp
   mfem::Vector& eigen_values = tmp.aux_vec_[vec0];

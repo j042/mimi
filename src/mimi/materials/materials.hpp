@@ -417,8 +417,8 @@ public:
     if (hardening_) {
       hardening_->Validate();
       // this does nothing for temperature independent hardening
-      hardening_->InitializeTemperature(initial_temperature,
-                                        melting_temperature);
+      hardening_->InitializeTemperature(initial_temperature_,
+                                        melting_temperature_);
     } else {
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
@@ -475,11 +475,11 @@ public:
     const double eqps_old = accumulated_plastic_strain;
     // this may be just one
     const double thermo_contribution =
-        hardening_->ThermoContribution(state->scalars_[State::k_temperature]);
+        hardening_->ThermoContribution(state->scalars[State::k_temperature]);
 
     // admissibility
-    auto residual = [eqps_old, q, *this, thermo_contribution](
-                        auto delta_eqps) -> ADScalar_ {
+    auto residual =
+        [eqps_old, q, this, thermo_contribution](auto delta_eqps) -> ADScalar_ {
       return q - 3.0 * G_ * delta_eqps
              - hardening_->Evaluate(eqps_old + delta_eqps)
                    * (hardening_->RateContribution(delta_eqps / dt_)
@@ -517,7 +517,7 @@ public:
 
         // update temp if needed
         if (hardening_->IsTemperatureDependent()) {
-          state->scalars_[State::k_temperature] +=
+          state->scalars[State::k_temperature] +=
               heat_fraction_ * q * delta_eqps / (density_ * specific_heat_);
         }
       }
@@ -590,8 +590,8 @@ public:
     if (hardening_) {
       hardening_->Validate();
       // this does nothing for temperature independent hardening
-      hardening_->InitializeTemperature(initial_temperature,
-                                        melting_temperature);
+      hardening_->InitializeTemperature(initial_temperature_,
+                                        melting_temperature_);
     } else {
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
@@ -685,7 +685,8 @@ public:
                      s_effective,
                      thermo_contrib,
                      hardening = hardening_,
-                     be_trace](auto delta_eqps) -> ADScalar_ {
+                     be_trace,
+                     this](auto delta_eqps) -> ADScalar_ {
       // no 3 * G -> (1/3) integrated to be_trace
       return s_effective - G * delta_eqps * be_trace
              - hardening->Evaluate(eqps_old + delta_eqps)
@@ -715,9 +716,9 @@ public:
       if constexpr (accumulate) {
         accumulated_plastic_strain += delta_eqps;
         if (hardening_->IsTemperatureDependent()) {
-          state->scalars_[State::k_temperature] +=
-              heat_fraction_ * s_effective * delta_eqps
-              / (density_ * specific_heat_);
+          state->scalars[State::k_temperature] += heat_fraction_ * s_effective
+                                                  * delta_eqps
+                                                  / (density_ * specific_heat_);
         }
       }
     }
@@ -768,6 +769,8 @@ public:
   // aux vec consts
   static constexpr const int k_eig_vec{0};
 
+  static constexpr const double k_tol{1.e-10};
+
   // additional parameters
   HardeningPtr_ hardening_;
 
@@ -798,8 +801,8 @@ public:
     if (hardening_) {
       hardening_->Validate();
       // this does nothing for temperature independent hardening
-      hardening_->InitializeTemperature(initial_temperature,
-                                        melting_temperature);
+      hardening_->InitializeTemperature(initial_temperature_,
+                                        melting_temperature_);
     } else {
       mimi::utils::PrintAndThrowError("hardening missing for", Name());
     }
@@ -848,7 +851,7 @@ public:
     mfem::DenseMatrix& E_e = tmp.aux_mat_[k_E_e];
     mfem::DenseMatrix& s = tmp.aux_mat_[k_s];
     mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
-    mfem::DenseMatrix& flowers = tmp.aux_mat_[k_F_e];
+    mfem::DenseMatrix& F_e = tmp.aux_mat_[k_F_e];
 
     // get states
     auto& Fp_inv = state->matrices[State::k_Fp_inv];
@@ -866,7 +869,7 @@ public:
     const double eqps_old = accumulated_plastic_strain;
     const double thermo_contrib = hardening_->ThermoContribution(temperature);
     auto residual =
-        [eqps_old, q, *this, thermo_contrib](auto delta_eqps) -> ADScalar_ {
+        [eqps_old, q, this, thermo_contrib](auto delta_eqps) -> ADScalar_ {
       return q - 3.0 * G_ * delta_eqps
              - hardening_->Evaluate(eqps_old + delta_eqps)
                    * (hardening_->RateContribution(delta_eqps / dt_)
@@ -948,7 +951,7 @@ public:
   virtual void Accumulate(MaterialStatePtr_& state, WorkData_& tmp) const {
     MIMI_FUNC()
 
-    PlasticStress<true>(state, tmp, tmp.stresslowers _ /* placeholder */);
+    PlasticStress<true>(state, tmp, tmp.stress_ /* placeholder */);
   }
 
 private:
