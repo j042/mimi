@@ -20,23 +20,11 @@ void init_py_material(py::module_& m) {
   using MaterialBase = mimi::materials::MaterialBase;
   using StVK = mimi::materials::StVenantKirchhoff;
   using CompOgdenNH = mimi::materials::CompressibleOgdenNeoHookean;
-  using J2 = mimi::materials::J2;
-  using J2NonlinIso = mimi::materials::J2NonlinearIsotropic;
-  using J2NonlinVisco = mimi::materials::J2NonlinearVisco;
+  using J2 = mimi::materials::J2Linear;
+  using J2NonlinIso = mimi::materials::J2Nonlinear;
   using J2NonlinAdiabaticVisco = mimi::materials::J2AdiabaticVisco;
   using J2NonlinAdiabaticViscoLarge = mimi::materials::J2AdiabaticViscoLarge;
   using J2NonlinAdiabaticViscoLog = mimi::materials::J2AdiabaticViscoLogStrain;
-
-  /// hardening laws
-  using HardeningBase = mimi::materials::HardeningBase;
-  using PowerLawHardening = mimi::materials::PowerLawHardening;
-  using VoceHardening = mimi::materials::VoceHardening;
-  using JCHardening = mimi::materials::JohnsonCookHardening;
-  using JCViscoHardening = mimi::materials::JohnsonCookRateDependentHardening;
-  using JCConstTemperatureHardening =
-      mimi::materials::JohnsonCookConstantTemperatureHardening;
-  using JCThermoViscoHardening =
-      mimi::materials::JohnsonCookAdiabaticRateDependentHardening;
 
   /// input type
   using ADScalar = typename HardeningBase::ADScalar_;
@@ -60,88 +48,16 @@ void init_py_material(py::module_& m) {
       "CompressibleOgdenNeoHookean");
   conh.def(py::init<>());
 
-  py::class_<J2, std::shared_ptr<J2>, MaterialBase> j2(m, "J2");
+  py::class_<J2Linear, std::shared_ptr<J2Linear>, MaterialBase> j2(m,
+                                                                   "J2Linear");
   j2.def(py::init<>())
-      .def_readwrite("isotropic_hardening", &J2::isotropic_hardening_)
-      .def_readwrite("kinematic_hardening", &J2::kinematic_hardening_)
-      .def_readwrite("sigma_y", &J2::sigma_y_);
+      .def_readwrite("isotropic_hardening", &J2Linear::isotropic_hardening_)
+      .def_readwrite("kinematic_hardening", &J2Linear::kinematic_hardening_)
+      .def_readwrite("sigma_y", &J2Linear::sigma_y_);
 
-  py::class_<HardeningBase, std::shared_ptr<HardeningBase>> h_base(m,
-                                                                   "Hardening");
-  h_base.def(py::init<>())
-      .def("sigma_y", &HardeningBase::SigmaY)
-      .def("name", &HardeningBase::Name)
-      .def("is_rate_dependent", &HardeningBase::IsRateDependent)
-      .def("evaluate",
-           [](const HardeningBase& self, const double eqps) -> double {
-             return self.Evaluate(ADScalar(eqps)).GetValue();
-           })
-      .def("visco_evaluate",
-           [](const HardeningBase& self,
-              const double eqps,
-              const double eqps_dot) -> double {
-             return self.Evaluate(ADScalar(eqps), eqps_dot).GetValue();
-           });
-
-  py::class_<PowerLawHardening,
-             std::shared_ptr<PowerLawHardening>,
-             HardeningBase>
-      power_law_h(m, "PowerLawHardening");
-  power_law_h.def(py::init<>())
-      .def_readwrite("sigma_y", &PowerLawHardening::sigma_y_)
-      .def_readwrite("n", &PowerLawHardening::n_)
-      .def_readwrite("eps0", &PowerLawHardening::eps0_);
-
-  py::class_<VoceHardening, std::shared_ptr<VoceHardening>, HardeningBase>
-      voce_h(m, "VoceHardening");
-  voce_h.def(py::init<>())
-      .def_readwrite("sigma_y", &VoceHardening::sigma_y_)
-      .def_readwrite("sigma_sat", &VoceHardening::sigma_sat_)
-      .def_readwrite("strain_constant", &VoceHardening::strain_constant_);
-
-  py::class_<JCHardening, std::shared_ptr<JCHardening>, HardeningBase> jc_h(
-      m,
-      "JohnsonCookHardening");
-  jc_h.def(py::init<>())
-      .def_readwrite("A", &JCHardening::A_)
-      .def_readwrite("B", &JCHardening::B_)
-      .def_readwrite("n", &JCHardening::n_);
-
-  py::class_<J2NonlinIso, std::shared_ptr<J2NonlinIso>, MaterialBase> j2_nl_hi(
-      m,
-      "J2NonlinearIsotropic");
+  py::class_<J2, std::shared_ptr<J2>, MaterialBase> j2_nl_hi(m, "J2");
   j2_nl_hi.def(py::init<>())
       .def_readwrite("hardening", &J2NonlinIso::hardening_);
-
-  py::class_<JCViscoHardening, std::shared_ptr<JCViscoHardening>, JCHardening>
-      jc_visco(m, "JohnsonCookViscoHardening");
-  jc_visco.def(py::init<>())
-      .def_readwrite("C", &JCViscoHardening::C_)
-      .def_readwrite("eps0_dot",
-                     &JCViscoHardening::effective_plastic_strain_rate_);
-
-  py::class_<JCConstTemperatureHardening,
-             std::shared_ptr<JCConstTemperatureHardening>,
-             JCViscoHardening>
-      jc_visco_const_temp(m, "JohnsonCookViscoConstantTemperatureHardening");
-  jc_visco_const_temp.def(py::init<>())
-      .def_readwrite("reference_temperature",
-                     &JCConstTemperatureHardening::reference_temperature_)
-      .def_readwrite("melting_temperature",
-                     &JCConstTemperatureHardening::melting_temperature_)
-      .def_readwrite("m", &JCConstTemperatureHardening::m_)
-      .def_readwrite("temperature", &JCConstTemperatureHardening::temperature_);
-
-  py::class_<JCThermoViscoHardening,
-             std::shared_ptr<JCThermoViscoHardening>,
-             JCViscoHardening>
-      jc_thermo_visco(m, "JohnsonCookThermoViscoHardening");
-  jc_thermo_visco.def(py::init<>())
-      .def_readwrite("reference_temperature",
-                     &JCThermoViscoHardening::reference_temperature_)
-      .def_readwrite("melting_temperature",
-                     &JCThermoViscoHardening::melting_temperature_)
-      .def_readwrite("m", &JCThermoViscoHardening::m_);
 
   py::class_<J2NonlinVisco, std::shared_ptr<J2NonlinVisco>, MaterialBase>
       j2_visco(m, "J2ViscoIsotropic");
