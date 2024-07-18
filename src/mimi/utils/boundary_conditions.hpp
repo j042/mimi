@@ -17,7 +17,7 @@ namespace mimi::utils {
 class BoundaryConditions {
 public:
   /// @brief boundary condition marker
-  struct BCMarker {
+  class BCMarker {
     bool initial_config_;
     std::map<int, std::set<int>> dirichlet_;
     std::map<int, double> pressure_;
@@ -252,7 +252,7 @@ public:
 };
 
 /// @brief minimal type to apply dynamic bc. now we only have constant velocity
-struct TimeDependentDirichletBoundaryCondition {
+class TimeDependentDirichletBoundaryCondition {
   std::map<int, std::map<int, mfem::Array<int>>>* boundary_dof_ids_;
   BoundaryConditions* dynamic_bc_;
 

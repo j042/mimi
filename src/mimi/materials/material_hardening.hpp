@@ -6,7 +6,7 @@
 
 namespace mimi::materials {
 
-struct HardeningBase {
+class HardeningBase {
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
 
   virtual std::string Name() const { return "HardeningBase"; }
@@ -62,7 +62,7 @@ struct HardeningBase {
   }
 };
 
-struct PowerLawHardening : public HardeningBase {
+class PowerLawHardening : public HardeningBase {
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -82,7 +82,7 @@ struct PowerLawHardening : public HardeningBase {
   virtual double SigmaY() const { return sigma_y_; }
 };
 
-struct VoceHardening : public HardeningBase {
+class VoceHardening : public HardeningBase {
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -104,7 +104,7 @@ struct VoceHardening : public HardeningBase {
   virtual double SigmaY() const { return sigma_y_; }
 };
 
-struct JohnsonCookHardening : public HardeningBase {
+class JohnsonCookHardening : public HardeningBase {
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -127,7 +127,7 @@ struct JohnsonCookHardening : public HardeningBase {
   virtual double SigmaY() const { return A_; }
 };
 
-struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
+class JohnsonCookRateDependentHardening : public JohnsonCookHardening {
   using Base_ = JohnsonCookHardening;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -172,7 +172,7 @@ struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
   }
 };
 
-struct JohnsonCookConstantTemperatureHardening
+class JohnsonCookConstantTemperatureHardening
     : public JohnsonCookRateDependentHardening {
   using Base_ = JohnsonCookRateDependentHardening;
   using ADScalar_ = Base_::ADScalar_;
@@ -259,7 +259,7 @@ struct JohnsonCookConstantTemperatureHardening
   }
 };
 
-struct JohnsonCookAdiabaticRateDependentHardening
+class JohnsonCookAdiabaticRateDependentHardening
     : public JohnsonCookRateDependentHardening {
   using Base_ = JohnsonCookRateDependentHardening;
   using JCBase_ = Base_::Base_;

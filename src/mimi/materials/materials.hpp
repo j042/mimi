@@ -287,8 +287,8 @@ public:
 
     std::shared_ptr<State> state = std::make_shared<State>();
     // create 2 matrices with the size of dim x dim and zero initialize
-    state->matrices_.resize(state->k_state_matrices);
-    for (mfem::DenseMatrix& mat : state->matrices_) {
+    state->matrices.resize(state->k_state_matrices);
+    for (mfem::DenseMatrix& mat : state->matrices) {
       mat.SetSize(dim_, dim_);
       mat = 0.;
     }
@@ -309,8 +309,8 @@ public:
     mfem::DenseMatrix& eta = tmp.aux_mat_[k_eta];
 
     // get states
-    auto& beta = state->matrices_[State::k_beta];
-    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& beta = state->matrices[State::k_beta];
+    auto& plastic_strain = state->matrices[State::k_plastic_strain];
     auto& accumulated_plastic_strain =
         state->scalars_[State::k_accumulated_plastic_strain];
 
@@ -415,8 +415,8 @@ public:
 
     std::shared_ptr<State> state = std::make_shared<State>();
     // create 2 matrices with the size of dim x dim and zero initialize
-    state->matrices_.resize(state->k_state_matrices);
-    for (mfem::DenseMatrix& mat : state->matrices_) {
+    state->matrices.resize(state->k_state_matrices);
+    for (mfem::DenseMatrix& mat : state->matrices) {
       mat.SetSize(dim_, dim_);
       mat = 0.;
     }
@@ -438,7 +438,7 @@ public:
     mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
 
     // get states - will get corresponding const-ness
-    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& plastic_strain = state->matrices[State::k_plastic_strain];
     auto& accumulated_plastic_strain =
         state->scalars_[State::k_accumulated_plastic_strain];
 
@@ -609,8 +609,8 @@ public:
 
     std::shared_ptr<State> state = std::make_shared<State>();
     // create 2 matrices with the size of dim x dim and zero initialize
-    state->matrices_.resize(state->k_state_matrices);
-    for (mfem::DenseMatrix& mat : state->matrices_) {
+    state->matrices.resize(state->k_state_matrices);
+    for (mfem::DenseMatrix& mat : state->matrices) {
       mat.SetSize(dim_, dim_);
       mat = 0.;
     }
@@ -737,11 +737,11 @@ public:
     mfem::DenseMatrix& mat_w0 = tmp.aux_mat_[k_work0];
 
     // get states
-    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& plastic_strain = state->matrices[State::k_plastic_strain];
     auto& accumulated_plastic_strain =
         state->scalars_[State::k_accumulated_plastic_strain];
     auto& temperature = state->scalars_[State::k_temperature];
-    auto& previous_eps = state->matrices_[State::k_elastic_strain];
+    auto& previous_eps = state->matrices[State::k_elastic_strain];
 
     // precompute aux values
     // eps, p, s, eta, q, equivalent plastic strain rate
@@ -919,13 +919,13 @@ public:
 
     std::shared_ptr<State> state = std::make_shared<State>();
     // create 2 matrices with the size of dim x dim and zero initialize
-    state->matrices_.resize(state->k_state_matrices);
-    for (mfem::DenseMatrix& mat : state->matrices_) {
+    state->matrices.resize(state->k_state_matrices);
+    for (mfem::DenseMatrix& mat : state->matrices) {
       mat.SetSize(dim_, dim_);
       mat = 0.;
     }
-    state->matrices_[State::k_be_old].Diag(1., dim_);
-    state->matrices_[State::k_F_old].Diag(1., dim_);
+    state->matrices[State::k_be_old].Diag(1., dim_);
+    state->matrices[State::k_F_old].Diag(1., dim_);
 
     // one scalar, also zero
     state->scalars_.assign(state->k_state_scalars, 0.);
@@ -955,8 +955,8 @@ public:
         state->scalars_[State::k_accumulated_plastic_strain];
     auto& temperature = state->scalars_[State::k_temperature];
     // matrix
-    auto& F_old = state->matrices_[State::k_F_old];
-    auto& be_old = state->matrices_[State::k_be_old];
+    auto& F_old = state->matrices[State::k_F_old];
+    auto& be_old = state->matrices[State::k_be_old];
 
     // // now, f = F F_hat^-1
     Mat& f_inv = w_mat0;
@@ -1107,14 +1107,14 @@ public:
 
     std::shared_ptr<State> state = std::make_shared<State>();
     // create 2 matrices with the size of dim x dim and zero initialize
-    state->matrices_.resize(state->k_state_matrices);
-    for (mfem::DenseMatrix& mat : state->matrices_) {
+    state->matrices.resize(state->k_state_matrices);
+    for (mfem::DenseMatrix& mat : state->matrices) {
       mat.SetSize(dim_, dim_);
       mat = 0.;
     }
 
     // for logarithmic this is I
-    state->matrices_[State::k_plastic_strain].Diag(1., dim_);
+    state->matrices[State::k_plastic_strain].Diag(1., dim_);
 
     // one scalar, also zero
     state->scalars_.resize(state->k_state_scalars, 0.);
@@ -1138,7 +1138,7 @@ public:
     mfem::DenseMatrix& N_p = tmp.aux_mat_[k_N_p];
 
     // get states
-    auto& plastic_strain = state->matrices_[State::k_plastic_strain];
+    auto& plastic_strain = state->matrices[State::k_plastic_strain];
     auto& accumulated_plastic_strain =
         state->scalars_[State::k_accumulated_plastic_strain];
     auto& temperature = state->scalars_[State::k_temperature];

@@ -61,7 +61,7 @@ public:
           precomputed_->GetElementQuadData("domain");
       for (ElementQuadData_& eqd : element_quad_data_vec) {
         for (QuadData_& qd : eqd.GetQuadData()) {
-          qd.material_state_ = material_->CreateState();
+          qd.material_state = material_->CreateState();
         }
       }
     }
@@ -111,15 +111,15 @@ public:
 
     // quad loop - we assume w.element_x_mat_ is prepared
     for (auto& q : q_data) {
-      w.ComputeF(q.dN_dX_);
+      w.ComputeF(q.dN_dX);
       if constexpr (!accumulate_state_only) {
-        material_->EvaluatePK1(q.material_state_, w, w.stress_);
-        mfem::AddMult_a_ABt(q.integration_weight_ * q.det_dX_dxi_,
-                            q.dN_dX_,
+        material_->EvaluatePK1(q.material_state, w, w.stress_);
+        mfem::AddMult_a_ABt(q.integration_weight * q.det_dX_dxi,
+                            q.dN_dX,
                             w.stress_,
                             w.ResidualMatrix());
       } else {
-        material_->Accumulate(q.material_state_, w);
+        material_->Accumulate(q.material_state, w);
       }
     }
   }
@@ -174,10 +174,10 @@ public:
       for (int i{begin}; i < end; ++i) {
         const ElementQuadData_& eqd = element_quad_data_vec[i];
         const ElementData_& ed = eqd.GetElementData();
-        w.SetDof(ed.n_dof_);
-        w.CurrentElementSolutionCopy(current_x, ed.v_dofs_);
+        w.SetDof(ed.n_dof);
+        w.CurrentElementSolutionCopy(current_x, ed.v_dofs);
         ElementResidual<false>(eqd.GetQuadData(), w);
-        w.thread_local_residual_.AddElementVector(ed.v_dofs_,
+        w.thread_local_residual_.AddElementVector(ed.v_dofs,
                                                   w.local_residual_.GetData());
       }
     };
@@ -208,17 +208,17 @@ public:
         // prepare assembly
         const ElementQuadData_& eqd = element_quad_data_vec[i];
         const ElementData_& ed = eqd.GetElementData();
-        w.SetDof(ed.n_dof_);
-        w.CurrentElementSolutionCopy(current_x, ed.v_dofs_);
+        w.SetDof(ed.n_dof);
+        w.CurrentElementSolutionCopy(current_x, ed.v_dofs);
 
         // assemble
         ElementResidualAndGrad(eqd.GetQuadData(), w);
         // push
-        w.thread_local_residual_.AddElementVector(ed.v_dofs_,
+        w.thread_local_residual_.AddElementVector(ed.v_dofs,
                                                   w.local_residual_.GetData());
         double* A = w.thread_local_A_.GetData();
         const double* local_A = w.local_grad_.GetData();
-        for (const int a_id : ed.A_ids_) {
+        for (const int a_id : ed.A_ids) {
           A[a_id] += *local_A++;
         }
       }
@@ -278,8 +278,8 @@ public:
           for (int i{begin}; i < end; ++i) {
             ElementQuadData_& eqd = element_quad_data_vec[i];
             const ElementData_& ed = eqd.GetElementData();
-            w.SetDof(ed.n_dof_);
-            w.CurrentElementSolutionCopy(current_x, ed.v_dofs_);
+            w.SetDof(ed.n_dof);
+            w.CurrentElementSolutionCopy(current_x, ed.v_dofs);
             ElementResidual<true>(eqd.GetQuadData(), w);
           }
         };

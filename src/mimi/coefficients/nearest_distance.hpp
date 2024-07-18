@@ -25,17 +25,17 @@ public:
 
   /// @brief nearest distance query
   struct Query {
-    mimi::utils::Data<double> query_;
-    int max_iterations_ = -1;
+    mimi::utils::Data<double> query;
+    int max_iterations = -1;
 
-    int Dim() const { return query_.size(); }
+    int Dim() const { return query.size(); }
 
-    void SetSize(const int& dim) { query_.Reallocate(dim); }
+    void SetSize(const int& dim) { query.Reallocate(dim); }
 
     template<typename Stream>
     void Print(Stream& out) const {
       out << "Query: [";
-      for (const auto& q : query_) {
+      for (const auto& q : query) {
         out << q << ", ";
       }
       out << "]\n";
@@ -43,7 +43,7 @@ public:
   };
 
   /// @brief results of nearest distance query
-  struct Results {
+  class Results {
     // query
     mimi::utils::Data<double> parametric_;
     mimi::utils::Data<double> physical_;
@@ -265,9 +265,9 @@ public:
     // and copy the minimum distance results
     for (const auto& spline : splines_) {
       spline->Core()->SplinepyVerboseProximity(
-          query.query_.data(),
+          query.query.data(),
           tolerance_,
-          query.max_iterations_,
+          query.max_iterations,
           true, /* aggressive_bounds */
           results.parametric_.data(),
           results.physical_.data(),
