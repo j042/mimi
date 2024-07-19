@@ -17,7 +17,6 @@ public:
   virtual void Validate() const { MIMI_FUNC() }
   virtual void InitializeTemperature(const double initial,
                                      const double melting) {
-    MIMI_FUNC()
     mimi::utils::PrintDebug(
         "Doing nothing with given initial and melting temperature",
         initial,
@@ -26,7 +25,6 @@ public:
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
-    MIMI_FUNC()
     mimi::utils::PrintAndThrowError("HardeningBase::Evaluate not implemented");
     return {};
   }
@@ -34,7 +32,6 @@ public:
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain,
            const double& equivalent_plastic_strain_rate) const {
-    MIMI_FUNC()
     mimi::utils::PrintAndThrowError(
         "HardeningBase::Evaluate (rate-dependent) not implemented");
     return {};
@@ -43,14 +40,12 @@ public:
   virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
                              const double& equivalent_plastic_strain_rate,
                              const double& temperature) const {
-    MIMI_FUNC()
     mimi::utils::PrintAndThrowError(
         "HardeningBase::Evaluate (thermo-rate-dependent) not implemented");
     return {};
   }
 
   virtual double SigmaY() const {
-    MIMI_FUNC()
     mimi::utils::PrintAndThrowError("HardeningBase::SigmaY not implemented");
     return -1.0;
   }
@@ -61,7 +56,6 @@ public:
   /// @return
   virtual double
   RateContribution(const double equivalent_plastic_strain_rate) const {
-    MIMI_FUNC()
     return 1.;
   }
 
@@ -75,8 +69,6 @@ public:
 
   /// Returns Thermo contribution. By default this will return 1.
   virtual double ThermoContribution(const double temperature) const {
-    MIMI_FUNC()
-
     return 1.;
   }
 };
