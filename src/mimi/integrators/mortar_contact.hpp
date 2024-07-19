@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cmath>
-#include <fstream>
 
 #include <mfem.hpp>
 
@@ -69,6 +68,145 @@ ComputeUnitNormal(const DerivativeContainer& first_derivatives,
   }
 }
 
+/// temporary containers required in element assembly
+/// mfem performs some fancy checks for allocating memories.
+/// So we create one for each thread
+class MortarContactWorkData {
+public:
+  mfem::Vector element_x_;
+  mfem::DenseMatrix element_x_mat_;
+  mfem::DenseMatrix J_;
+  mfem::DenseMatrix local_residual_;
+  mfem::DenseMatrix local_grad_;
+  mfem::DenseMatrix forward_residual_;
+
+  mfem::Vector element_pressure_;
+
+  mimi::coefficients::NearestDistanceBase::Query distance_query_;
+  mimi::coefficients::NearestDistanceBase::Results distance_results_;
+
+  mfem::Vector normal_;
+
+  // thread local
+  mfem::Vector local_area_;
+  mfem::Vector local_gap_;
+  // global, read as thread_local (pause) area
+  mfem::Vector thread_local_area_;
+  mfem::Vector thread_local_gap_;
+
+  int dim_{-1};
+  int n_dof_{-1};
+  bool assembling_grad_{false};
+
+  void SetDim(const int dim) {
+    MIMI_FUNC()
+
+    dim_ = dim;
+    assert(dim_ > 0);
+
+    distance_query_.SetSize(dim);
+    distance_results_.SetSize(dim - 1, dim);
+    J_.SetSize(dim_, dim_ - 1);
+    normal_.SetSize(dim_);
+  }
+
+  void SetDof(const int n_dof) {
+    MIMI_FUNC()
+
+    assert(dim_ > 0);
+    n_dof_ = n_dof;
+    element_x_.SetSize(n_dof * dim_);
+    element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
+    local_residual_.SetSize(n_dof, dim_);
+    local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
+    forward_residual_.SetSize(n_dof, dim_);
+    element_pressure_.SetSize(n_dof);
+    local_area_.SetSize(n_dof);
+    local_gap_.SetSize(n_dof);
+  }
+
+  mfem::DenseMatrix&
+  CurrentElementSolutionCopy(const mfem::Vector& current_all,
+                             const ElementQuadData_& eq_data) {
+    MIMI_FUNC()
+
+    current_all.GetSubVector(eq_data.GetElementData().v_dofs, element_x_);
+    element_x_mat_ += eq_data.GetMatrix(kXRef);
+
+    return element_x_mat_;
+  }
+
+  mfem::Vector& CurrentElementPressure(const mfem::Vector& pressure_all,
+                                       const ElementQuadData_& eq_data) {
+    MIMI_FUNC()
+
+    pressure_all.GetSubVector(eq_data.GetArray(kDof), element_pressure_);
+    return element_pressure_;
+  }
+
+  mfem::DenseMatrix& ComputeJ(const mfem::DenseMatrix& dndxi) {
+    MIMI_FUNC()
+    mfem::MultAtB(element_x_mat_, dndxi, J_);
+    return J_;
+  }
+
+  void ComputeNearestDistanceQuery(const mfem::Vector& N) {
+    MIMI_FUNC()
+    element_x_mat_.MultTranspose(N, distance_query_.query.data());
+  }
+
+  bool IsPressureZero() const {
+    for (const double p : element_pressure_) {
+      if (p != 0.0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  double Pressure(const mfem::Vector& N) const {
+    MIMI_FUNC()
+    const double* p_d = element_pressure_.GetData();
+    const double* n_d = N.GetData();
+    double p{};
+    for (int i{}; i < N.Size(); ++i) {
+      p += n_d[i] * p_d[i];
+    }
+    return p;
+  }
+
+  void InitializeThreadLocalAreaAndGap() {
+    double* a_d = thread_local_area_.GetData();
+    double* g_d = thread_local_gap_.GetData();
+    for (int i{}; i < thread_local_area_.Size(); ++i) {
+      a_d[i] = 0.0;
+      g_d[i] = 0.0;
+    }
+  }
+
+  void GradAssembly(bool state) {
+    MIMI_FUNC()
+
+    assembling_grad_ = state;
+  }
+
+  mfem::DenseMatrix& ResidualMatrix() {
+    MIMI_FUNC()
+    if (assembling_grad_) {
+      return forward_residual_;
+    }
+    return local_residual_;
+  }
+
+  int GetTDof() const { return dim_ * n_dof_; }
+
+  mfem::DenseMatrix& CurrentSolution() {
+    MIMI_FUNC()
+
+    return element_x_mat_;
+  }
+};
+
 /// implements normal contact methods presented in "De Lorenzis.
 /// A large deformation frictional contact formulation using NURBS-based
 /// isogeometric analysis"
@@ -99,145 +237,6 @@ public:
   double last_pressure_;
   mimi::utils::Data<double> last_force_;
 
-  /// temporary containers required in element assembly
-  /// mfem performs some fancy checks for allocating memories.
-  /// So we create one for each thread
-  class TemporaryData {
-  public:
-    mfem::Vector element_x_;
-    mfem::DenseMatrix element_x_mat_;
-    mfem::DenseMatrix J_;
-    mfem::DenseMatrix local_residual_;
-    mfem::DenseMatrix local_grad_;
-    mfem::DenseMatrix forward_residual_;
-
-    mfem::Vector element_pressure_;
-
-    mimi::coefficients::NearestDistanceBase::Query distance_query_;
-    mimi::coefficients::NearestDistanceBase::Results distance_results_;
-
-    mfem::Vector normal_;
-
-    // thread local
-    mfem::Vector local_area_;
-    mfem::Vector local_gap_;
-    // global, read as thread_local (pause) area
-    mfem::Vector thread_local_area_;
-    mfem::Vector thread_local_gap_;
-
-    int dim_{-1};
-    int n_dof_{-1};
-    bool assembling_grad_{false};
-
-    void SetDim(const int dim) {
-      MIMI_FUNC()
-
-      dim_ = dim;
-      assert(dim_ > 0);
-
-      distance_query_.SetSize(dim);
-      distance_results_.SetSize(dim - 1, dim);
-      J_.SetSize(dim_, dim_ - 1);
-      normal_.SetSize(dim_);
-    }
-
-    void SetDof(const int n_dof) {
-      MIMI_FUNC()
-
-      assert(dim_ > 0);
-      n_dof_ = n_dof;
-      element_x_.SetSize(n_dof * dim_);
-      element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
-      local_residual_.SetSize(n_dof, dim_);
-      local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
-      forward_residual_.SetSize(n_dof, dim_);
-      element_pressure_.SetSize(n_dof);
-      local_area_.SetSize(n_dof);
-      local_gap_.SetSize(n_dof);
-    }
-
-    mfem::DenseMatrix&
-    CurrentElementSolutionCopy(const mfem::Vector& current_all,
-                               const ElementQuadData_& eq_data) {
-      MIMI_FUNC()
-
-      current_all.GetSubVector(eq_data.GetElementData().v_dofs, element_x_);
-      element_x_mat_ += eq_data.GetMatrix(kXRef);
-
-      return element_x_mat_;
-    }
-
-    mfem::Vector& CurrentElementPressure(const mfem::Vector& pressure_all,
-                                         const ElementQuadData_& eq_data) {
-      MIMI_FUNC()
-
-      pressure_all.GetSubVector(eq_data.GetArray(kDof), element_pressure_);
-      return element_pressure_;
-    }
-
-    mfem::DenseMatrix& ComputeJ(const mfem::DenseMatrix& dndxi) {
-      MIMI_FUNC()
-      mfem::MultAtB(element_x_mat_, dndxi, J_);
-      return J_;
-    }
-
-    void ComputeNearestDistanceQuery(const mfem::Vector& N) {
-      MIMI_FUNC()
-      element_x_mat_.MultTranspose(N, distance_query_.query.data());
-    }
-
-    bool IsPressureZero() const {
-      for (const double p : element_pressure_) {
-        if (p != 0.0) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    double Pressure(const mfem::Vector& N) const {
-      MIMI_FUNC()
-      const double* p_d = element_pressure_.GetData();
-      const double* n_d = N.GetData();
-      double p{};
-      for (int i{}; i < N.Size(); ++i) {
-        p += n_d[i] * p_d[i];
-      }
-      return p;
-    }
-
-    void InitializeThreadLocalAreaAndGap() {
-      double* a_d = thread_local_area_.GetData();
-      double* g_d = thread_local_gap_.GetData();
-      for (int i{}; i < thread_local_area_.Size(); ++i) {
-        a_d[i] = 0.0;
-        g_d[i] = 0.0;
-      }
-    }
-
-    void GradAssembly(bool state) {
-      MIMI_FUNC()
-
-      assembling_grad_ = state;
-    }
-
-    mfem::DenseMatrix& ResidualMatrix() {
-      MIMI_FUNC()
-      if (assembling_grad_) {
-        return forward_residual_;
-      }
-      return local_residual_;
-    }
-
-    int GetTDof() const { return dim_ * n_dof_; }
-
-    mfem::DenseMatrix& CurrentSolution() {
-      MIMI_FUNC()
-
-      return element_x_mat_;
-    }
-  };
-
 protected:
   /// scene
   std::shared_ptr<mimi::coefficients::NearestDistanceBase>
@@ -265,7 +264,7 @@ protected:
   mfem::Vector average_pressure_;
   mfem::Vector area_;
 
-  Vector_<TemporaryData> temporary_data_;
+  Vector_<MortarContactWorkData> work_data_;
 
 public:
   MortarContact(
@@ -290,7 +289,7 @@ public:
     n_marked_boundaries_ = Base_::marked_boundary_elements_.size();
 
     last_force_.Reallocate(dim_);
-    temporary_data_.resize(n_threads_);
+    work_data_.resize(n_threads_);
 
     Vector_<ElementQuadData_>& element_quad_data_vec =
         precomputed_->GetElementQuadData(Name());
@@ -384,10 +383,10 @@ public:
               local_vdofs[i] = local_marked_v_dofs_[ed.v_dofs[i]];
             }
           }
-          TemporaryData& tmp = temporary_data_[i_thread];
-          tmp.SetDim(precomputed_->dim_);
-          tmp.thread_local_area_.SetSize(local_dof_size);
-          tmp.thread_local_gap_.SetSize(local_dof_size);
+          MortarContactWorkData& w = work_data_[i_thread];
+          w.SetDim(precomputed_->dim_);
+          w.thread_local_area_.SetSize(local_dof_size);
+          w.thread_local_gap_.SetSize(local_dof_size);
         };
 
     mimi::utils::NThreadExe(dofs_and_x_ref_thread_local,
@@ -409,28 +408,28 @@ public:
   }
 
   void ElementGapAndArea(const Vector_<QuadData_>& q_data,
-                         TemporaryData& tmp,
+                         MortarContactWorkData& w,
                          double& area_contribution) const {
 
-    tmp.local_area_ = 0.0;
-    tmp.local_gap_ = 0.0;
-    double* la_d = tmp.local_area_.GetData();
-    double* lg_d = tmp.local_gap_.GetData();
+    w.local_area_ = 0.0;
+    w.local_gap_ = 0.0;
+    double* la_d = w.local_area_.GetData();
+    double* lg_d = w.local_gap_.GetData();
     const int N_size = q_data[0].N.Size();
 
     for (const QuadData_& q : q_data) {
       // compute query, then distance, then normal
-      tmp.ComputeNearestDistanceQuery(q.N);
-      nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
-                                               tmp.distance_results_);
-      tmp.distance_results_.ComputeNormal<true>(); // unit normal
+      w.ComputeNearestDistanceQuery(q.N);
+      nearest_distance_coeff_->NearestDistance(w.distance_query_,
+                                               w.distance_results_);
+      w.distance_results_.ComputeNormal<true>(); // unit normal
 
       // get normal gaps and make sure it's not negative
-      const double true_g = tmp.distance_results_.NormalGap();
+      const double true_g = w.distance_results_.NormalGap();
       double g = std::min(true_g, 0.);
 
       // jacobian
-      mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi);
+      mfem::DenseMatrix& J = w.ComputeJ(q.dN_dxi);
       const double fac = q.integration_weight * J.Weight();
       area_contribution += fac;
 
@@ -438,7 +437,7 @@ public:
       // angle between two vectors:  acos(a * b / (a.norm * b.norm))
       constexpr const double angle_tol = 1.e-5;
       if (std::acos(
-              std::min(1., std::abs(true_g) / tmp.distance_results_.distance_))
+              std::min(1., std::abs(true_g) / w.distance_results_.distance_))
           > angle_tol) {
         g = 0.0;
       }
@@ -460,34 +459,34 @@ public:
 
     // first assemble thread locally
     std::mutex gap_mutex;
-    auto prepare_average_gap =
-        [&](const int begin, const int end, const int i_thread) {
-          // deref
-          Vector_<ElementQuadData_>& element_quad_data_vec =
-              precomputed_->GetElementQuadData(Name());
-          double local_area{};
-          auto& tmp = temporary_data_[i_thread];
-          // initialize thread local vectors
-          tmp.InitializeThreadLocalAreaAndGap();
-          for (int i{begin}; i < end; ++i) {
-            // deref and prepare
-            ElementQuadData_& eqd = element_quad_data_vec[i];
-            ElementData_& bed = eqd.GetElementData();
-            tmp.SetDof(bed.n_dof);
-            tmp.CurrentElementSolutionCopy(current_u, eqd);
+    auto prepare_average_gap = [&](const int begin,
+                                   const int end,
+                                   const int i_thread) {
+      // deref
+      Vector_<ElementQuadData_>& element_quad_data_vec =
+          precomputed_->GetElementQuadData(Name());
+      double local_area{};
+      auto& w = work_data_[i_thread];
+      // initialize thread local vectors
+      w.InitializeThreadLocalAreaAndGap();
+      for (int i{begin}; i < end; ++i) {
+        // deref and prepare
+        ElementQuadData_& eqd = element_quad_data_vec[i];
+        ElementData_& bed = eqd.GetElementData();
+        w.SetDof(bed.n_dof);
+        w.CurrentElementSolutionCopy(current_u, eqd);
 
-            ElementGapAndArea(eqd.GetQuadData(), tmp, local_area);
+        ElementGapAndArea(eqd.GetQuadData(), w, local_area);
 
-            // thread local push
-            tmp.thread_local_area_.AddElementVector(eqd.GetArray(kDof),
-                                                    tmp.local_area_);
-            tmp.thread_local_gap_.AddElementVector(eqd.GetArray(kDof),
-                                                   tmp.local_gap_);
-          }
-          // area contribution
-          std::lock_guard<std::mutex> lock(gap_mutex);
-          area += local_area;
-        };
+        // thread local push
+        w.thread_local_area_.AddElementVector(eqd.GetArray(kDof),
+                                              w.local_area_);
+        w.thread_local_gap_.AddElementVector(eqd.GetArray(kDof), w.local_gap_);
+      }
+      // area contribution
+      std::lock_guard<std::mutex> lock(gap_mutex);
+      area += local_area;
+    };
 
     mimi::utils::NThreadExe(prepare_average_gap,
                             n_marked_boundaries_,
@@ -505,9 +504,9 @@ public:
       double* p_begin = average_pressure_.GetData() + begin;
       double* area_begin = area_.GetData() + begin;
       // first we reduce
-      for (const TemporaryData& tmp : temporary_data_) {
-        const double* tl_area_begin = tmp.thread_local_area_.GetData() + begin;
-        const double* tl_gap_begin = tmp.thread_local_gap_.GetData() + begin;
+      for (const MortarContactWorkData& w : work_data_) {
+        const double* tl_area_begin = w.thread_local_area_.GetData() + begin;
+        const double* tl_gap_begin = w.thread_local_gap_.GetData() + begin;
         for (int i{}; i < size; ++i) {
           area_begin[i] += tl_area_begin[i];
           gap_begin[i] += tl_gap_begin[i];
@@ -528,36 +527,36 @@ public:
   /// (IsPressureZero), otherwise this will be a waste
   template<bool record>
   void ElementResidual(const Vector_<QuadData_>& q_data,
-                       TemporaryData& tmp,
+                       MortarContactWorkData& w,
                        mimi::utils::Data<double>& force /* only if applicable*/,
                        double& pressure_integral) const {
     MIMI_FUNC()
-    tmp.ResidualMatrix() = 0.0;
+    w.ResidualMatrix() = 0.0;
     const double penalty = nearest_distance_coeff_->coefficient_;
-    double* residual_d = tmp.ResidualMatrix().GetData();
+    double* residual_d = w.ResidualMatrix().GetData();
 
     for (const QuadData_& q : q_data) {
-      const double p = tmp.Pressure(q.N);
+      const double p = w.Pressure(q.N);
       assert(std::isfinite(p));
       assert(p < 0.);
 
       // we need derivatives to get normal.
-      mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi);
+      mfem::DenseMatrix& J = w.ComputeJ(q.dN_dxi);
       const double det_J = J.Weight();
-      ComputeUnitNormal(J, tmp.normal_);
+      ComputeUnitNormal(J, w.normal_);
 
       // this one has negative sign as we use the normal from gauss point
       const double fac = q.integration_weight * det_J * p;
       Ptr_AddMult_a_VWt(-fac,
                         q.N.begin(),
                         q.N.end(),
-                        tmp.normal_.begin(),
-                        tmp.normal_.end(),
+                        w.normal_.begin(),
+                        w.normal_.end(),
                         residual_d);
 
       // this is application specific quantity
       if constexpr (record) {
-        force.Add(fac, tmp.normal_.begin());
+        force.Add(fac, w.normal_.begin());
         pressure_integral += fac;
       }
     }
@@ -568,22 +567,22 @@ public:
   /// integrators
   void ElementResidualAndGrad(
       const Vector_<QuadData_>& q_data,
-      TemporaryData& tmp,
+      MortarContactWorkData& w,
       mimi::utils::Data<double>& force /* only if applicable*/,
       double& pressure_integral) {
     MIMI_FUNC()
 
-    tmp.GradAssembly(false);
-    ElementResidual<true>(q_data, tmp, force, pressure_integral);
+    w.GradAssembly(false);
+    ElementResidual<true>(q_data, w, force, pressure_integral);
 
-    tmp.GradAssembly(true);
+    w.GradAssembly(true);
     mimi::utils::Data<double> dummy_f;
     double dummy_p;
-    double* grad_data = tmp.local_grad_.GetData();
-    double* solution_data = tmp.CurrentSolution().GetData();
-    const double* residual_data = tmp.local_residual_.GetData();
-    const double* fd_forward_data = tmp.forward_residual_.GetData();
-    const int n_t_dof = tmp.GetTDof();
+    double* grad_data = w.local_grad_.GetData();
+    double* solution_data = w.CurrentSolution().GetData();
+    const double* residual_data = w.local_residual_.GetData();
+    const double* fd_forward_data = w.forward_residual_.GetData();
+    const int n_t_dof = w.GetTDof();
     for (int i{}; i < n_t_dof; ++i) {
       double& with_respect_to = *solution_data++;
       const double orig_wrt = with_respect_to;
@@ -592,7 +591,7 @@ public:
       const double diff_step_inv = 1. / diff_step;
 
       with_respect_to = orig_wrt + diff_step;
-      ElementResidual<false>(q_data, tmp, dummy_f, dummy_p);
+      ElementResidual<false>(q_data, w, dummy_f, dummy_p);
       for (int j{}; j < n_t_dof; ++j) {
         *grad_data++ = (fd_forward_data[j] - residual_data[j]) * diff_step_inv;
       }
@@ -615,8 +614,8 @@ public:
     auto assemble_face_residual = [&](const int begin,
                                       const int end,
                                       const int i_thread) {
-      auto& tmp = temporary_data_[i_thread];
-      tmp.GradAssembly(false);
+      auto& w = work_data_[i_thread];
+      w.GradAssembly(false);
       mimi::utils::Data<double> tl_force(dim_);
       tl_force.Fill(0.0);
       double local_pressure{};
@@ -629,24 +628,21 @@ public:
 
         // first we check if we need to do anything - if pressure is zero,
         // nothing to do
-        tmp.CurrentElementPressure(average_pressure_, beqd);
-        if (tmp.IsPressureZero()) {
+        w.CurrentElementPressure(average_pressure_, beqd);
+        if (w.IsPressureZero()) {
           continue;
         }
 
         // continue with assembly
         ElementData_& bed = beqd.GetElementData();
-        tmp.SetDof(bed.n_dof);
+        w.SetDof(bed.n_dof);
 
-        tmp.CurrentElementSolutionCopy(current_u, beqd);
-        ElementResidual<true>(beqd.GetQuadData(),
-                              tmp,
-                              tl_force,
-                              local_pressure);
+        w.CurrentElementSolutionCopy(current_u, beqd);
+        ElementResidual<true>(beqd.GetQuadData(), w, tl_force, local_pressure);
 
         {
           const std::lock_guard<std::mutex> lock(residual_mutex);
-          residual.AddElementVector(bed.v_dofs, tmp.local_residual_.GetData());
+          residual.AddElementVector(bed.v_dofs, w.local_residual_.GetData());
         }
       } // marked elem loop
         // reuse mutex for area and force update
@@ -685,7 +681,7 @@ public:
     // lambda for nthread assemble
     auto assemble_boundary_residual_and_grad_then_contribute =
         [&](const int begin, const int end, const int i_thread) {
-          auto& tmp = temporary_data_[i_thread];
+          auto& w = work_data_[i_thread];
           mimi::utils::Data<double> tl_force(dim_);
           tl_force.Fill(0.0);
           double local_pressure{};
@@ -696,27 +692,27 @@ public:
 
             // first we check if we need to do anything - if pressure is zero,
             // nothing to do
-            tmp.CurrentElementPressure(average_pressure_, beqd);
-            if (tmp.IsPressureZero()) {
+            w.CurrentElementPressure(average_pressure_, beqd);
+            if (w.IsPressureZero()) {
               continue;
             }
 
             ElementData_& bed = beqd.GetElementData();
-            tmp.SetDof(bed.n_dof);
+            w.SetDof(bed.n_dof);
 
             // get current element solution as matrix
-            tmp.CurrentElementSolutionCopy(current_u, beqd);
+            w.CurrentElementSolutionCopy(current_u, beqd);
             ElementResidualAndGrad(beqd.GetQuadData(),
-                                   tmp,
+                                   w,
                                    tl_force,
                                    local_pressure);
 
             // push right away
             std::lock_guard<std::mutex> lock(residual_mutex);
             const auto& vdofs = bed.v_dofs;
-            residual.AddElementVector(vdofs, tmp.local_residual_.GetData());
+            residual.AddElementVector(vdofs, w.local_residual_.GetData());
             double* A = grad.GetData();
-            const double* local_A = tmp.local_grad_.GetData();
+            const double* local_A = w.local_grad_.GetData();
             const auto& A_ids = bed.A_ids;
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++ * grad_factor;
@@ -740,7 +736,7 @@ public:
     std::mutex gap_norm;
     double gap_squared_total{};
     auto find_gap = [&](const int begin, const int end, const int i_thread) {
-      auto& tmp = temporary_data_[i_thread];
+      auto& w = work_data_[i_thread];
       double local_g_squared_sum{};
       Vector_<ElementQuadData_>& element_quad_data_vec =
           precomputed_->GetElementQuadData(Name());
@@ -749,20 +745,19 @@ public:
         // get bed
         const ElementQuadData_& beqd = element_quad_data_vec[i];
         const ElementData_& bed = beqd.GetElementData();
-        tmp.SetDof(bed.n_dof);
+        w.SetDof(bed.n_dof);
 
         mfem::DenseMatrix& current_element_x =
-            tmp.CurrentElementSolutionCopy(test_x, beqd);
+            w.CurrentElementSolutionCopy(test_x, beqd);
 
         for (const QuadData_& q : beqd.GetQuadData()) {
           // get current position and F
-          current_element_x.MultTranspose(q.N,
-                                          tmp.distance_query_.query.data());
+          current_element_x.MultTranspose(q.N, w.distance_query_.query.data());
           // query
-          nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
-                                                   tmp.distance_results_);
-          tmp.distance_results_.ComputeNormal<true>(); // unit normal
-          const double g = tmp.distance_results_.NormalGap();
+          nearest_distance_coeff_->NearestDistance(w.distance_query_,
+                                                   w.distance_results_);
+          w.distance_results_.ComputeNormal<true>(); // unit normal
+          const double g = w.distance_results_.NormalGap();
           if (g < 0.0) {
             local_g_squared_sum += g * g;
           }
