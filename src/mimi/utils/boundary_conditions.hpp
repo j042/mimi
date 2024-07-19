@@ -99,7 +99,7 @@ public:
   Vector<double> saved_a_;
 
   /// Checks if we have pointers to boundary_dof_ids_ and dynamic_bc_
-  bool HasDynamicDirichlet();
+  bool HasDynamicDirichlet() const;
 
   /// @brief apply bounday conditions. note that those are alpha values.
   /// @param t
