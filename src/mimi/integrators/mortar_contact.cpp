@@ -1,6 +1,11 @@
-#pragma once
+#include "mimi/integrators/mortar_contact.hpp"
 
 namespace mimi::integrators {
+
+static const int kDof{0};
+static const int kVDof{1};
+
+static const int kXRef{0};
 
 void MortarContactWorkData::SetDim(const int dim) {
   MIMI_FUNC()

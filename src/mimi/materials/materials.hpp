@@ -2,7 +2,7 @@
 
 #include <mfem.hpp>
 
-#include "mimi/integrators/nonlinear_base.hpp"
+#include "mimi/integrators/integrator_utils.hpp"
 #include "mimi/materials/material_hardening.hpp"
 #include "mimi/materials/material_state.hpp"
 #include "mimi/materials/material_utils.hpp"

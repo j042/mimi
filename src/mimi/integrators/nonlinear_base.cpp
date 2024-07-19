@@ -85,7 +85,7 @@ mimi::utils::Vector<int>& NonlinearBase::MarkedBoundaryElements() {
   return marked_boundary_elements_;
 }
 
-double NonlinearBase : GapNorm(const mfem::Vector& test_x, const int nthreads) {
+double NonlinearBase::GapNorm(const mfem::Vector& test_x, const int nthreads) {
   MIMI_FUNC()
   mimi::utils::PrintAndThrowError("GapNorm(x, nthread) not implemented for",
                                   Name());

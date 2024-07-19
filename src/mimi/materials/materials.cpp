@@ -1,16 +1,6 @@
 #include "mimi/materials/materials.hpp"
 
-#include <algorithm>
-#include <cmath>
-
-#include "mimi/integrators/nonlinear_base.hpp"
-#include "mimi/materials/material_hardening.hpp"
-#include "mimi/materials/material_state.hpp"
-#include "mimi/materials/material_utils.hpp"
-#include "mimi/solvers/newton.hpp"
-#include "mimi/utils/ad.hpp"
-#include "mimi/utils/containers.hpp"
-#include "mimi/utils/print.hpp"
+#include "mimi/integrators/nonlinear_solid.hpp"
 
 namespace mimi::materials {
 

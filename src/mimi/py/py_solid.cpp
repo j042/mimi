@@ -112,7 +112,7 @@ std::unique_ptr<mfem::Mesh>& PySolid::Mesh() {
   return mesh_;
 }
 
-const std::unique_ptr<mfem::Mesh>& PySolid::Mesh() {
+const std::unique_ptr<mfem::Mesh>& PySolid::Mesh() const {
   MIMI_FUNC()
 
   if (!mesh_) {

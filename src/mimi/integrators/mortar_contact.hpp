@@ -73,6 +73,8 @@ ComputeUnitNormal(const DerivativeContainer& first_derivatives,
 /// So we create one for each thread
 class MortarContactWorkData {
 public:
+  using ElementQuadData_ = mimi::utils::ElementQuadData;
+
   mfem::Vector element_x_;
   mfem::DenseMatrix element_x_mat_;
   mfem::DenseMatrix J_;
@@ -147,12 +149,6 @@ public:
 /// isogeometric analysis"
 /// Currently implements normal contact
 class MortarContact : public NonlinearBase {
-protected:
-  static const int kDof{0};
-  static const int kVDof{1};
-
-  static const int kXRef{0};
-
 public:
   using Base_ = NonlinearBase;
   template<typename T>
@@ -293,9 +289,10 @@ public:
   virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_u,
                                           const double grad_factor,
                                           mfem::Vector& residual,
-                                          mfem::SparseMatrix& grad;
+                                          mfem::SparseMatrix& grad);
 
-  /// checks GapNorm from given test_u. Useful to check fulfillment of contact conditions.
+  /// checks GapNorm from given test_u. Useful to check fulfillment of contact
+  /// conditions.
   virtual double GapNorm(const mfem::Vector& test_u, const int nthreads);
 
   /// Saves relevant properties at converged state
