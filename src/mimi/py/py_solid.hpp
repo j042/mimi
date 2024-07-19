@@ -104,7 +104,7 @@ public:
   /// @brief sets mesh
   /// @param fname
   virtual void ReadMesh(const std::string fname);
-  
+
   virtual void SaveMesh(const std::string fname) const;
 
   /// @brief returns mesh. If it's missing, it will raise.
