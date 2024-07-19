@@ -12,7 +12,6 @@ nl.elevate_degrees(1)
 nl.subdivide(2)
 
 # create material
-mat = mimi.StVenantKirchhoff()
 mat = mimi.CompressibleOgdenNeoHookean()
 mat.density = 1
 mat.viscosity = -1
