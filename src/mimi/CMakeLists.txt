@@ -8,6 +8,8 @@ set(SRCS
     operators/nonlinear_solid.cpp
     solvers/ode.cpp
     utils/boundary_conditions.cpp
+    utils/precomputed.cpp
+    utils/mfem_ext.cpp
     py/py_boundary_conditions.cpp
     py/py_solid.cpp
     py/py_nearest_distance.cpp

@@ -147,7 +147,7 @@ void PrecomputedData::PrepareElementData() {
   mimi::utils::NThreadExe(process_boundary_elems, n_b_elements_, n_threads_);
 }
 
-void PrecomputeData::PrepareSparsity() {
+void PrecomputedData::PrepareSparsity() {
   MIMI_FUNC()
 
   ThreadSafe();
@@ -216,10 +216,10 @@ void PrecomputeData::PrepareSparsity() {
   }
 }
 
-Vector_<ElementQuadData>&
+PrecomputedData::Vector_<ElementQuadData>&
 PrecomputedData::CreateElementQuadData(const std::string name,
-                                       int* mask = nullptr,
-                                       int mask_size = -1) {
+                                       int* mask,
+                                       int mask_size) {
   MIMI_FUNC()
   Vector_<int> arange;
   if (!mask) {
@@ -238,10 +238,10 @@ PrecomputedData::CreateElementQuadData(const std::string name,
   return eq_data;
 }
 
-Vector_<ElementQuadData>&
+PrecomputedData::Vector_<ElementQuadData>&
 PrecomputedData::CreateBoundaryElementQuadData(const std::string name,
-                                               int* mask = nullptr,
-                                               int mask_size = -1) {
+                                               int* mask,
+                                               int mask_size) {
   MIMI_FUNC()
 
   Vector_<int> arange;

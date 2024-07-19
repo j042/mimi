@@ -1,9 +1,11 @@
 #include "mimi/utils/mfem_ext.hpp"
 
 namespace mimi::utils {
-MeshExt::GetFaceElementTransformations(int FaceNo,
-                                       int mask,
-                                       FaceElementTransformationsExt& f_tr) {
+
+void MeshExt::GetFaceElementTransformations(
+    int FaceNo,
+    int mask,
+    FaceElementTransformationsExt& f_tr) {
   FaceInfo& face_info = faces_info[FaceNo];
 
   int cmask = 0;
