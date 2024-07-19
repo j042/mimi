@@ -139,10 +139,10 @@ void J2::Setup(const int dim) {
   Base_::Setup(dim);
 
   if (hardening_) {
-    hardening_->Validate();
     // this does nothing for temperature independent hardening
     hardening_->InitializeTemperature(initial_temperature_,
                                       melting_temperature_);
+    hardening_->Validate();
   } else {
     mimi::utils::PrintAndThrowError("hardening missing for", Name());
   }
@@ -172,10 +172,10 @@ void J2Simo::Setup(const int dim) {
   Base_::Setup(dim);
 
   if (hardening_) {
-    hardening_->Validate();
     // this does nothing for temperature independent hardening
     hardening_->InitializeTemperature(initial_temperature_,
                                       melting_temperature_);
+    hardening_->Validate();
   } else {
     mimi::utils::PrintAndThrowError("hardening missing for", Name());
   }
@@ -209,10 +209,10 @@ void J2Log::Setup(const int dim) {
   Base_::Setup(dim);
 
   if (hardening_) {
-    hardening_->Validate();
     // this does nothing for temperature independent hardening
     hardening_->InitializeTemperature(initial_temperature_,
                                       melting_temperature_);
+    hardening_->Validate();
   } else {
     mimi::utils::PrintAndThrowError("hardening missing for", Name());
   }

@@ -623,7 +623,7 @@ public:
     MIMI_FUNC()
 
     // Ee, s, N_p, a misc work array, eigen vectors/work2
-    tmp.aux_mat_.resize(5, mfem::DenseMatrix(dim_, dim_));
+    tmp.aux_mat_.resize(6, mfem::DenseMatrix(dim_, dim_));
     // eigen values
     tmp.aux_vec_.resize(1, mfem::Vector(dim_));
   }

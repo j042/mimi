@@ -59,21 +59,32 @@ auto ScalarSolve(function&& f,
   double fl = f(lower_bound, params...).GetValue();
   double fh = f(upper_bound, params...).GetValue();
 
-  if (fl * fh > 0.) {
-    mimi::utils::PrintAndThrowError(
-        "ScalarSolve: root not bracketed by input bounds.");
-  }
-
   unsigned int iterations = 0;
   bool converged = false;
 
   // handle corner cases where one of the brackets is the root
-  if (fl == 0) {
+  if (std::abs(fl) < options.rtol) {
     x = lower_bound;
     converged = true;
-  } else if (fh == 0) {
+    return x;
+  } else if (std::abs(fh) < options.rtol) {
     x = upper_bound;
     converged = true;
+    return x;
+  }
+
+  if (fl * fh > 0.) {
+    mimi::utils::PrintAndThrowError(
+        "ScalarSolve: root not bracketed by input bounds. lower bound:",
+        lower_bound,
+        "value:",
+        fl,
+        "upper bound:",
+        upper_bound,
+        "value:",
+        fh,
+        "tolerance:",
+        options.rtol);
   }
 
   if (converged) {
@@ -150,27 +161,6 @@ auto ScalarSolve(function&& f,
       ++iterations;
     }
   }
-
-  // Accumulate derivatives so that the user can get derivatives
-  // with respect to parameters, subject to constraing that f(x, p) = 0 for all
-  // p Conceptually, we're doing the following: [fval, df_dp] = f(get_value(x),
-  // p) df = 0 for p in params:
-  //   df += inner(df_dp, dp)
-  // dx = -df / df_dx
-  // constexpr bool contains_duals =
-  //     (is_dual_number<ParamTypes>::value || ...) ||
-  //     (is_tensor_of_dual_number<ParamTypes>::value || ...);
-  // if constexpr (contains_duals) {
-  //   auto [fval, df] = f(x, params...);
-  //   auto         dx = -df / df_dx;
-  //   SolverStatus status{.converged = converged, .iterations = iterations,
-  //   .residual = fval}; return tuple{dual{x, dx}, status};
-  // }
-  // if constexpr (!contains_duals) {
-  //   auto         fval = f(x, params...);
-  //   SolverStatus status{.converged = converged, .iterations = iterations,
-  //   .residual = fval}; return std::tuple{x, status};
-  // }
 
   return x;
 }
