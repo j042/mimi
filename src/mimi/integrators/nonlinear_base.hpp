@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cmath>
-
 #include <mfem.hpp>
 
 #include <splinepy/py/py_spline.hpp>
@@ -53,55 +51,33 @@ public:
   }
 
   /// Precompute call interface
-  virtual void Prepare() {
-    MIMI_FUNC()
-
-    mimi::utils::PrintAndThrowError("Prepare not implemented");
-  };
+  virtual void Prepare();
 
   virtual void AddDomainResidual(const mfem::Vector& current_x,
-                                 mfem::Vector& residual) const {
-    mimi::utils::PrintAndThrowError("AddDomainResidual not implemented");
-  };
+                                 mfem::Vector& residual) const;
 
   virtual void AddDomainGrad(const mfem::Vector& current_x,
-                             mfem::SparseMatrix& grad) const {
-    mimi::utils::PrintAndThrowError("AddDomainGrad not implemented");
-  };
+                             mfem::SparseMatrix& grad) const;
 
   virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
                                         const double grad_factor,
                                         mfem::Vector& residual,
-                                        mfem::SparseMatrix& grad) const {
-    mimi::utils::PrintAndThrowError("AddDomainResidualAndGrad not implemented");
-  };
+                                        mfem::SparseMatrix& grad) const;
 
-  virtual void DomainPostTimeAdvance(const mfem::Vector& current_x) {
-    mimi::utils::PrintAndThrowError("DomainPostTimeAdvance not implemented");
-  }
+  virtual void DomainPostTimeAdvance(const mfem::Vector& current_x);
 
   virtual void AddBoundaryResidual(const mfem::Vector& current_x,
-                                   mfem::Vector& residual) {
-    mimi::utils::PrintAndThrowError("AddBoundaryResidual not implemented");
-  };
+                                   mfem::Vector& residual);
 
   virtual void AddBoundaryGrad(const mfem::Vector& current_x,
-                               mfem::SparseMatrix& grad) {
-    mimi::utils::PrintAndThrowError("AddBoundaryGrad not implemented");
-  };
+                               mfem::SparseMatrix& grad);
 
   virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
                                           const double grad_factor,
                                           mfem::Vector& residual,
-                                          mfem::SparseMatrix& grad) {
-    mimi::utils::PrintAndThrowError(
-        "AddBoundaryResidualAndGrad not implemented");
-  };
+                                          mfem::SparseMatrix& grad);
 
-  virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("BoundaryPostTimeAdvance not implemented");
-  }
+  virtual void BoundaryPostTimeAdvance(const mfem::Vector& current_x);
 
   virtual void SetBoundaryMarker(const mfem::Array<int>* b_marker) {
     MIMI_FUNC()
@@ -109,35 +85,7 @@ public:
     boundary_marker_ = b_marker;
   }
 
-  virtual mimi::utils::Vector<int>& MarkedBoundaryElements() {
-    MIMI_FUNC()
-    if (!boundary_marker_) {
-      mimi::utils::PrintAndThrowError("boundary_marker_ not set");
-    }
-    if (!precomputed_) {
-      mimi::utils::PrintAndThrowError("precomputed_ not set");
-    }
-
-    if (marked_boundary_elements_.size() > 0) {
-      return marked_boundary_elements_;
-    }
-
-    auto& mesh = *precomputed_->meshes_[0];
-    auto& b_marker = *boundary_marker_;
-    marked_boundary_elements_.reserve(precomputed_->n_b_elements_);
-
-    // loop boundary elements and check their attributes
-    for (int i{}; i < precomputed_->n_b_elements_; ++i) {
-      const int bdr_attr = mesh.GetBdrAttribute(i);
-      if (b_marker[bdr_attr - 1] == 0) {
-        continue;
-      }
-      marked_boundary_elements_.push_back(i);
-    }
-    marked_boundary_elements_.shrink_to_fit();
-
-    return marked_boundary_elements_;
-  }
+  virtual mimi::utils::Vector<int>& MarkedBoundaryElements();
 
   template<typename TemporaryDataVector>
   static void AddThreadLocalResidual(const TemporaryDataVector& t_data_vec,
@@ -202,157 +150,7 @@ public:
     mimi::utils::NThreadExe(global_push, n_threads, n_threads);
   }
 
-  virtual double GapNorm(const mfem::Vector& test_x, const int nthreads) {
-    MIMI_FUNC()
-    mimi::utils::PrintAndThrowError("GapNorm(x, nthread) not implemented for",
-                                    Name());
-    return 0.0;
-  }
-};
-
-/// Temporary containers required in element assembly. One for each thread will
-/// be created. Stores values required for material, quad point and element
-/// data.
-class NonlinearSolidWorkData {
-public:
-  // basic info. used to compute tdofs
-  int dim_;
-  int n_dof_;
-
-  // state variable
-  double det_F_{};
-  bool has_det_F_{false};
-  bool has_F_inv_{false};
-
-  /// flag to inform residual destination
-  bool assembling_grad_{false};
-
-  // general assembly items
-  mfem::Vector element_x_;
-  mfem::DenseMatrix element_x_mat_;
-  mfem::DenseMatrix local_residual_;
-  mfem::DenseMatrix local_grad_;
-  mfem::DenseMatrix forward_residual_;
-
-  // used for materials
-  mfem::DenseMatrix stress_;
-  mfem::DenseMatrix F_;
-  mfem::DenseMatrix F_inv_;
-  mfem::DenseMatrix F_dot_; // for visco but put it here for easier visibility
-
-  // used in materials - materials will visit and initiate those in
-  // PrepareWorkData
-  mfem::DenseMatrix I_;
-  mfem::DenseMatrix alternative_stress_;           // for conversion
-  mimi::utils::Vector<mfem::Vector> aux_vec_;      // for computation
-  mimi::utils::Vector<mfem::DenseMatrix> aux_mat_; // for computation
-
-  // this is global sized local residual / grad entries
-  mfem::Vector thread_local_residual_;
-  mfem::Vector thread_local_A_;
-
-  /// this can be called once at Prepare()
-  void SetDim(const int dim) {
-    MIMI_FUNC()
-    has_det_F_ = false;
-    has_F_inv_ = false;
-
-    dim_ = dim;
-
-    stress_.SetSize(dim, dim);
-    F_.SetSize(dim, dim);
-    F_inv_.SetSize(dim, dim);
-    F_dot_.SetSize(dim, dim);
-
-    I_.Diag(1., dim);
-    alternative_stress_.SetSize(dim, dim);
-  }
-
-  /// this should be called at the start of every element as NDof may change
-  void SetDof(const int n_dof) {
-    MIMI_FUNC()
-
-    n_dof_ = n_dof;
-    element_x_.SetSize(n_dof * dim_); // will be resized in getsubvector
-    element_x_mat_.UseExternalData(element_x_.GetData(), n_dof, dim_);
-    forward_residual_.SetSize(n_dof, dim_);
-    local_residual_.SetSize(n_dof, dim_);
-    local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
-  }
-
-  /// Number of true dof based on dim and n_dof values
-  int GetTDof() const {
-    MIMI_FUNC()
-
-    return dim_ * n_dof_;
-  }
-
-  /// computes F, deformation gradient, and resets flags
-  void ComputeF(const mfem::DenseMatrix& dNdX) {
-    MIMI_FUNC()
-    has_det_F_ = false;
-    has_F_inv_ = false;
-
-    mfem::MultAtB(element_x_mat_, dNdX, F_);
-    mimi::utils::AddDiagonal(F_.GetData(), 1.0, dim_);
-  }
-
-  /// Returns inverse of F. For consecutive calls, it will return stored value
-  mfem::DenseMatrix& FInv() {
-    MIMI_FUNC()
-    if (has_F_inv_) {
-      return F_inv_;
-    }
-    mfem::CalcInverse(F_, F_inv_);
-
-    has_F_inv_ = true;
-    return F_inv_;
-  }
-
-  /// determinant of F
-  double DetF() {
-    MIMI_FUNC()
-    if (has_det_F_) {
-      return det_F_;
-    }
-
-    det_F_ = F_.Det();
-    has_det_F_ = true;
-    return det_F_;
-  }
-
-  /// Given global state vector and support ids, copies element vector and
-  /// returns matrix form.
-  mfem::DenseMatrix& CurrentElementSolutionCopy(const mfem::Vector& current_all,
-                                                const mfem::Array<int>& vdofs) {
-    MIMI_FUNC()
-
-    current_all.GetSubVector(vdofs, element_x_);
-    return element_x_mat_;
-  }
-
-  mfem::DenseMatrix& CurrentSolution() {
-    MIMI_FUNC()
-
-    return element_x_mat_;
-  }
-
-  /// hint flag to inform current action. influences return value for
-  /// ResidualMatrix()
-  void GradAssembly(bool state) {
-    MIMI_FUNC()
-
-    assembling_grad_ = state;
-  }
-
-  /// Returns destination matrix for assembly. This maybe for residual or FD.
-  mfem::DenseMatrix& ResidualMatrix() {
-    MIMI_FUNC()
-    if (assembling_grad_) {
-      return forward_residual_;
-    }
-    return local_residual_;
-  }
+  virtual double GapNorm(const mfem::Vector& test_x, const int nthreads);
 };
 
 } // namespace mimi::integrators
