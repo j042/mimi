@@ -8,6 +8,112 @@
 
 namespace mimi::integrators {
 
+/// Temporary containers required in element assembly. One for each thread will
+/// be created. Stores values required for material, quad point and element
+/// data.
+class NonlinearSolidWorkData {
+public:
+  // basic info. used to compute tdofs
+  int dim_;
+  int n_dof_;
+
+  // state variable
+  double det_F_{};
+  bool has_det_F_{false};
+  bool has_F_inv_{false};
+
+  /// flag to inform residual destination
+  bool assembling_grad_{false};
+
+  // general assembly items
+  mfem::Vector element_x_;
+  mfem::DenseMatrix element_x_mat_;
+  mfem::DenseMatrix local_residual_;
+  mfem::DenseMatrix local_grad_;
+  mfem::DenseMatrix forward_residual_;
+
+  // used for materials
+  mfem::DenseMatrix stress_;
+  mfem::DenseMatrix F_;
+  mfem::DenseMatrix F_inv_;
+  mfem::DenseMatrix F_dot_; // for visco but put it here for easier visibility
+
+  // used in materials - materials will visit and initiate those in
+  // PrepareWorkData
+  mfem::DenseMatrix I_;
+  mfem::DenseMatrix alternative_stress_;           // for conversion
+  mimi::utils::Vector<mfem::Vector> aux_vec_;      // for computation
+  mimi::utils::Vector<mfem::DenseMatrix> aux_mat_; // for computation
+
+  // this is global sized local residual / grad entries
+  mfem::Vector thread_local_residual_;
+  mfem::Vector thread_local_A_;
+
+  /// this can be called once at Prepare()
+  void SetDim(const int dim);
+
+  /// this should be called at the start of every element as NDof may change
+  void SetDof(const int n_dof);
+
+  /// Number of true dof based on dim and n_dof values
+  int GetTDof() const { return dim_ * n_dof_; }
+
+  /// computes F, deformation gradient, and resets flags
+  void ComputeF(const mfem::DenseMatrix& dNdX);
+
+  /// Returns inverse of F. For consecutive calls, it will return stored value
+  mfem::DenseMatrix& FInv() {
+    MIMI_FUNC()
+    if (has_F_inv_) {
+      return F_inv_;
+    }
+    mfem::CalcInverse(F_, F_inv_);
+
+    has_F_inv_ = true;
+    return F_inv_;
+  }
+
+  /// determinant of F
+  double DetF() {
+    MIMI_FUNC()
+    if (has_det_F_) {
+      return det_F_;
+    }
+
+    det_F_ = F_.Det();
+    has_det_F_ = true;
+    return det_F_;
+  }
+
+  /// Given global state vector and support ids, copies element vector and
+  /// returns matrix form.
+  mfem::DenseMatrix& CurrentElementSolutionCopy(const mfem::Vector& current_all,
+                                                const mfem::Array<int>& vdofs);
+
+  mfem::DenseMatrix& CurrentSolution() {
+    MIMI_FUNC()
+
+    return element_x_mat_;
+  }
+
+  /// hint flag to inform current action. influences return value for
+  /// ResidualMatrix()
+  void GradAssembly(bool state) {
+    MIMI_FUNC()
+
+    assembling_grad_ = state;
+  }
+
+  /// Returns destination matrix for assembly. This maybe for residual or FD.
+  mfem::DenseMatrix& ResidualMatrix() {
+    MIMI_FUNC()
+    if (assembling_grad_) {
+      return forward_residual_;
+    }
+    return local_residual_;
+  }
+};
+
 /// basic integrator of nonlinear solids
 /// given current x coordinate (NOT displacement)
 /// Computes F and passes it to material
@@ -50,53 +156,14 @@ public:
 
   virtual const std::string& Name() const { return name_; }
 
-  virtual void PrepareNonlinearSolidWorkDataAndMaterial() {
-    MIMI_FUNC()
-
-    assert(material_);
-
-    // create states if needed
-    if (has_states_) {
-      Vector_<ElementQuadData_>& element_quad_data_vec =
-          precomputed_->GetElementQuadData("domain");
-      for (ElementQuadData_& eqd : element_quad_data_vec) {
-        for (QuadData_& qd : eqd.GetQuadData()) {
-          qd.material_state = material_->CreateState();
-        }
-      }
-    }
-
-    // allocate temporary data
-    work_data_.resize(n_threads_);
-    for (auto& td : work_data_) {
-      td.SetDim(precomputed_->dim_);
-      material_->AllocateAux(td);
-    }
-  }
+  virtual void PrepareNonlinearSolidWorkDataAndMaterial();
 
   /// This one needs / stores
   /// - basis(shape) function derivative (at reference)
   /// - reference to target jacobian weight (det)
   /// - target to reference jacobian (inverse of previous)
   /// - basis derivative at target
-  virtual void Prepare() {
-    MIMI_FUNC()
-
-    n_elements_ = precomputed_->n_elements_;
-    n_threads_ = precomputed_->n_threads_;
-
-    // setup material
-    material_->Setup(precomputed_->dim_);
-    // set flag for this integrator
-    if (material_->CreateState()) {
-      // not a nullptr -> has states
-      has_states_ = true;
-    } else {
-      has_states_ = false;
-    }
-
-    PrepareNonlinearSolidWorkDataAndMaterial();
-  }
+  virtual void Prepare();
 
   /// reusable element assembly routine. Make sure CurrentElementSolutionCopy is
   /// called beforehand. Specify residual destination to enable fd
@@ -127,164 +194,40 @@ public:
   /// reusable element residual and jacobian assembly. Make sure
   /// CurrentElementSolutionCopy is called beforehand
   void ElementResidualAndGrad(const Vector_<QuadData_>& q_data,
-                              NonlinearSolidWorkData& w) const {
-    MIMI_FUNC()
+                              NonlinearSolidWorkData& w) const;
 
-    w.GradAssembly(false);
-    ElementResidual(q_data, w);
+  /// Each thread assembles residual in a separate vector to avoid race
+  /// condition. This can be then reduced to one vector using
+  /// AddThreadLocalResidual()
+  void ThreadLocalResidual(const mfem::Vector& current_u) const;
 
-    // now, forward fd
-    w.GradAssembly(true);
-    double* grad_data = w.local_grad_.GetData();
-    double* solution_data = w.CurrentSolution().GetData();
-    const double* residual_data = w.local_residual_.GetData();
-    const double* fd_forward_data = w.forward_residual_.GetData();
-    const int n_t_dof = w.GetTDof();
-    for (int i{}; i < n_t_dof; ++i) {
-      double& with_respect_to = *solution_data++;
-      const double orig_wrt = with_respect_to;
-      const double diff_step =
-          (orig_wrt != 0.0) ? std::abs(orig_wrt) * 1.0e-8 : 1.0e-10;
-      const double diff_step_inv = 1. / diff_step;
+  /// Similar to ThreadLocalResidual, but also grad
+  void ThreadLocalResidualAndGrad(const mfem::Vector& current_u,
+                                  const int A_nnz) const;
 
-      with_respect_to = orig_wrt + diff_step;
-      ElementResidual(q_data, w);
-      for (int j{}; j < n_t_dof; ++j) {
-        *grad_data++ = (fd_forward_data[j] - residual_data[j]) * diff_step_inv;
-      }
-      with_respect_to = orig_wrt;
-    }
-  }
+  /// Adds residual contribution
+  virtual void AddDomainResidual(const mfem::Vector& current_u,
+                                 mfem::Vector& residual) const;
 
-  void ThreadLocalResidual(const mfem::Vector& current_x) const {
-    auto thread_local_residual = [&](const int begin,
-                                     const int end,
-                                     const int i_thread) {
-      // deref relavant resources
-      NonlinearSolidWorkData& w = work_data_[i_thread];
-      Vector_<ElementQuadData_>& element_quad_data_vec =
-          precomputed_->GetElementQuadData("domain");
-
-      // initialize thread local residual
-      w.thread_local_residual_.SetSize(current_x.Size());
-      w.thread_local_residual_ = 0.0;
-      w.GradAssembly(false);
-
-      // assemble to thread local
-      for (int i{begin}; i < end; ++i) {
-        const ElementQuadData_& eqd = element_quad_data_vec[i];
-        const ElementData_& ed = eqd.GetElementData();
-        w.SetDof(ed.n_dof);
-        w.CurrentElementSolutionCopy(current_x, ed.v_dofs);
-        ElementResidual<false>(eqd.GetQuadData(), w);
-        w.thread_local_residual_.AddElementVector(ed.v_dofs,
-                                                  w.local_residual_.GetData());
-      }
-    };
-
-    mimi::utils::NThreadExe(thread_local_residual, n_elements_, n_threads_);
-  }
-
-  void ThreadLocalResidualAndGrad(const mfem::Vector& current_x,
-                                  const int A_nnz) const {
-    auto thread_local_residual_and_grad = [&](const int begin,
-                                              const int end,
-                                              const int i_thread) {
-      // deref relavant resources
-      NonlinearSolidWorkData& w = work_data_[i_thread];
-      Vector_<ElementQuadData_>& element_quad_data_vec =
-          precomputed_->GetElementQuadData("domain");
-
-      // initialize thread local residual
-      w.thread_local_residual_.SetSize(current_x.Size());
-      w.thread_local_residual_ = 0.0;
-      w.thread_local_A_.SetSize(A_nnz);
-      w.thread_local_A_ = 0.0;
-
-      w.GradAssembly(false);
-
-      // assemble to thread local
-      for (int i{begin}; i < end; ++i) {
-        // prepare assembly
-        const ElementQuadData_& eqd = element_quad_data_vec[i];
-        const ElementData_& ed = eqd.GetElementData();
-        w.SetDof(ed.n_dof);
-        w.CurrentElementSolutionCopy(current_x, ed.v_dofs);
-
-        // assemble
-        ElementResidualAndGrad(eqd.GetQuadData(), w);
-        // push
-        w.thread_local_residual_.AddElementVector(ed.v_dofs,
-                                                  w.local_residual_.GetData());
-        double* A = w.thread_local_A_.GetData();
-        const double* local_A = w.local_grad_.GetData();
-        for (const int a_id : ed.A_ids) {
-          A[a_id] += *local_A++;
-        }
-      }
-    };
-
-    mimi::utils::NThreadExe(thread_local_residual_and_grad,
-                            n_elements_,
-                            n_threads_);
-  }
-
-  virtual void AddDomainResidual(const mfem::Vector& current_x,
-                                 mfem::Vector& residual) const {
-    // pass time stepping info to material
-    material_->dt_ = dt_;
-    material_->first_effective_dt_ = first_effective_dt_;
-    material_->second_effective_dt_ = second_effective_dt_;
-
-    ThreadLocalResidual(current_x);
-    AddThreadLocalResidual(work_data_, n_threads_, residual);
-  }
-
-  virtual void AddDomainGrad(const mfem::Vector& current_x,
+  /// Adds jacobian contribution. Currently not used, as it is more efficient to
+  /// assemble residual and grad at the same time using computational
+  /// differentiation.
+  virtual void AddDomainGrad(const mfem::Vector& current_u,
                              mfem::SparseMatrix& grad) const {
 
     mimi::utils::PrintAndThrowError(
         "Currently not implemented, use AddDomainResidualAndGrad");
   }
 
-  virtual void AddDomainResidualAndGrad(const mfem::Vector& current_x,
+  /// Adds residual jacobian contribution
+  virtual void AddDomainResidualAndGrad(const mfem::Vector& current_u,
                                         const double grad_factor,
                                         mfem::Vector& residual,
-                                        mfem::SparseMatrix& grad) const {
+                                        mfem::SparseMatrix& grad) const;
 
-    material_->dt_ = dt_;
-    material_->first_effective_dt_ = first_effective_dt_;
-    material_->second_effective_dt_ = second_effective_dt_;
-
-    ThreadLocalResidualAndGrad(current_x, grad.NumNonZeroElems());
-    AddThreadLocalResidualAndGrad(work_data_,
-                                  n_threads_,
-                                  residual,
-                                  grad_factor,
-                                  grad);
-  }
-
-  virtual void DomainPostTimeAdvance(const mfem::Vector& current_x) {
-    MIMI_FUNC()
-
-    if (!has_states_)
-      return;
-    auto accumulate_states =
-        [&](const int begin, const int end, const int i_thread) {
-          // deref relavant resources
-          NonlinearSolidWorkData& w = work_data_[i_thread];
-          Vector_<ElementQuadData_>& element_quad_data_vec =
-              precomputed_->GetElementQuadData("domain");
-          for (int i{begin}; i < end; ++i) {
-            ElementQuadData_& eqd = element_quad_data_vec[i];
-            const ElementData_& ed = eqd.GetElementData();
-            w.SetDof(ed.n_dof);
-            w.CurrentElementSolutionCopy(current_x, ed.v_dofs);
-            ElementResidual<true>(eqd.GetQuadData(), w);
-          }
-        };
-    mimi::utils::NThreadExe(accumulate_states, n_elements_, n_threads_);
-  }
+  /// using converged solution at the time step, postprocess. For example,
+  /// actual accumulation of material states.
+  virtual void DomainPostTimeAdvance(const mfem::Vector& converged_x);
 };
 
 } // namespace mimi::integrators
