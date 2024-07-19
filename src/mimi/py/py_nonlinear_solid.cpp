@@ -364,7 +364,9 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   nl_oper->SetNewtonSolver(newton);
 
   // ode
-  auto odesolver = std::make_unique<mimi::solvers::GeneralizedAlpha2>(*nl_oper);
+  const double rho_inf =
+      RuntimeCommunication()->GetReal("ode_coefficient", .25);
+  auto odesolver = std::make_unique<mimi::solvers::GeneralizedAlpha2>(*nl_oper, rho_inf);
   odesolver->PrintInfo();
   if (!Base_::boundary_conditions_->InitialConfiguration()
            .constant_velocity_.empty()) {
