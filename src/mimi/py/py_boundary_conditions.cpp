@@ -11,7 +11,7 @@ namespace py = pybind11;
 
 void init_py_boundary_conditions(py::module_& m) {
   using BC = mimi::utils::BoundaryConditions;
-  using BCM = typename BC::BCMarker;
+  using BCM = mimi::utils::BCMarker;
   py::class_<BCM> marker(m, "BoundaryMarker");
   marker
       .def("dirichlet",

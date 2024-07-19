@@ -80,7 +80,7 @@ public:
   /// Alias for the data type storing the gradient
   using DerivType_ =
       std::conditional_t<number_of_derivatives == 0,
-                         mimi::utils::Data<Scalar_>,
+                         Data<Scalar_>,
                          std::array<Scalar_, number_of_derivatives>>;
 
 private:

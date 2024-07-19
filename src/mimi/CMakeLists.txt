@@ -1,5 +1,15 @@
 set(SRCS
     solvers/newton.cpp
+    integrators/nonlinear_base.cpp
+    integrators/nonlinear_solid.cpp
+    integrators/mortar_contact.cpp
+    integrators/integrator_utils.cpp
+    materials/materials.cpp
+    operators/nonlinear_solid.cpp
+    solvers/ode.cpp
+    utils/boundary_conditions.cpp
+    utils/precomputed.cpp
+    utils/mfem_ext.cpp
     py/py_boundary_conditions.cpp
     py/py_solid.cpp
     py/py_nearest_distance.cpp
