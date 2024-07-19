@@ -21,6 +21,8 @@ public:
   // we work with a mono system instead of block structure
   std::shared_ptr<mimi::utils::FluidPrecomputedData> fluid_precomputed_data_;
 
+  mfem::BlockVector block_v_p_;
+
   PyStokes() = default;
 
   virtual void SetMaterial(const MaterialPointer_& material) {
@@ -78,20 +80,6 @@ public:
                                                      mfem::Ordering::byVDIM);
     }
 
-    mimi::utils::PrintInfo("Creating grid functions v");
-    // create solution fields for x and set local reference
-    mfem::GridFunction& v = velocity_fes.grid_functions_["v"];
-    v.SetSpace(velocity_fes.fe_space_.get());
-
-    mimi::utils::PrintInfo("Creating grid functions p");
-    mfem::GridFunction& p = pressure_fes.grid_functions_["p"];
-    p.SetSpace(pressure_fes.fe_space_.get());
-
-    // set initial condition
-    // you can change this in python using SolutionView()
-    v = 0.0;
-    p = 0.0;
-
     // we need to create precomputed data one for:
     // - bilinear forms
     // - nonlinear solid
@@ -108,11 +96,9 @@ public:
     velocity_fes.precomputed_->PrepareThreadSafety(*velocity_fes.fe_space_,
                                                    n_threads);
     velocity_fes.precomputed_->PrepareElementData();
-    velocity_fes.precomputed_->PrepareSparsity();
     pressure_fes.precomputed_->PrepareThreadSafety(*pressure_fes.fe_space_,
                                                    n_threads);
     pressure_fes.precomputed_->PrepareElementData();
-    pressure_fes.precomputed_->PrepareSparsity();
     // let's process boundaries
     mimi::utils::PrintDebug("Find boundary dof ids");
     Base_::FindBoundaryDofIds();
@@ -123,7 +109,29 @@ public:
     // once we have parallel bilinear form assembly we can re directly cal;
     // precompute
 
-    // create FluidPrecomputedData and get sparsity
+    mimi::utils::PrintInfo("Creating grid functions v");
+    // create solution fields for x and set local reference
+    mfem::GridFunction& v = velocity_fes.grid_functions_["v"];
+    // v.SetSpace(velocity_fes.fe_space_.get());
+
+    mimi::utils::PrintInfo("Creating grid functions p");
+    mfem::GridFunction& p = pressure_fes.grid_functions_["p"];
+    // p.SetSpace(pressure_fes.fe_space_.get());
+
+    // setup v and p based on block vector
+    mfem::Array<int> offsets(3);
+    offsets[0] = 0;
+    offsets[1] = velocity_fes.precomputed_->n_v_dofs_;
+    offsets[2] = velocity_fes.precomputed_->n_v_dofs_
+                 + pressure_fes.precomputed_->n_dofs_;
+    block_v_p_.Update(offsets);
+    v.MakeTRef(velocity_fes.fe_space_.get(), block_v_p_.GetBlock(0), 0);
+    p.MakeTRef(pressure_fes.fe_space_.get(), block_v_p_.GetBlock(1), 0);
+
+    // set initial condition
+    // you can change this in python using SolutionView()
+    v = 0.0;
+    p = 0.0;
 
     // creating operators
     auto fluid_oper = std::make_unique<mimi::operators::IncompressibleFluid>(
