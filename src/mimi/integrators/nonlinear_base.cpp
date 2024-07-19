@@ -1,5 +1,3 @@
-#pragma once
-
 #include <cmath>
 
 #include "mimi/integrators/nonlinear_base.hpp"
