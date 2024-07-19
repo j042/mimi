@@ -112,11 +112,9 @@ public:
     mimi::utils::PrintInfo("Creating grid functions v");
     // create solution fields for x and set local reference
     mfem::GridFunction& v = velocity_fes.grid_functions_["v"];
-    // v.SetSpace(velocity_fes.fe_space_.get());
 
     mimi::utils::PrintInfo("Creating grid functions p");
     mfem::GridFunction& p = pressure_fes.grid_functions_["p"];
-    // p.SetSpace(pressure_fes.fe_space_.get());
 
     // setup v and p based on block vector
     mfem::Array<int> offsets(3);
