@@ -2,9 +2,9 @@
 
 #include <mfem.hpp>
 
+#include "mimi/coefficients/nearest_distance.hpp"
 #include "mimi/utils/containers.hpp"
 #include "mimi/utils/precomputed.hpp"
-#include "mimi/coefficients/nearest_distance.hpp"
 
 namespace mimi::integrators {
 
