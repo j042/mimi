@@ -58,12 +58,12 @@ protected:
   mimi::utils::Vector<mfem::Array<int>> boundary_markers_;
 
   struct FESpace {
-    std::string name_{"None"};
-    std::unique_ptr<mfem::FiniteElementSpace> fe_space_{nullptr};
-    std::map<int, std::map<int, mfem::Array<int>>> boundary_dof_ids_;
-    std::unordered_map<std::string, mfem::GridFunction> grid_functions_;
-    mfem::Array<int> zero_dofs_;
-    std::shared_ptr<mimi::utils::PrecomputedData> precomputed_;
+    std::string name{"None"};
+    std::unique_ptr<mfem::FiniteElementSpace> fe_space{nullptr};
+    std::map<int, std::map<int, mfem::Array<int>>> boundary_dof_ids;
+    std::unordered_map<std::string, mfem::GridFunction> grid_functions;
+    mfem::Array<int> zero_dofs;
+    std::shared_ptr<mimi::utils::PrecomputedData> precomputed;
   };
 
   // there can be multiple fe spaces
@@ -280,7 +280,7 @@ public:
     return boundary_conditions_;
   }
 
-  /// @brief finds true dof ids for each boundary this also finds zero_dofs_
+  /// @brief finds true dof ids for each boundary this also finds zero_dofs
   virtual void FindBoundaryDofIds() {
     MIMI_FUNC()
 
@@ -288,21 +288,21 @@ public:
     for (auto& [key, fes] : fe_spaces_) {
       mimi::utils::PrintDebug("Finding boundary dofs for", key, "FE Space.");
 
-      const int max_bdr_id = fes.fe_space_->GetMesh()->bdr_attributes.Max();
+      const int max_bdr_id = fes.fe_space->GetMesh()->bdr_attributes.Max();
 
       // loop each bdr.
       for (int i{}; i < max_bdr_id; ++i) {
         // fespace's dim
-        for (int j{}; j < fes.fe_space_->GetVDim(); ++j) {
+        for (int j{}; j < fes.fe_space->GetVDim(); ++j) {
           // mark only bdr id for this loop
           mfem::Array<int> bdr_id_query(max_bdr_id);
           bdr_id_query = 0;    // clear
           bdr_id_query[i] = 1; // mark
 
           // query
-          fes.fe_space_->GetEssentialTrueDofs(bdr_id_query,
-                                              fes.boundary_dof_ids_[i][j],
-                                              j);
+          fes.fe_space->GetEssentialTrueDofs(bdr_id_query,
+                                             fes.boundary_dof_ids[i][j],
+                                             j);
         }
       }
     }
@@ -324,12 +324,12 @@ public:
 
           // append saved dofs
           // may have duplicating dofs, harmless.
-          fes.zero_dofs_.Append(fes.boundary_dof_ids_[bid][dim]);
+          fes.zero_dofs.Append(fes.boundary_dof_ids[bid][dim]);
         }
       }
       // on second thought, it is a bit harmless.
-      fes.zero_dofs_.Sort();
-      fes.zero_dofs_.Unique();
+      fes.zero_dofs.Sort();
+      fes.zero_dofs.Unique();
     }
   }
 
@@ -425,7 +425,7 @@ public:
 
   virtual py::array_t<int> DofMap(const std::string& key) const {
     MIMI_FUNC()
-    mfem::NURBSExtension& ext = *fe_spaces_.at(key).fe_space_->GetNURBSext();
+    mfem::NURBSExtension& ext = *fe_spaces_.at(key).fe_space->GetNURBSext();
     const int dim = MeshDim();
     const int n_dof = Mesh()->GetNodes()->Size() / dim;
 
@@ -510,7 +510,7 @@ public:
     MIMI_FUNC()
 
     auto& fes = fe_spaces_.at(fes_name);
-    auto& grid_func = fes.grid_functions_.at(component_name);
+    auto& grid_func = fes.grid_functions.at(component_name);
 
     return mimi::py::NumpyView<double>(grid_func,
                                        grid_func.Size()); // will be raveled.
@@ -521,7 +521,7 @@ public:
     MIMI_FUNC()
 
     auto& fes = fe_spaces_.at(fes_name);
-    auto& mfem_array = fes.boundary_dof_ids_.at(bid).at(dim);
+    auto& mfem_array = fes.boundary_dof_ids.at(bid).at(dim);
 
     return mimi::py::NumpyCopy<int>(mfem_array, mfem_array.Size());
   }
@@ -531,7 +531,7 @@ public:
 
     auto& fes = fe_spaces_.at(fes_name);
 
-    return mimi::py::NumpyCopy<int>(fes.zero_dofs_, fes.zero_dofs_.Size());
+    return mimi::py::NumpyCopy<int>(fes.zero_dofs, fes.zero_dofs.Size());
   }
 
   virtual std::shared_ptr<mimi::forms::Nonlinear>

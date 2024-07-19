@@ -59,9 +59,9 @@ using Vector = std::vector<Type, DefaultInitializationAllocator<Type>>;
 
 template<typename MatrixType, typename VectorType, typename ScalarType>
 struct DataSeries {
-  Vector<MatrixType> matrices_;
-  Vector<VectorType> vectors_;
-  Vector<ScalarType> scalars_;
+  Vector<MatrixType> matrices;
+  Vector<VectorType> vectors;
+  Vector<ScalarType> scalars;
 };
 
 /// @brief Fully dynamic array that can view another data. Equipped with basic

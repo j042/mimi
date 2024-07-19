@@ -6,7 +6,8 @@
 
 namespace mimi::materials {
 
-struct HardeningBase {
+class HardeningBase {
+public:
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
 
   virtual std::string Name() const { return "HardeningBase"; }
@@ -14,6 +15,14 @@ struct HardeningBase {
   virtual bool IsRateDependent() const { return false; }
   virtual bool IsTemperatureDependent() const { return false; }
   virtual void Validate() const { MIMI_FUNC() }
+  virtual void InitializeTemperature(const double initial,
+                                     const double melting) {
+    MIMI_FUNC()
+    mimi::utils::PrintDebug(
+        "Doing nothing with given initial and melting temperature",
+        initial,
+        melting);
+  }
 
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
@@ -46,23 +55,34 @@ struct HardeningBase {
     return -1.0;
   }
 
+  /// @brief Returns rate contribution given rate. By default this will
+  /// return 1.
+  /// @param equivalent_plastic_strain_rate
+  /// @return
   virtual double
-  ViscoContribution(const double equivalent_plastic_strain_rate) const {
+  RateContribution(const double equivalent_plastic_strain_rate) const {
     MIMI_FUNC()
-    mimi::utils::PrintAndThrowError(
-        "HardeningBase::ViscoContribution not implemented");
-    return {};
+    return 1.;
   }
 
+  /// @brief Overload function with ADScalar input types. It will just extract
+  /// value from it and call the function with double input
+  /// @param eqps_r
+  /// @return
+  virtual double RateContribution(const ADScalar_& eqps_r) const {
+    return RateContribution(eqps_r.GetValue());
+  }
+
+  /// Returns Thermo contribution. By default this will return 1.
   virtual double ThermoContribution(const double temperature) const {
     MIMI_FUNC()
-    mimi::utils::PrintAndThrowError(
-        "HardeningBase::ThermoContribution not implemented");
-    return {};
+
+    return 1.;
   }
 };
 
-struct PowerLawHardening : public HardeningBase {
+class PowerLawHardening : public HardeningBase {
+public:
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -82,7 +102,8 @@ struct PowerLawHardening : public HardeningBase {
   virtual double SigmaY() const { return sigma_y_; }
 };
 
-struct VoceHardening : public HardeningBase {
+class VoceHardening : public HardeningBase {
+public:
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -104,7 +125,8 @@ struct VoceHardening : public HardeningBase {
   virtual double SigmaY() const { return sigma_y_; }
 };
 
-struct JohnsonCookHardening : public HardeningBase {
+class JohnsonCookHardening : public HardeningBase {
+public:
   using Base_ = HardeningBase;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -127,7 +149,8 @@ struct JohnsonCookHardening : public HardeningBase {
   virtual double SigmaY() const { return A_; }
 };
 
-struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
+class JohnsonCookRateDependentHardening : public JohnsonCookHardening {
+public:
   using Base_ = JohnsonCookHardening;
   using ADScalar_ = Base_::ADScalar_;
 
@@ -149,7 +172,7 @@ struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
   virtual bool IsRateDependent() const { return true; }
 
   virtual double
-  ViscoContribution(const double equivalent_plastic_strain_rate) const {
+  RateContribution(const double equivalent_plastic_strain_rate) const {
     MIMI_FUNC()
 
     // get visco contribution
@@ -168,99 +191,13 @@ struct JohnsonCookRateDependentHardening : public JohnsonCookHardening {
     MIMI_FUNC()
 
     return Base_::Evaluate(accumulated_plastic_strain)
-           * ViscoContribution(equivalent_plastic_strain_rate);
+           * RateContribution(equivalent_plastic_strain_rate);
   }
 };
 
-struct JohnsonCookConstantTemperatureHardening
+class JohnsonCookTemperatureAndRateDependentHardening
     : public JohnsonCookRateDependentHardening {
-  using Base_ = JohnsonCookRateDependentHardening;
-  using ADScalar_ = Base_::ADScalar_;
-
-  using Base_::A_;
-  using Base_::B_;
-  using Base_::C_;
-  using Base_::effective_plastic_strain_rate_;
-  using Base_::n_;
-
-  // temperature related
-  double reference_temperature_;
-  double melting_temperature_;
-  double m_;
-  double temperature_; // this will stay constant
-
-  // temperature contribution
-  mutable double temperature_contribution_;
-
-  /// @brief  this is a long name for a hardening model
-  /// @return
-  virtual std::string Name() const {
-    return "JohnsonCookConstantTemperatureHardening";
-  }
-
-  virtual bool IsRateDependent() const { return true; }
-
-  virtual bool IsTemperatureDependent() const { return false; }
-
-  virtual void Validate() const {
-    MIMI_FUNC()
-
-    if (reference_temperature_ > melting_temperature_) {
-      mimi::utils::PrintAndThrowError(
-          "reference temperature,",
-          reference_temperature_,
-          ",can't be bigger than melting temperature,",
-          melting_temperature_,
-          ".");
-    }
-
-    // compute frequently used value
-    temperature_contribution_ =
-        1.0
-        - std::pow((temperature_ - reference_temperature_)
-                       / (melting_temperature_ - reference_temperature_),
-                   m_);
-
-    mimi::utils::PrintInfo(Name(),
-                           "Temp:",
-                           temperature_,
-                           "Ref Temp:",
-                           reference_temperature_,
-                           "Melting Temp:",
-                           melting_temperature_,
-                           "Contribution:",
-                           temperature_contribution_);
-
-    if (temperature_contribution_ <= 0.0) {
-      mimi::utils::PrintAndThrowError("Invalid temperature contribution",
-                                      temperature_contribution_);
-    }
-  }
-
-  virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
-                             const double& equivalent_plastic_strain_rate,
-                             const double& temperature) const {
-    MIMI_FUNC()
-
-    // get visco contribution
-    double visco_contribution{1.0};
-    if (equivalent_plastic_strain_rate > effective_plastic_strain_rate_) {
-      visco_contribution += C_
-                            * std::log(equivalent_plastic_strain_rate
-                                       / effective_plastic_strain_rate_);
-    }
-
-    if (std::abs(accumulated_plastic_strain.GetValue()) < 1.e-13) {
-      return ADScalar_(A_) * visco_contribution * temperature_contribution_;
-    }
-
-    return (A_ + B_ * pow(accumulated_plastic_strain, n_)) * visco_contribution
-           * temperature_contribution_;
-  }
-};
-
-struct JohnsonCookAdiabaticRateDependentHardening
-    : public JohnsonCookRateDependentHardening {
+public:
   using Base_ = JohnsonCookRateDependentHardening;
   using JCBase_ = Base_::Base_;
   using ADScalar_ = Base_::ADScalar_;
@@ -284,12 +221,22 @@ struct JohnsonCookAdiabaticRateDependentHardening
   /// @brief  this is a long name for a hardening model
   /// @return
   virtual std::string Name() const {
-    return "JohnsonCookAdiabaticRateDependentHardening";
+    return "JohnsonCookTemperatureAndRateDependentHardening";
   }
 
   virtual bool IsRateDependent() const { return true; }
 
   virtual bool IsTemperatureDependent() const { return true; }
+
+  virtual void InitializeTemperature(const double initial,
+                                     const double melting) {
+    MIMI_FUNC()
+
+    mimi::utils::PrintDebug("Doing nothing with given initial temperature",
+                            initial);
+
+    melting_temperature_ = melting;
+  }
 
   virtual void Validate() const {
     MIMI_FUNC()
@@ -302,9 +249,6 @@ struct JohnsonCookAdiabaticRateDependentHardening
           melting_temperature_,
           ".");
     }
-
-    // compute frequently used value
-    inv_Tm_minus_Tr_ = 1. / (melting_temperature_ - reference_temperature_);
   }
 
   virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
@@ -313,7 +257,7 @@ struct JohnsonCookAdiabaticRateDependentHardening
     MIMI_FUNC()
 
     return JCBase_::Evaluate(accumulated_plastic_strain)
-           * ViscoContribution(equivalent_plastic_strain_rate)
+           * RateContribution(equivalent_plastic_strain_rate)
            * ThermoContribution(temperature);
   }
 
@@ -328,10 +272,78 @@ struct JohnsonCookAdiabaticRateDependentHardening
       thermo_contribution = 0.0;
     } else {
       thermo_contribution -=
-          std::pow((temperature - reference_temperature_) * inv_Tm_minus_Tr_,
+          std::pow((temperature - reference_temperature_)
+                       / (melting_temperature_ - reference_temperature_),
                    m_);
     }
     return thermo_contribution;
+  }
+};
+
+struct JohnsonCookConstantTemperatureHardening
+    : public JohnsonCookTemperatureAndRateDependentHardening {
+  using Base_ = JohnsonCookTemperatureAndRateDependentHardening;
+  using ADScalar_ = Base_::ADScalar_;
+
+  double temperature_{-1.0};
+  double temperature_contribution_{-1.0};
+
+  /// @brief  this is a long name for a hardening model
+  /// @return
+  virtual std::string Name() const {
+    return "JohnsonCookConstantTemperatureHardening";
+  }
+
+  virtual bool IsRateDependent() const { return true; }
+
+  /// Considered temperature independent to minimize unnecessary computations
+  virtual bool IsTemperatureDependent() const { return false; }
+
+  virtual void InitializeTemperature(const double initial,
+                                     const double melting) {
+    MIMI_FUNC()
+
+    melting_temperature_ = melting;
+    SetTemperature(initial);
+  }
+
+  void SetTemperature(const double temp) {
+    MIMI_FUNC()
+    temperature_ = temp;
+    temperature_contribution_ =
+        1.0
+        - std::pow((temperature_ - reference_temperature_)
+                       / (melting_temperature_ - reference_temperature_),
+                   m_);
+
+    if (temperature_contribution_ <= 0.0) {
+      mimi::utils::PrintAndThrowError("Invalid temperature contribution",
+                                      temperature_contribution_);
+    }
+  }
+
+  double GetTemperature() { return temperature_; }
+  const double GetTemperature() const { return temperature_; }
+
+  /// As for constant temperature, input is ignored. In debug mode, checks if
+  /// they match
+  virtual double ThermoContribution(const double temperature) const {
+    MIMI_FUNC()
+
+    assert(std::abs(temperature_ - temperature) < 1.e-12);
+
+    return temperature_contribution_;
+  }
+
+  /// Will raise as this isn't supposed to be temperature dependent
+  virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
+                             const double& equivalent_plastic_strain_rate,
+                             const double& temperature) const {
+
+    mimi::utils::PrintAndThrowError(Name(),
+                                    "cannot have temperature as input.");
+
+    return {};
   }
 };
 

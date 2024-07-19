@@ -69,7 +69,7 @@ public:
       nurbsext->ConnectBoundaries(b0s, b1s);
 
       // create new fe space with this nurbsext
-      disp_fes.fe_space_ =
+      disp_fes.fe_space =
           std::make_unique<mfem::FiniteElementSpace>(Base_::Mesh().get(),
                                                      // takes ownership
                                                      nurbsext.release(),
@@ -79,7 +79,7 @@ public:
     } else {
       // here, if we pass NURBSext, it will steal the ownership, causing
       // segfault.
-      disp_fes.fe_space_ = std::make_unique<mfem::FiniteElementSpace>(
+      disp_fes.fe_space = std::make_unique<mfem::FiniteElementSpace>(
           Base_::Mesh().get(),
           nullptr, // Base_::Mesh()->NURBSext,
           fe_collection,
@@ -91,21 +91,21 @@ public:
 
     mimi::utils::PrintInfo("Creating grid functions u");
     // create solution fields for x and set local reference
-    mfem::GridFunction& x = disp_fes.grid_functions_["x"];
-    x.SetSpace(disp_fes.fe_space_.get());
+    mfem::GridFunction& x = disp_fes.grid_functions["x"];
+    x.SetSpace(disp_fes.fe_space.get());
     Base_::x2_ = &x; // "2" means x for ode second order
 
     // and x_dot (= v)
     mimi::utils::PrintInfo("Creating grid functions v");
-    mfem::GridFunction& x_dot = disp_fes.grid_functions_["x_dot"];
-    x_dot.SetSpace(disp_fes.fe_space_.get());
+    mfem::GridFunction& x_dot = disp_fes.grid_functions["x_dot"];
+    x_dot.SetSpace(disp_fes.fe_space.get());
     Base_::x2_dot_ = &x_dot;
 
     // and reference / initial reference. initialize with fe space then
     // copy from mesh
     mimi::utils::PrintInfo("Creating grid functions x_ref");
-    mfem::GridFunction& x_ref = disp_fes.grid_functions_["x_ref"];
-    x_ref.SetSpace(disp_fes.fe_space_.get());
+    mfem::GridFunction& x_ref = disp_fes.grid_functions["x_ref"];
+    x_ref.SetSpace(disp_fes.fe_space.get());
 
     // carefully create x_ref, in case we have periodic mesh
     mfem::GridFunction& nodes = *Base_::Mesh()->GetNodes();
@@ -115,7 +115,7 @@ public:
 
     // if there's more efficient way, do so.
     if (nodes.Size() != x_ref.Size()) {
-      mfem::NURBSExtension& ext = *disp_fes.fe_space_->GetNURBSext();
+      mfem::NURBSExtension& ext = *disp_fes.fe_space->GetNURBSext();
       const int dim = Base_::MeshDim();
       const double* node_d = nodes.GetData();
       for (int i{}; i < nodes.Size() / dim; ++i) {
@@ -142,24 +142,24 @@ public:
     // note, for bilinear, nothing is really saved. just used for thread safety
     mimi::utils::PrintDebug("Creating PrecomputedData");
     // create precomputed for this FESpace
-    disp_fes.precomputed_ = std::make_shared<mimi::utils::PrecomputedData>();
+    disp_fes.precomputed = std::make_shared<mimi::utils::PrecomputedData>();
 
     mimi::utils::PrintDebug("Setup PrecomputedData");
-    disp_fes.precomputed_->PrepareThreadSafety(*disp_fes.fe_space_, n_threads);
-    disp_fes.precomputed_->PrepareElementData();
-    disp_fes.precomputed_->PrepareSparsity();
+    disp_fes.precomputed->PrepareThreadSafety(*disp_fes.fe_space, n_threads);
+    disp_fes.precomputed->PrepareElementData();
+    disp_fes.precomputed->PrepareSparsity();
     // let's process boundaries
     mimi::utils::PrintDebug("Find boundary dof ids");
     Base_::FindBoundaryDofIds();
 
     // create element data - simple domain precompute
-    disp_fes.precomputed_->CreateElementQuadData("domain", nullptr);
+    disp_fes.precomputed->CreateElementQuadData("domain", nullptr);
     // once we have parallel bilinear form assembly we can re directly cal;
     // precompute
 
     // creating operators
     auto nl_oper =
-        std::make_unique<mimi::operators::NonlinearSolid>(*disp_fes.fe_space_);
+        std::make_unique<mimi::operators::NonlinearSolid>(*disp_fes.fe_space);
 
     // let's setup the system
     // create dummy sparse matrix - mfem just sets referencee, so no copies are
@@ -167,7 +167,7 @@ public:
     mfem::SparseMatrix tmp;
 
     // 1. mass
-    auto mass = std::make_shared<mfem::BilinearForm>(disp_fes.fe_space_.get());
+    auto mass = std::make_shared<mfem::BilinearForm>(disp_fes.fe_space.get());
     nl_oper->AddBilinearForm("mass", mass);
 
     // create density coeff for mass integrator
@@ -185,12 +185,11 @@ public:
     mfem::ConstantCoefficient rho(material_->density_);
     mass->AddDomainIntegrator(new mfem::VectorMassIntegrator(rho));
     mass->Assemble(0);
-    mass->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
+    mass->FormSystemMatrix(disp_fes.zero_dofs, tmp);
 
     // 2. damping / viscosity, as mfem calls it
     if (material_->viscosity_ > 0.0) {
-      auto visc =
-          std::make_shared<mfem::BilinearForm>(disp_fes.fe_space_.get());
+      auto visc = std::make_shared<mfem::BilinearForm>(disp_fes.fe_space.get());
       nl_oper->AddBilinearForm("viscosity", visc);
 
       // create viscosity coeff
@@ -204,14 +203,14 @@ public:
       mfem::ConstantCoefficient v_coef(material_->viscosity_);
       visc->AddDomainIntegrator(new mfem::VectorDiffusionIntegrator(v_coef));
       visc->Assemble(0);
-      visc->FormSystemMatrix(disp_fes.zero_dofs_, tmp);
+      visc->FormSystemMatrix(disp_fes.zero_dofs, tmp);
     }
 
     // 3. nonlinear stiffness
     // first pre-computed
     // nlform
     auto nonlinear_stiffness =
-        std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
+        std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space.get());
     // add it to operator
     nl_oper->AddNonlinearForm("nonlinear_stiffness", nonlinear_stiffness);
     // create integrator
@@ -219,22 +218,22 @@ public:
         std::make_shared<mimi::integrators::NonlinearSolid>(
             material_->Name() + "-NonlinearSolid",
             material_,
-            disp_fes.precomputed_);
+            disp_fes.precomputed);
     nonlinear_solid_integ->runtime_communication_ = RuntimeCommunication();
     // we precompute for nonlinear solid
     const int default_solid_q =
         RuntimeCommunication()->GetInteger("nonlinear_solid_quadrature_order",
                                            -1);
-    disp_fes.precomputed_->PrecomputeElementQuadData("domain",
-                                                     default_solid_q,
-                                                     true);
+    disp_fes.precomputed->PrecomputeElementQuadData("domain",
+                                                    default_solid_q,
+                                                    true);
     nonlinear_solid_integ->Prepare();
     // add integrator to nl form
     nonlinear_stiffness->AddDomainIntegrator(nonlinear_solid_integ);
-    nonlinear_stiffness->SetEssentialTrueDofs(disp_fes.zero_dofs_);
+    nonlinear_stiffness->SetEssentialTrueDofs(disp_fes.zero_dofs);
 
     // 4. linear form
-    auto rhs = std::make_shared<mfem::LinearForm>(disp_fes.fe_space_.get());
+    auto rhs = std::make_shared<mfem::LinearForm>(disp_fes.fe_space.get());
     bool rhs_set{false};
     // assemble body force
     if (const auto& body_force =
@@ -295,7 +294,7 @@ public:
     if (rhs_set) {
       rhs->Assemble();
       // remove dirichlet nodes
-      rhs->SetSubVector(disp_fes.zero_dofs_, 0.0);
+      rhs->SetSubVector(disp_fes.zero_dofs, 0.0);
       nl_oper->AddLinearForm("rhs", rhs);
     }
 
@@ -305,14 +304,14 @@ public:
         contact.size() != 0) {
 
       auto nl_form =
-          std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space_.get());
+          std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space.get());
       nl_oper->AddNonlinearForm("contact", nl_form);
       for (const auto& [bid, nd_coeff] : contact) {
         // initialzie integrator with nearest distance coeff (splinepy splines)
         auto contact_integ = std::make_shared<mimi::integrators::MortarContact>(
             nd_coeff,
             "contact" + std::to_string(bid),
-            disp_fes.precomputed_);
+            disp_fes.precomputed);
 
         contact_integ->runtime_communication_ = RuntimeCommunication();
 
@@ -322,15 +321,15 @@ public:
             contact_integ->MarkedBoundaryElements();
 
         // precompute
-        disp_fes.precomputed_->CreateBoundaryElementQuadData(
+        disp_fes.precomputed->CreateBoundaryElementQuadData(
             contact_integ->Name(),
             marked_bdr.data(),
             static_cast<int>(marked_bdr.size()));
         const int default_contact_q =
             RuntimeCommunication()->GetInteger("contact_quadrature_order", -1);
-        disp_fes.precomputed_->PrecomputeElementQuadData(contact_integ->Name(),
-                                                         default_contact_q,
-                                                         false /* dNdX*/);
+        disp_fes.precomputed->PrecomputeElementQuadData(contact_integ->Name(),
+                                                        default_contact_q,
+                                                        false /* dNdX*/);
 
         // set the same boundary marker. It will be internally used for nthread
         // assemble of marked boundaries
@@ -388,7 +387,7 @@ public:
              .constant_velocity_.empty()) {
       auto dynamic_dirichlet = std::make_shared<
           mimi::utils::TimeDependentDirichletBoundaryCondition>();
-      dynamic_dirichlet->boundary_dof_ids_ = &disp_fes.boundary_dof_ids_;
+      dynamic_dirichlet->boundary_dof_ids_ = &disp_fes.boundary_dof_ids;
       dynamic_dirichlet->dynamic_bc_ = Base_::boundary_conditions_.get();
       odesolver->dynamic_dirichlet_ = dynamic_dirichlet;
     }

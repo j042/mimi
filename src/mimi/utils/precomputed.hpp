@@ -57,77 +57,77 @@ CreateFaceTransformation() {
 struct QuadDataExt {};
 
 struct QuadData {
-  double integration_weight_;
-  double det_dX_dxi_;
-  mfem::Vector N_;
+  double integration_weight;
+  double det_dX_dxi;
+  mfem::Vector N;
   /// basis derivative - this is usally relevant to boundary (dof x dim)
-  mfem::DenseMatrix dN_dxi_;
+  mfem::DenseMatrix dN_dxi;
   /// basis  this is usually relevant to domain (dof x dim)
-  mfem::DenseMatrix dN_dX_;
+  mfem::DenseMatrix dN_dX;
 
-  std::shared_ptr<mimi::materials::MaterialState> material_state_;
-  std::shared_ptr<QuadDataExt> ext_;
+  std::shared_ptr<mimi::materials::MaterialState> material_state;
+  std::shared_ptr<QuadDataExt> ext;
 };
 
 struct ElementData {
-  int geometry_type_;
-  int n_dof_;
-  int n_tdof_;
-  int i_thread_;
-  int id_;
-  bool is_bdr_;
+  int geometry_type;
+  int n_dof;
+  int n_tdof;
+  int i_thread;
+  int id;
+  bool is_bdr;
 
-  mfem::Array<int> dofs_;
-  mfem::Array<int> v_dofs_;
-  mimi::utils::Vector<int> A_ids_; // id to matrix entry
+  mfem::Array<int> dofs;
+  mfem::Array<int> v_dofs;
+  mimi::utils::Vector<int> A_ids; // id to matrix entry
 
-  std::shared_ptr<mfem::NURBSFiniteElement> element_;
+  std::shared_ptr<mfem::NURBSFiniteElement> element;
 
   /// in case of boundary, this may be
   /// `mimi::utils::FaceElementTransformationsExt`
-  std::shared_ptr<mfem::IsoparametricTransformation> element_trans_;
+  std::shared_ptr<mfem::IsoparametricTransformation> element_trans;
 };
 
 /// holds element and quad data together
 struct ElementQuadData {
-  int quadrature_order_;
-  int n_quad_;
+  int quadrature_order;
+  int n_quad;
 
-  std::shared_ptr<ElementData> element_data_;
-  Vector<QuadData> quad_data_;
+  std::shared_ptr<ElementData> element_data;
+  Vector<QuadData> quad_data;
 
   // some optional spaces for indices. used in contact, for example.
-  Vector<mfem::Array<int>> arrays_;
-  Vector<mfem::Vector> vectors_;
-  Vector<mfem::DenseMatrix> matrices_;
+  Vector<mfem::Array<int>> arrays;
+  Vector<mfem::Vector> vectors;
+  Vector<mfem::DenseMatrix> matrices;
 
   ElementData& GetElementData() {
-    assert(element_data_);
-    return *element_data_;
+    assert(element_data);
+    return *element_data;
   };
 
   const ElementData& GetElementData() const {
-    assert(element_data_);
-    return *element_data_;
+    assert(element_data);
+    return *element_data;
   };
 
-  Vector<QuadData>& GetQuadData() { return quad_data_; }
+  Vector<QuadData>& GetQuadData() { return quad_data; }
 
-  const Vector<QuadData>& GetQuadData() const { return quad_data_; }
+  const Vector<QuadData>& GetQuadData() const { return quad_data; }
 
-  void MakeArrays(const int n) { arrays_.resize(n); }
+  void MakeArrays(const int n) { arrays.resize(n); }
 
-  mfem::Array<int>& GetArray(const int i) { return arrays_[i]; }
-  const mfem::Array<int>& GetArray(const int i) const { return arrays_[i]; }
+  mfem::Array<int>& GetArray(const int i) { return arrays[i]; }
+  const mfem::Array<int>& GetArray(const int i) const { return arrays[i]; }
 
-  void MakeVectors(const int n) { vectors_.resize(n); }
+  void MakeVectors(const int n) { vectors.resize(n); }
 
-  mfem::Vector& GetVector(const int i) { return vectors_[i]; }
+  mfem::Vector& GetVector(const int i) { return vectors[i]; }
 
-  void MakeMatrices(const int n) { matrices_.resize(n); }
+  void MakeMatrices(const int n) { matrices.resize(n); }
 
-  mfem::DenseMatrix& GetMatrix(const int i) { return matrices_[i]; }
-  const mfem::DenseMatrix& GetMatrix(const int i) const { return matrices_[i]; }
+  mfem::DenseMatrix& GetMatrix(const int i) { return matrices[i]; }
+  const mfem::DenseMatrix& GetMatrix(const int i) const { return matrices[i]; }
 };
 
 /// base class for precomputed data
@@ -243,51 +243,50 @@ public:
     domain_element_data_.resize(n_elements_);
     boundary_element_data_.resize(n_b_elements_);
 
-    auto process_elems =
-        [&](const int begin, const int end, const int i_thread) {
-          auto& mesh = *meshes_[i_thread];
-          auto& fes = *fe_spaces_[i_thread];
+    auto process_elems = [&](const int begin,
+                             const int end,
+                             const int i_thread) {
+      auto& mesh = *meshes_[i_thread];
+      auto& fes = *fe_spaces_[i_thread];
 
-          for (int i{begin}; i < end; ++i) {
-            // get elem data
-            auto& el_data_ptr = domain_element_data_[i];
-            el_data_ptr = std::make_shared<ElementData>();
-            auto& el_data = *el_data_ptr;
-            // we will create elements and v dof trans (dof trans is used in
-            // case of prolongation, but not used here.)
-            // 1. create element
-            el_data.element_ = CreatFiniteElement(dim_); // make_shared
-            // 2. el trans
-            el_data.element_trans_ = CreateTransformation(); // make_shared
+      for (int i{begin}; i < end; ++i) {
+        // get elem data
+        auto& el_data_ptr = domain_element_data_[i];
+        el_data_ptr = std::make_shared<ElementData>();
+        auto& el_data = *el_data_ptr;
+        // we will create elements and v dof trans (dof trans is used in
+        // case of prolongation, but not used here.)
+        // 1. create element
+        el_data.element = CreatFiniteElement(dim_); // make_shared
+        // 2. el trans
+        el_data.element_trans = CreateTransformation(); // make_shared
 
-            // process / fill each data
-            fes.GetNURBSext()->LoadFE(i, el_data.element_.get());
-            fes.GetElementTransformation(i, el_data.element_trans_.get());
-            // however, we do need to set FE to this newly created, as it is a
-            // ptr to internal obj
-            el_data.element_trans_->SetFE(el_data.element_.get());
+        // process / fill each data
+        fes.GetNURBSext()->LoadFE(i, el_data.element.get());
+        fes.GetElementTransformation(i, el_data.element_trans.get());
+        // however, we do need to set FE to this newly created, as it is a
+        // ptr to internal obj
+        el_data.element_trans->SetFE(el_data.element.get());
 
-            // for our application there's no dof transformation.
-            // if so, we can extend here
-            mfem::DofTransformation* doftrans =
-                fes.GetElementDofs(i, el_data.dofs_);
-            doftrans = fes.GetElementVDofs(i, el_data.v_dofs_);
+        // for our application there's no dof transformation.
+        // if so, we can extend here
+        mfem::DofTransformation* doftrans = fes.GetElementDofs(i, el_data.dofs);
+        doftrans = fes.GetElementVDofs(i, el_data.v_dofs);
 
-            if (doftrans) {
-              mimi::utils::PrintAndThrowError(
-                  "There's doftrans. There shouldn't be one according to the "
-                  "documentations.");
-            }
+        if (doftrans) {
+          mimi::utils::PrintAndThrowError(
+              "There's doftrans. There shouldn't be one according to the "
+              "documentations.");
+        }
 
-            // set properties
-            el_data.geometry_type_ = el_data.element_->GetGeomType();
-            el_data.n_dof_ = el_data.element_->GetDof();
-            el_data.n_tdof_ = el_data.n_dof_ * v_dim_;
-            el_data.i_thread_ =
-                i_thread; // this is a help value, don't rely on this
-            el_data.id_ = i;
-          }
-        };
+        // set properties
+        el_data.geometry_type = el_data.element->GetGeomType();
+        el_data.n_dof = el_data.element->GetDof();
+        el_data.n_tdof = el_data.n_dof * v_dim_;
+        el_data.i_thread = i_thread; // this is a help value, don't rely on this
+        el_data.id = i;
+      }
+    };
 
     auto process_boundary_elems =
         [&](const int begin, const int end, const int i_thread) {
@@ -301,9 +300,9 @@ public:
             // to avoid re casting, we assign boundary element in a separate
             // variable
             auto b_element = CreatFiniteFaceElement(dim_);
-            bel_data.element_ = b_element;
+            bel_data.element = b_element;
             auto b_trans = CreateFaceTransformation();
-            bel_data.element_trans_ = b_trans;
+            bel_data.element_trans = b_trans;
 
             fes.GetNURBSext()->LoadBE(i, b_element.get());
             mesh.GetBdrFaceTransformations(i, b_trans.get());
@@ -311,13 +310,13 @@ public:
             // we overwrite some pointers to our own copies
             // this is mask 1 - related elem
             b_trans->Elem1 =
-                domain_element_data_[b_trans->Elem1No]->element_trans_.get();
+                domain_element_data_[b_trans->Elem1No]->element_trans.get();
             // this is mask 16 - related face elem
             b_trans->SetFE(b_element.get());
 
             mfem::DofTransformation* doftrans =
-                fes.GetBdrElementVDofs(i, bel_data.dofs_);
-            doftrans = fes.GetBdrElementVDofs(i, bel_data.v_dofs_);
+                fes.GetBdrElementVDofs(i, bel_data.dofs);
+            doftrans = fes.GetBdrElementVDofs(i, bel_data.v_dofs);
 
             if (doftrans) {
               mimi::utils::PrintAndThrowError(
@@ -326,12 +325,12 @@ public:
             }
 
             // set properties
-            bel_data.geometry_type_ = bel_data.element_->GetGeomType();
-            bel_data.n_dof_ = bel_data.element_->GetDof();
-            bel_data.n_tdof_ = bel_data.n_dof_ * v_dim_;
-            bel_data.i_thread_ =
+            bel_data.geometry_type = bel_data.element->GetGeomType();
+            bel_data.n_dof = bel_data.element->GetDof();
+            bel_data.n_tdof = bel_data.n_dof * v_dim_;
+            bel_data.i_thread =
                 i_thread; // this is a help value, don't rely on this
-            bel_data.id_ = i;
+            bel_data.id = i;
           }
         };
 
@@ -354,7 +353,7 @@ public:
     // dummy sparsity pattern creation
     mfem::DenseMatrix dum;
     for (const auto& el_data : domain_element_data_) {
-      auto& vd = el_data->v_dofs_;
+      auto& vd = el_data->v_dofs;
       dum.SetSize(vd.Size(), vd.Size());
       dum = 1.0;
       sparse.AddSubMatrix(vd, vd, dum, 0 /* (no) skip_zeros */);
@@ -374,36 +373,36 @@ public:
     // get direct data access ids to A
     mfem::DenseMatrix sub_mat;
     for (const auto& el_data : domain_element_data_) {
-      const auto& vd = el_data->v_dofs_;
+      const auto& vd = el_data->v_dofs;
       const int vd_size = vd.Size();
       const int mat_size = vd_size * vd_size;
 
       sub_mat.SetSize(vd_size, vd_size);
       sparse.GetSubMatrix(vd, vd, sub_mat);
 
-      el_data->A_ids_.resize(mat_size);
+      el_data->A_ids.resize(mat_size);
       const double* sm_data = sub_mat.GetData();
       for (int j{}; j < mat_size; ++j) {
         // WARNING mfem uses int, we use int, if this is a problem, we
         // have a problem
-        el_data->A_ids_[j] = static_cast<int>(std::lround(sm_data[j]));
+        el_data->A_ids[j] = static_cast<int>(std::lround(sm_data[j]));
       }
     }
 
     for (const auto& bel_data : boundary_element_data_) {
-      const auto& vd = bel_data->v_dofs_;
+      const auto& vd = bel_data->v_dofs;
       const int vd_size = vd.Size();
       const int mat_size = vd_size * vd_size;
 
       sub_mat.SetSize(vd_size, vd_size);
       sparse.GetSubMatrix(vd, vd, sub_mat);
 
-      bel_data->A_ids_.resize(mat_size);
+      bel_data->A_ids.resize(mat_size);
       const double* sm_data = sub_mat.GetData();
       for (int j{}; j < mat_size; ++j) {
         // WARNING mfem uses int, we use int, if this is a problem, we
         // have a problem
-        bel_data->A_ids_[j] = static_cast<int>(std::lround(sm_data[j]));
+        bel_data->A_ids[j] = static_cast<int>(std::lround(sm_data[j]));
       }
     }
   }
@@ -427,7 +426,7 @@ public:
     eq_data.resize(mask_size);
     for (int i{}; i < mask_size; ++i) {
       ElementQuadData& eqd = eq_data[i];
-      eqd.element_data_ = domain_element_data_[mask[i]];
+      eqd.element_data = domain_element_data_[mask[i]];
     }
     return eq_data;
   }
@@ -449,7 +448,7 @@ public:
     beq_data.resize(mask_size);
     for (int i{}; i < mask_size; ++i) {
       ElementQuadData& beqd = beq_data[i];
-      beqd.element_data_ = boundary_element_data_[mask[i]];
+      beqd.element_data = boundary_element_data_[mask[i]];
     }
     return beq_data;
   }
@@ -462,7 +461,7 @@ public:
     Vector_<ElementQuadData>& eq_data = element_quad_data_.at(name);
 
     // info check
-    if (eq_data.at(0).quad_data_.size() > 0) {
+    if (eq_data.at(0).quad_data.size() > 0) {
       mimi::utils::PrintWarning("QuadData already exists for",
                                 name,
                                 "re-accessing");
@@ -474,44 +473,44 @@ public:
       for (int i{begin}; i < end; ++i) {
         ElementQuadData& eqd = eq_data[i];
         ElementData& e_data = eqd.GetElementData();
-        eqd.quadrature_order_ = (quadrature_order < 0)
-                                    ? e_data.element_->GetOrder() * 2 + 3
-                                    : quadrature_order;
+        eqd.quadrature_order = (quadrature_order < 0)
+                                   ? e_data.element->GetOrder() * 2 + 3
+                                   : quadrature_order;
 
         // prepare quadrature point loop
         const mfem::IntegrationRule& ir =
-            int_rules.Get(e_data.geometry_type_, eqd.quadrature_order_);
+            int_rules.Get(e_data.geometry_type, eqd.quadrature_order);
 
-        eqd.n_quad_ = ir.GetNPoints();
-        eqd.quad_data_.resize(eqd.n_quad_);
-        for (int j{}; j < eqd.n_quad_; ++j) {
+        eqd.n_quad = ir.GetNPoints();
+        eqd.quad_data.resize(eqd.n_quad);
+        for (int j{}; j < eqd.n_quad; ++j) {
           const mfem::IntegrationPoint& ip = ir.IntPoint(j);
-          e_data.element_trans_->SetIntPoint(&ip);
+          e_data.element_trans->SetIntPoint(&ip);
 
-          QuadData& q_data = eqd.quad_data_[j];
+          QuadData& q_data = eqd.quad_data[j];
           // weights
-          q_data.integration_weight_ = ip.weight;
-          q_data.det_dX_dxi_ = e_data.element_trans_->Weight();
+          q_data.integration_weight = ip.weight;
+          q_data.det_dX_dxi = e_data.element_trans->Weight();
 
           // basis
-          q_data.N_.SetSize(e_data.n_dof_);
-          e_data.element_->CalcShape(ip, q_data.N_);
+          q_data.N.SetSize(e_data.n_dof);
+          e_data.element->CalcShape(ip, q_data.N);
 
           // basis derivative
-          q_data.dN_dxi_.SetSize(e_data.n_dof_, e_data.element_->GetDim());
-          e_data.element_->CalcDShape(ip, q_data.dN_dxi_);
+          q_data.dN_dxi.SetSize(e_data.n_dof, e_data.element->GetDim());
+          e_data.element->CalcDShape(ip, q_data.dN_dxi);
 
           // this is often used in
           if (dN_dX) {
-            const int ref_dim = e_data.element_->GetDim();
+            const int ref_dim = e_data.element->GetDim();
             if (ref_dim != dim_) {
               mimi::utils::PrintWarning(
                   "Non-Square Jacobian detected for dN_dX computation");
             }
-            q_data.dN_dX_.SetSize(e_data.n_dof_, ref_dim);
+            q_data.dN_dX.SetSize(e_data.n_dof, ref_dim);
             dxi_dX.SetSize(dim_, ref_dim);
-            mfem::CalcInverse(e_data.element_trans_->Jacobian(), dxi_dX);
-            mfem::Mult(q_data.dN_dxi_, dxi_dX, q_data.dN_dX_);
+            mfem::CalcInverse(e_data.element_trans->Jacobian(), dxi_dX);
+            mfem::Mult(q_data.dN_dxi, dxi_dX, q_data.dN_dX);
           }
         }
       }

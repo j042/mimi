@@ -102,7 +102,8 @@ public:
   /// temporary containers required in element assembly
   /// mfem performs some fancy checks for allocating memories.
   /// So we create one for each thread
-  struct TemporaryData {
+  class TemporaryData {
+  public:
     mfem::Vector element_x_;
     mfem::DenseMatrix element_x_mat_;
     mfem::DenseMatrix J_;
@@ -160,7 +161,7 @@ public:
                                const ElementQuadData_& eq_data) {
       MIMI_FUNC()
 
-      current_all.GetSubVector(eq_data.GetElementData().v_dofs_, element_x_);
+      current_all.GetSubVector(eq_data.GetElementData().v_dofs, element_x_);
       element_x_mat_ += eq_data.GetMatrix(kXRef);
 
       return element_x_mat_;
@@ -182,7 +183,7 @@ public:
 
     void ComputeNearestDistanceQuery(const mfem::Vector& N) {
       MIMI_FUNC()
-      element_x_mat_.MultTranspose(N, distance_query_.query_.data());
+      element_x_mat_.MultTranspose(N, distance_query_.query.data());
     }
 
     bool IsPressureZero() const {
@@ -301,7 +302,7 @@ public:
         * std::pow((precomputed_->fe_spaces_[0]->GetMaxElementOrder() + 1),
                    boundary_para_dim_));
     for (const ElementQuadData_& eqd : element_quad_data_vec) {
-      for (const int& vdof : eqd.GetElementData().v_dofs_) {
+      for (const int& vdof : eqd.GetElementData().v_dofs) {
         marked_boundary_v_dofs_.push_back(vdof);
       }
     }
@@ -361,9 +362,9 @@ public:
             // get x_ref -> transposed layout
             eqd.MakeMatrices(1);
             mfem::DenseMatrix& x_ref = eqd.GetMatrix(kXRef);
-            x_ref.SetSize(ed.n_dof_, dim_);
-            const mfem::DenseMatrix& p_mat = ed.element_trans_->GetPointMat();
-            for (int i_dof{}; i_dof < ed.n_dof_; ++i_dof) {
+            x_ref.SetSize(ed.n_dof, dim_);
+            const mfem::DenseMatrix& p_mat = ed.element_trans->GetPointMat();
+            for (int i_dof{}; i_dof < ed.n_dof; ++i_dof) {
               for (int i_dim{}; i_dim < dim_; ++i_dim) {
                 x_ref(i_dof, i_dim) = p_mat(i_dim, i_dof);
               }
@@ -374,13 +375,13 @@ public:
             eqd.MakeArrays(2);
             mfem::Array<int>& local_dofs = eqd.GetArray(kDof);
             mfem::Array<int>& local_vdofs = eqd.GetArray(kVDof);
-            local_dofs.SetSize(ed.n_dof_);
-            local_vdofs.SetSize(ed.n_tdof_);
-            for (int i{}; i < ed.n_tdof_; ++i) {
-              if (i < ed.n_dof_) {
-                local_dofs[i] = local_marked_dofs_[ed.v_dofs_[i] / dim_];
+            local_dofs.SetSize(ed.n_dof);
+            local_vdofs.SetSize(ed.n_tdof);
+            for (int i{}; i < ed.n_tdof; ++i) {
+              if (i < ed.n_dof) {
+                local_dofs[i] = local_marked_dofs_[ed.v_dofs[i] / dim_];
               }
-              local_vdofs[i] = local_marked_v_dofs_[ed.v_dofs_[i]];
+              local_vdofs[i] = local_marked_v_dofs_[ed.v_dofs[i]];
             }
           }
           TemporaryData& tmp = temporary_data_[i_thread];
@@ -415,11 +416,11 @@ public:
     tmp.local_gap_ = 0.0;
     double* la_d = tmp.local_area_.GetData();
     double* lg_d = tmp.local_gap_.GetData();
-    const int N_size = q_data[0].N_.Size();
+    const int N_size = q_data[0].N.Size();
 
     for (const QuadData_& q : q_data) {
       // compute query, then distance, then normal
-      tmp.ComputeNearestDistanceQuery(q.N_);
+      tmp.ComputeNearestDistanceQuery(q.N);
       nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
                                                tmp.distance_results_);
       tmp.distance_results_.ComputeNormal<true>(); // unit normal
@@ -429,8 +430,8 @@ public:
       double g = std::min(true_g, 0.);
 
       // jacobian
-      mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi_);
-      const double fac = q.integration_weight_ * J.Weight();
+      mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi);
+      const double fac = q.integration_weight * J.Weight();
       area_contribution += fac;
 
       // normalgap validity and angle tolerance
@@ -442,7 +443,7 @@ public:
         g = 0.0;
       }
 
-      const double* N_d = q.N_.GetData();
+      const double* N_d = q.N.GetData();
       const double fac_g = fac * g; /* maybe zero */
       for (int i{}; i < N_size; ++i) {
         const double N = N_d[i];
@@ -472,7 +473,7 @@ public:
             // deref and prepare
             ElementQuadData_& eqd = element_quad_data_vec[i];
             ElementData_& bed = eqd.GetElementData();
-            tmp.SetDof(bed.n_dof_);
+            tmp.SetDof(bed.n_dof);
             tmp.CurrentElementSolutionCopy(current_u, eqd);
 
             ElementGapAndArea(eqd.GetQuadData(), tmp, local_area);
@@ -536,20 +537,20 @@ public:
     double* residual_d = tmp.ResidualMatrix().GetData();
 
     for (const QuadData_& q : q_data) {
-      const double p = tmp.Pressure(q.N_);
+      const double p = tmp.Pressure(q.N);
       assert(std::isfinite(p));
       assert(p < 0.);
 
       // we need derivatives to get normal.
-      mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi_);
+      mfem::DenseMatrix& J = tmp.ComputeJ(q.dN_dxi);
       const double det_J = J.Weight();
       ComputeUnitNormal(J, tmp.normal_);
 
       // this one has negative sign as we use the normal from gauss point
-      const double fac = q.integration_weight_ * det_J * p;
+      const double fac = q.integration_weight * det_J * p;
       Ptr_AddMult_a_VWt(-fac,
-                        q.N_.begin(),
-                        q.N_.end(),
+                        q.N.begin(),
+                        q.N.end(),
                         tmp.normal_.begin(),
                         tmp.normal_.end(),
                         residual_d);
@@ -635,7 +636,7 @@ public:
 
         // continue with assembly
         ElementData_& bed = beqd.GetElementData();
-        tmp.SetDof(bed.n_dof_);
+        tmp.SetDof(bed.n_dof);
 
         tmp.CurrentElementSolutionCopy(current_u, beqd);
         ElementResidual<true>(beqd.GetQuadData(),
@@ -645,7 +646,7 @@ public:
 
         {
           const std::lock_guard<std::mutex> lock(residual_mutex);
-          residual.AddElementVector(bed.v_dofs_, tmp.local_residual_.GetData());
+          residual.AddElementVector(bed.v_dofs, tmp.local_residual_.GetData());
         }
       } // marked elem loop
         // reuse mutex for area and force update
@@ -701,7 +702,7 @@ public:
             }
 
             ElementData_& bed = beqd.GetElementData();
-            tmp.SetDof(bed.n_dof_);
+            tmp.SetDof(bed.n_dof);
 
             // get current element solution as matrix
             tmp.CurrentElementSolutionCopy(current_u, beqd);
@@ -712,11 +713,11 @@ public:
 
             // push right away
             std::lock_guard<std::mutex> lock(residual_mutex);
-            const auto& vdofs = bed.v_dofs_;
+            const auto& vdofs = bed.v_dofs;
             residual.AddElementVector(vdofs, tmp.local_residual_.GetData());
             double* A = grad.GetData();
             const double* local_A = tmp.local_grad_.GetData();
-            const auto& A_ids = bed.A_ids_;
+            const auto& A_ids = bed.A_ids;
             for (int k{}; k < A_ids.size(); ++k) {
               A[A_ids[k]] += *local_A++ * grad_factor;
             }
@@ -748,15 +749,15 @@ public:
         // get bed
         const ElementQuadData_& beqd = element_quad_data_vec[i];
         const ElementData_& bed = beqd.GetElementData();
-        tmp.SetDof(bed.n_dof_);
+        tmp.SetDof(bed.n_dof);
 
         mfem::DenseMatrix& current_element_x =
             tmp.CurrentElementSolutionCopy(test_x, beqd);
 
         for (const QuadData_& q : beqd.GetQuadData()) {
           // get current position and F
-          current_element_x.MultTranspose(q.N_,
-                                          tmp.distance_query_.query_.data());
+          current_element_x.MultTranspose(q.N,
+                                          tmp.distance_query_.query.data());
           // query
           nearest_distance_coeff_->NearestDistance(tmp.distance_query_,
                                                    tmp.distance_results_);

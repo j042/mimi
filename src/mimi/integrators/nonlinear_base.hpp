@@ -210,19 +210,14 @@ public:
   }
 };
 
-/// Currently, we don't split hpp and cpp, so we move nested structure to a
-/// mutual place, here.
-/// temporary containers required in element assembly. one for each thread
-/// Stores values required for material, quad point and element data,
-/// temporarily
-struct TemporaryData {
+/// Temporary containers required in element assembly. One for each thread will
+/// be created. Stores values required for material, quad point and element
+/// data.
+class NonlinearSolidWorkData {
+public:
   // basic info. used to compute tdofs
   int dim_;
   int n_dof_;
-
-  // help info for thread local to global push
-  int support_start_;
-  int support_end_;
 
   // state variable
   double det_F_{};
@@ -246,7 +241,7 @@ struct TemporaryData {
   mfem::DenseMatrix F_dot_; // for visco but put it here for easier visibility
 
   // used in materials - materials will visit and initiate those in
-  // PrepareTemporaryData
+  // PrepareWorkData
   mfem::DenseMatrix I_;
   mfem::DenseMatrix alternative_stress_;           // for conversion
   mimi::utils::Vector<mfem::Vector> aux_vec_;      // for computation
@@ -285,13 +280,14 @@ struct TemporaryData {
     local_grad_.SetSize(n_dof * dim_, n_dof * dim_);
   }
 
+  /// Number of true dof based on dim and n_dof values
   int GetTDof() const {
     MIMI_FUNC()
 
     return dim_ * n_dof_;
   }
 
-  // computes F and resets flags
+  /// computes F, deformation gradient, and resets flags
   void ComputeF(const mfem::DenseMatrix& dNdX) {
     MIMI_FUNC()
     has_det_F_ = false;
@@ -301,6 +297,7 @@ struct TemporaryData {
     mimi::utils::AddDiagonal(F_.GetData(), 1.0, dim_);
   }
 
+  /// Returns inverse of F. For consecutive calls, it will return stored value
   mfem::DenseMatrix& FInv() {
     MIMI_FUNC()
     if (has_F_inv_) {
@@ -312,6 +309,7 @@ struct TemporaryData {
     return F_inv_;
   }
 
+  /// determinant of F
   double DetF() {
     MIMI_FUNC()
     if (has_det_F_) {
@@ -323,6 +321,8 @@ struct TemporaryData {
     return det_F_;
   }
 
+  /// Given global state vector and support ids, copies element vector and
+  /// returns matrix form.
   mfem::DenseMatrix& CurrentElementSolutionCopy(const mfem::Vector& current_all,
                                                 const mfem::Array<int>& vdofs) {
     MIMI_FUNC()
@@ -337,94 +337,21 @@ struct TemporaryData {
     return element_x_mat_;
   }
 
+  /// hint flag to inform current action. influences return value for
+  /// ResidualMatrix()
   void GradAssembly(bool state) {
     MIMI_FUNC()
 
     assembling_grad_ = state;
   }
 
+  /// Returns destination matrix for assembly. This maybe for residual or FD.
   mfem::DenseMatrix& ResidualMatrix() {
     MIMI_FUNC()
     if (assembling_grad_) {
       return forward_residual_;
     }
     return local_residual_;
-  }
-};
-
-struct TemporaryViscoData : TemporaryData {
-  using BaseTD_ = TemporaryData;
-
-  mfem::Vector element_v_;          // v
-  mfem::DenseMatrix element_v_mat_; // v as matrix
-
-  using BaseTD_::DetF;
-  using BaseTD_::FInv;
-
-  // computes F and resets flags
-  void ComputeFAndFDot(const mfem::DenseMatrix& dNdX) {
-    MIMI_FUNC()
-    has_det_F_ = false;
-    has_F_inv_ = false;
-
-    // MultAtBAndA1tB:
-    // MultAtB together for 2 As. adapted from mfem::MultAtB
-
-    // loop size
-    const int ah = element_x_mat_.Height();
-    const int aw = element_x_mat_.Width();
-    const int bw = dNdX.Width();
-    // A and B's data
-    const double* x_d_begin = element_x_.GetData();
-    const double* v_d_begin = element_v_.GetData();
-    const double* dndx_d = dNdX.Data();
-    // output
-    double* f_d = F_.Data();
-    double* fd_d = F_dot_.Data();
-    for (int j{}; j < bw; ++j) {
-      const double* x_d = x_d_begin;
-      const double* v_d = v_d_begin;
-      for (int i{}; i < aw; ++i) {
-        double f_ij{}, fd_ij{};
-        for (int k{}; k < ah; ++k) {
-          f_ij += x_d[k] * dndx_d[k];
-          fd_ij += v_d[k] * dndx_d[k];
-        }
-        *(f_d++) = f_ij;
-        *(fd_d++) = fd_ij;
-        x_d += ah;
-        v_d += ah;
-      }
-      dndx_d += ah;
-    }
-
-    mimi::utils::AddDiagonal(F_.GetData(), 1.0, dim_);
-  }
-
-  void SetDof(const int n_dof) {
-    MIMI_FUNC()
-
-    BaseTD_::SetDof(n_dof);
-
-    element_v_.SetSize(n_dof * dim_);
-    element_v_mat_.UseExternalData(element_v_.GetData(), n_dof, dim_);
-  }
-
-  void CurrentElementSolutionCopy(const mfem::Vector& all_x,
-                                  const mfem::Vector& all_v,
-                                  const mfem::Array<int>& vdofs) {
-    MIMI_FUNC()
-
-    const double* all_x_data = all_x.GetData();
-    const double* all_v_data = all_v.GetData();
-
-    double* elem_x_data = element_x_.GetData();
-    double* elem_v_data = element_v_.GetData();
-
-    for (const int& vdof : vdofs) {
-      *elem_x_data++ = all_x_data[vdof];
-      *elem_v_data++ = all_v_data[vdof];
-    }
   }
 };
 
