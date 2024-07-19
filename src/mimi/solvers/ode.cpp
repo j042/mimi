@@ -1,7 +1,8 @@
 #include "mimi/solvers/ode.hpp"
 
 namespace mimi::solvers {
-void GeneralizedAlpha2:::ComputeFactors() {
+
+void GeneralizedAlpha2::ComputeFactors() {
     fac0_ = (0.5 - (beta / alpha_m));
     fac1_ = alpha_f;
     fac1_inv_ = 1. / fac1_;
