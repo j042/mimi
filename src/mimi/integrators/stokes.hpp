@@ -7,7 +7,7 @@
 namespace mimi::integrators {
 class Stokes : public NonlinearBase {
 protected:
-  std::shared_ptr<mimi::utils::FluidMatrialBase> material_;
+  std::shared_ptr<mimi::utils::FluidMaterialBase> material_;
   std::shared_ptr<mimi::utils::FluidPrecomputedData> precomputed_;
 
   std::unique_ptr<mfem::SparseMatrix> bilinear_matrix_;
@@ -21,7 +21,7 @@ public:
   using QuadData_ = mimi::utils::QuadData;
 
   Stokes(const std::string& name,
-         const std::shared_ptr<mimi::utils::FluidMatrialBase> mat,
+         const std::shared_ptr<mimi::utils::FluidMaterialBase> mat,
          const std::shared_ptr<mimi::utils::FluidPrecomputedData>& precomputed)
       : NonlinearBase(name, nullptr),
         material_(mat),
@@ -45,6 +45,7 @@ public:
       // list all the elements that's required for assembly.
       mfem::DenseMatrix element_A00, element_A01;
       mfem::Vector& thread_local_A = thread_local_As[i_thread];
+      const Vector_<BlockSparseEntries>& block_sparse_entries = precomputed_->GetBlockSparseEntries();
       for (int i{begin}; i < end; ++i) { // element loop
         ElementQuadData_& v_eqd = v_elem_quad_data_vec[i];
         ElementQuadData_& p_eqd = p_elem_quad_data_vec[i];
@@ -52,14 +53,39 @@ public:
         ElementData_& p_ed = p_eqd.GetElementData();
         Vector_<QuadData_>& v_qd_vec = v_eqd.GetQuadData();
         Vector_<QuadData_>& p_qd_vec = p_eqd.GetQuadData();
+        const BlockSparseEntries& bse = block_sparse_entries[i];
 
         // quad loop
         for (int q{}; q < v_qd.size(); ++q) {
           QuadData_ v_qd = v_qd_vec[q];
           QuadData_ p_qd = p_qd_vec[q];
+
+          double mu = material_.viscosity_;
+          double int_weight_vel = v_qd.integration_weight;
+          double det_J_vel = v_qd.det_dX_dxi;
+          mfem::DenseMatrix vel_dxi = v_qd.dN_dxi;
+          
+          //∫μ ∇v:∇w dΩ
+
+          // A00: ∫μ (∇v)ᵀ:∇w dΩ
+          mfem::AddMult_a_AAt(
+            mu * int_weight_vel,
+            vel_dxi,
+            element_A00
+          );
+
+          // ∫p∇⋅w dΩ
+          mfem::Vector& vel_div;
+          vel_dxi.GradToDiv(vel_div);
+          mfem::AddMult_a_VWt(
+            int_weight_vel,
+            p_qd.N,
+            vel_div,
+            element_A01
+          );
         }
 
-        // push to thead local A
+        // push to thread local A
       }
     };
 
