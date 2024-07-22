@@ -9,53 +9,41 @@
 
 namespace mimi::operators {
 
-class IncompressibleFluid : public OperatorTwoBases {
+class IncompressibleFluid : public OperatorBase,
+                            public mfem::TimeDependentOperator {
 public:
-  using MimiBase_ = OperatorTwoBases;
+  using MfemBase_ = mfem::TimeDependentOperator;
+  using MimiBase_ = OperatorBase;
   using LinearFormPointer_ = MimiBase_::LinearFormPointer_;
   using BilinearFormPointer_ = MimiBase_::BilinearFormPointer_;
+  using NonlinearFormPointer_ = MimiBase_::NonlinearFormPointer_;
 
 protected:
   // linear forms
   LinearFormPointer_ rhs_;
 
   // bilinear forms
-  BilinearFormPointer_ diffusion_;
-  BilinearFormPointer_ conservation_;
-
-  std::shared_ptr<mfem::Vector> rhs_vector_;
+  NonlinearFormPointer_ stokes;
 
   // internal values - to set params for each implicit term
-  const mfem::Vector* vel_;
-  const mfem::Vector* p_;
-
-  mutable mfem::Vector temp_res_vel_;
-  mutable mfem::Vector temp_res_p_;
+  const mfem::Vector* v_p_;
 
   // unlike base classes, we will keep one sparse matrix and initialize
   std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
-
-  mutable mfem::Vector temp_vel_;
-  mutable mfem::Vector temp_p_;
-
   mutable mfem::SparseMatrix* jacobian_ = nullptr;
 
 public:
   /// This is same as Base_'s ctor
-  IncompressibleFluid(mfem::FiniteElementSpace& fe_space_velocity,
-                      mfem::FiniteElementSpace& fe_space_pressure)
-      : MimiBase_(fe_space_velocity, fe_space_pressure) {
+  IncompressibleFluid(const int size) : MfemBase_(size), MimiBase_() {
     MIMI_FUNC()
   }
 
   virtual std::string Name() const { return "IncompressibleFluid"; }
 
-  virtual void SetParameters(const mfem::Vector* vel, const mfem::Vector* p) {
+  virtual void SetParameters(const mfem::Vector* v_p) {
     MIMI_FUNC()
 
-    // this is from base
-    vel_ = vel;
-    p_ = p;
+    v_p_ = v_p;
   }
 
   // TODO: Surely wrong; check if this is right
@@ -178,12 +166,8 @@ public:
     }
 
     // Set residual of Dirichlet DoFs to zero
-    for (const int i : *dirichlet_dofs_velocity_) {
-      temp_res_vel_[i] = 0.0;
-    }
-    const int n_vel_dofs = {fe_space_1_->GetNE()};
-    for (const int i : *dirichlet_dofs_pressure_) {
-      temp_res_p_[i] = 0.0;
+    for (const int i : *all_dirichlet_dofs) {
+      residual[i] = 0.0;
     }
     // ------------
     // TODO: declare ndofs: should be dofs vel + dofs p

@@ -62,8 +62,7 @@ protected:
 public:
   /// This is same as Base_'s ctor
   NonlinearSolid(mfem::FiniteElementSpace& fe_space)
-      : MimiBase_(fe_space),
-        MfemBase_(fe_space.GetTrueVSize(), 0.0) {
+      : MfemBase_(fe_space.GetTrueVSize(), 0.0) {
     MIMI_FUNC()
   }
 

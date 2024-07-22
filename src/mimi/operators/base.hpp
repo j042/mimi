@@ -20,8 +20,6 @@ public:
   using MixedBilinearFormPointer_ = std::shared_ptr<mfem::MixedBilinearForm>;
   using NonlinearFormPointer_ = std::shared_ptr<mimi::forms::Nonlinear>; //
 
-  mfem::FiniteElementSpace& fe_space_;
-
   const mfem::Array<int>* dirichlet_dofs_{nullptr};
 
   // set dt
@@ -42,7 +40,7 @@ public:
 
   /// @brief ctor
   /// @param fe_space
-  OperatorBase(mfem::FiniteElementSpace& fe_space) : fe_space_(fe_space) {}
+  OperatorBase() = default;
 
   virtual ~OperatorBase() {}
 

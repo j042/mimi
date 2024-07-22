@@ -23,6 +23,8 @@ public:
 
   mfem::BlockVector block_v_p_;
 
+  mfem::Array<int> zero_dofs_;
+
   PyStokes() = default;
 
   virtual void SetMaterial(const MaterialPointer_& material) {
