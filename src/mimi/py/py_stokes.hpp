@@ -104,8 +104,22 @@ public:
     Base_::FindBoundaryDofIds();
 
     // create element data - simple domain precompute
+    const int vel_order = velocity_fes.fe_space_->GetMaxElementOrder();
+    const int default_stokes_q =
+        RuntimeCommunication()->GetInteger("stokes_quadrature_order",
+                                           2 * vel_order + 3);
     velocity_fes.precomputed_->CreateElementQuadData("domain", nullptr);
+    // get N, dN_dxi, dN_dX
+    velocity_fes.precomputed_->PrecomputeElementQuadData("domain",
+                                                         default_stokes_q,
+                                                         true);
     pressure_fes.precomputed_->CreateElementQuadData("domain", nullptr);
+    // get N, dN_dxi - we don't need dN_dxi, but for shape optimization loop, we
+    // can use that to compute jacobian of the changed shape
+    pressure_fes.precomputed_->PrecomputeElementQuadData("domain",
+                                                         default_stokes_q,
+                                                         false);
+
     // once we have parallel bilinear form assembly we can re directly cal;
     // precompute
 
