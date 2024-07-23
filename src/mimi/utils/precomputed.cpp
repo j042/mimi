@@ -19,7 +19,7 @@ void PrecomputedData::PrepareThreadSafety(mfem::FiniteElementSpace& fe_space,
 
     // deep copy mesh
     meshes_.emplace_back(
-        std::make_shared<mimi::utils::MeshExt>(*fe_space.GetMesh(), true));
+        std::make_shared<mfem::Mesh>(*fe_space.GetMesh(), true));
 
     // create fe_collection
     fe_collections_.emplace_back(
@@ -102,6 +102,7 @@ void PrecomputedData::PrepareElementData() {
                                     const int i_thread) {
     auto& mesh = *meshes_[i_thread];
     auto& fes = *fe_spaces_[i_thread];
+    mfem::IsoparametricTransformation dummy_eltrans;
     for (int i{begin}; i < end; ++i) {
       // get bdr elem data
       auto& bel_data_ptr = boundary_element_data_[i];
@@ -115,7 +116,7 @@ void PrecomputedData::PrepareElementData() {
       bel_data.element_trans = b_trans;
 
       fes.GetNURBSext()->LoadBE(i, b_element.get());
-      mesh.GetBdrFaceTransformations(i, b_trans.get());
+      mesh.GetBdrFaceTransformations(i, *b_trans, dummy_eltrans, dummy_eltrans);
 
       // we overwrite some pointers to our own copies
       // this is mask 1 - related elem

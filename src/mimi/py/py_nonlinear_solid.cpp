@@ -266,7 +266,7 @@ void PyNonlinearSolid::Setup(const int nthreads) {
     }
 
     // set
-    for (int i{}; i < traction_per_dim.size(); ++i) {
+    for (int i{}; i < static_cast<int>(traction_per_dim.size()); ++i) {
       traction_coeff->Set(i, new mfem::PWConstCoefficient(traction_per_dim[i]));
     }
 

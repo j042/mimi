@@ -104,11 +104,11 @@ void MortarContact::Prepare() {
           mfem::Array<int>& local_vdofs = eqd.GetArray(kVDof);
           local_dofs.SetSize(ed.n_dof);
           local_vdofs.SetSize(ed.n_tdof);
-          for (int i{}; i < ed.n_tdof; ++i) {
-            if (i < ed.n_dof) {
-              local_dofs[i] = local_marked_dofs_[ed.v_dofs[i] / dim_];
+          for (int j{}; j < ed.n_tdof; ++j) {
+            if (j < ed.n_dof) {
+              local_dofs[j] = local_marked_dofs_[ed.v_dofs[j] / dim_];
             }
-            local_vdofs[i] = local_marked_v_dofs_[ed.v_dofs[i]];
+            local_vdofs[j] = local_marked_v_dofs_[ed.v_dofs[j]];
           }
         }
         MortarContactWorkData& w = work_data_[i_thread];
@@ -387,7 +387,7 @@ void MortarContact::AddBoundaryResidualAndGrad(const mfem::Vector& current_u,
           double* A = grad.GetData();
           const double* local_A = w.local_grad_.GetData();
           const auto& A_ids = bed.A_ids;
-          for (int k{}; k < A_ids.size(); ++k) {
+          for (int k{}; k < static_cast<int>(A_ids.size()); ++k) {
             A[A_ids[k]] += *local_A++ * grad_factor;
           }
         }

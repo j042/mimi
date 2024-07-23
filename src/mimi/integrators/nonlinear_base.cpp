@@ -37,7 +37,7 @@ void NonlinearBase::AddBoundaryResidual(const mfem::Vector& current_x,
 }
 
 void NonlinearBase::AddBoundaryGrad(const mfem::Vector& current_x,
-                                    mfem::SparseMatrix& grad) {
+                                    mfem::SparseMatrix& grad) const {
   mimi::utils::PrintAndThrowError("AddBoundaryGrad not implemented");
 }
 

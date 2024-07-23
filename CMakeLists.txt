@@ -23,7 +23,31 @@ if(CMAKE_BUILD_TYPE MATCHES Release)
   set(MIMI_FLAGS -O3)
   set(MIMI_DEFS NDEBUG)
 else()
-  set(MIMI_FLAGS)
+  # add warnings - a lot of inline functions of mfem breaks those. So -Werror is
+  # impossible to have.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    set(MIMI_WARNING_FLAGS # -Werror
+        -Wall -Wextra -Wpedantic -Wno-unused)
+    # -Wzero-as-null-pointer-constant)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(MIMI_WARNING_FLAGS
+        # -Werror
+        -Wall
+        -Wmost
+        -Wextra
+        -Wpedantic
+        -Wunreachable-code
+        -Wshadow
+        -Wfloat-equal
+        -Weffc++
+        -Wno-unused-parameter
+        -Wno-unused-variable)
+    # -Wzero-as-null-pointer-constant)
+  else()
+    message(WARNING "Untested compiler. mimi is tested with GNU and Clang.")
+  endif()
+
+  list(APPEND MIMI_FLAGS ${MIMI_WARNING_FLAGS})
   set(MIMI_DEFS)
 endif()
 

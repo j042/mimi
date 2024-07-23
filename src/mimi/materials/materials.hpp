@@ -38,6 +38,9 @@ public:
   double K_{-1.0};
   double G_{-1.0};
 
+  MaterialBase() = default;
+  virtual ~MaterialBase(){};
+
   virtual std::string Name() const { return "MaterialBase"; }
 
   /// defining material properties using young's modulus and poisson's ratio
@@ -348,7 +351,7 @@ public:
 
     if (residual(0.0) > tolerance) {
       /// return mapping
-      mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
+      mimi::solvers::ScalarSolverOptions opts{.xtol = k_tol,
                                               .rtol = tolerance,
                                               .max_iter = 100};
 
@@ -522,7 +525,7 @@ public:
     const double tolerance = hardening_->SigmaY() * k_tol;
     if (residual(0.0) > tolerance) {
       /// return mapping
-      mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
+      mimi::solvers::ScalarSolverOptions opts{.xtol = k_tol,
                                               .rtol = tolerance,
                                               .max_iter = 100};
 
@@ -673,7 +676,7 @@ public:
 
     if (residual(0.0) > tolerance) {
       /// return mapping
-      mimi::solvers::ScalarSolverOptions opts{.xtol = 0.,
+      mimi::solvers::ScalarSolverOptions opts{.xtol = k_tol,
                                               .rtol = tolerance,
                                               .max_iter = 100};
 

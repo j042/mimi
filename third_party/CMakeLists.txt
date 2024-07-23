@@ -1,4 +1,4 @@
-add_subdirectory(mfem-fork)
+add_subdirectory(mfem)
 add_subdirectory(pybind11)
 add_subdirectory(cnpy)
 

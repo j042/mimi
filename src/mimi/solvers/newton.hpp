@@ -42,6 +42,11 @@ struct ScalarSolverOptions {
   unsigned int max_iter; ///< maximum allowed number of iterations
 };
 
+template<typename T>
+bool AlmostZero(const T val, const T tol) {
+  return std::abs(val) < tol;
+}
+
 /// implementation taken from serac
 /// thank you serac
 /// ParamTypes should be just simple double
@@ -63,11 +68,11 @@ auto ScalarSolve(function&& f,
   bool converged = false;
 
   // handle corner cases where one of the brackets is the root
-  if (std::abs(fl) < options.rtol) {
+  if (AlmostZero(fl, options.xtol)) {
     x = lower_bound;
     converged = true;
     return x;
-  } else if (std::abs(fh) < options.rtol) {
+  } else if (AlmostZero(fh, options.xtol)) {
     x = upper_bound;
     converged = true;
     return x;
@@ -133,13 +138,11 @@ auto ScalarSolve(function&& f,
         delta_x_old = delta_x;
         delta_x = 0.5 * (xh - xl);
         x = xl + delta_x;
-        converged = (x == xl);
       } else { // use Newton step
         delta_x_old = delta_x;
         delta_x = fval / df_dx;
         auto temp = x;
         x -= delta_x;
-        converged = (x == temp);
       }
 
       // function and jacobian evaluation
@@ -148,8 +151,8 @@ auto ScalarSolve(function&& f,
       df_dx = R.GetDerivatives(0);
 
       // convergence check
-      converged = converged || (std::abs(delta_x) < options.xtol)
-                  || (std::abs(fval) < options.rtol);
+      converged = converged || (AlmostZero(delta_x, options.xtol))
+                  || (AlmostZero(fval, options.rtol));
 
       // maintain bracket on root
       if (fval < 0) {

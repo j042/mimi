@@ -51,8 +51,11 @@ public:
   /// This does not initialize residual with 0. instead just adds to it.
   /// Mult() uses this after initializing residual to zero
   virtual void AddMult(const mfem::Vector& current_x,
-                       mfem::Vector& residual) const {
+                       mfem::Vector& residual,
+                       const double factor = 1.0) const {
     MIMI_FUNC()
+    // currently ignored
+    assert(factor == 1.0);
 
     // we assemble all first - these will call nthreadexe
     // domain
@@ -119,7 +122,7 @@ public:
       // this is an adhoc solution to get sparsity pattern
       // we know one of nl integrator should have precomputed, so access matrix
       // from that
-      mfem::SparseMatrix* sparsity_pattern;
+      mfem::SparseMatrix* sparsity_pattern{};
       if (domain_nfi_.size() > 0) {
         sparsity_pattern =
             domain_nfi_[0]->precomputed_->sparsity_pattern_.get();

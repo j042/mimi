@@ -9,7 +9,6 @@ set(SRCS
     solvers/ode.cpp
     utils/boundary_conditions.cpp
     utils/precomputed.cpp
-    utils/mfem_ext.cpp
     py/py_boundary_conditions.cpp
     py/py_solid.cpp
     py/py_nearest_distance.cpp
@@ -38,6 +37,6 @@ if(MIMI_USE_OMP)
   target_compile_definitions(mimi_core PRIVATE MIMI_USE_OMP)
   target_link_libraries(mimi_core PRIVATE OpenMP::OpenMP_CXX)
   # target_compile_options(mimi_core PRIVATE -fopenmp)
-  target_compile_options(mimi_core PRIVATE ${OpenMP_C_FLAGS}
-                                           ${OpenMP_CXX_FLAGS})
+  # target_compile_options(mimi_core PRIVATE ${OpenMP_C_FLAGS}
+  # ${OpenMP_CXX_FLAGS})
 endif()

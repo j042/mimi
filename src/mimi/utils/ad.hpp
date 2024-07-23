@@ -80,7 +80,7 @@ public:
   /// Alias for the data type storing the gradient
   using DerivType_ =
       std::conditional_t<number_of_derivatives == 0,
-                         Data<Scalar_>,
+                         mimi::utils::Data<Scalar_>,
                          std::array<Scalar_, number_of_derivatives>>;
 
 private:
@@ -169,7 +169,7 @@ public:
   ADScalar(const Scalar& value, const IndexingType_ active_component)
       : v_{value},
         d_{} {
-    assert(active_component < d_.size());
+    assert(active_component < static_cast<IndexingType_>(d_.size()));
     SetActiveComponent(active_component);
   }
 

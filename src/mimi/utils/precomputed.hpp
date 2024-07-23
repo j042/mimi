@@ -8,13 +8,12 @@
 
 #include "mimi/materials/material_state.hpp"
 #include "mimi/utils/containers.hpp"
-#include "mimi/utils/mfem_ext.hpp"
 #include "mimi/utils/n_thread_exe.hpp"
 #include "mimi/utils/print.hpp"
 
 namespace mimi::utils {
 
-inline std::shared_ptr<mfem::NURBSFiniteElement>
+inline std::shared_ptr<mfem::FiniteElement>
 CreateFiniteElement(int const& para_dim) {
   MIMI_FUNC()
 
@@ -27,7 +26,7 @@ CreateFiniteElement(int const& para_dim) {
   }
 }
 
-inline std::shared_ptr<mfem::NURBSFiniteElement>
+inline std::shared_ptr<mfem::FiniteElement>
 CreateFiniteFaceElement(int const& para_dim) {
   MIMI_FUNC()
 
@@ -47,11 +46,11 @@ CreateTransformation() {
   return std::make_shared<mfem::IsoparametricTransformation>();
 }
 
-inline std::shared_ptr<mimi::utils::FaceElementTransformationsExt>
+inline std::shared_ptr<mfem::FaceElementTransformations>
 CreateFaceTransformation() {
   MIMI_FUNC()
 
-  return std::make_shared<mimi::utils::FaceElementTransformationsExt>();
+  return std::make_shared<mfem::FaceElementTransformations>();
 }
 
 struct QuadDataExt {};
@@ -81,7 +80,7 @@ struct ElementData {
   mfem::Array<int> v_dofs;
   mimi::utils::Vector<int> A_ids; // id to matrix entry
 
-  std::shared_ptr<mfem::NURBSFiniteElement> element;
+  std::shared_ptr<mfem::FiniteElement> element;
 
   /// in case of boundary, this may be
   /// `mimi::utils::FaceElementTransformationsExt`
@@ -157,9 +156,8 @@ public:
   /// @brief size == nthreads, can share as long as v_dim are the same
   Vector_<std::shared_ptr<mfem::FiniteElementSpace>> fe_spaces_;
 
-  /// @brief size == nthreads, can share - just for boundary, we use mesh
-  /// extention
-  Vector_<std::shared_ptr<mimi::utils::MeshExt>> meshes_;
+  /// @brief size == nthreads, can share
+  Vector_<std::shared_ptr<mfem::Mesh>> meshes_;
 
   /// @brief size == nthreads, can share as long as they are same geometry
   Vector_<std::shared_ptr<mfem::NURBSFECollection>> fe_collections_;
