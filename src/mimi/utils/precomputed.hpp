@@ -282,10 +282,6 @@ public:
   void PrepareSparsity();
 
   Vector<BlockSparseEntries>& GetBlockSparseEntries() { return A_ids_; }
-
-  const Vector<BlockSparseEntries>& GetBlockSparseEntries() const {
-    return A_ids_;
-  }
 };
 
 } // namespace mimi::utils

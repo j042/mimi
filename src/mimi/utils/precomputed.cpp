@@ -333,12 +333,10 @@ void FluidPrecomputedData::PrepareSparsity() {
 
   // get velocity
   PrecomputedData& v_precomputed = GetVelocity();
-  mfem::FiniteElementSpace& v_fes = v_precomputed.fe_spaces_[0];
   const int v_nvdofs = v_precomputed.n_v_dofs_;
 
   // get pressure
   PrecomputedData& p_precomputed = GetPressure();
-  mfem::FiniteElementSpace& p_fes = p_precomputed.fe_spaces_[0];
   const int p_ndofs = p_precomputed.n_dofs_;
 
   sparsity_pattern_ = std::make_shared<mfem::SparseMatrix>(v_nvdofs + p_ndofs);

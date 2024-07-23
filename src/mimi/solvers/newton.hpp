@@ -7,7 +7,8 @@
 
 namespace mimi::operators {
 class NonlinearSolid;
-}
+class IncompressibleFluid;
+} // namespace mimi::operators
 
 namespace mimi::solvers {
 
@@ -22,6 +23,8 @@ public:
 
   /// pointer to nl oper to
   mimi::operators::NonlinearSolid* nl_oper_{nullptr};
+  /// pointer to fluid oper
+  mimi::operators::IncompressibleFluid* fluid_oper_{nullptr};
 
   /// Mult is not thread safe, due to some mutable variables. so let's use this
   /// vector within Mult()

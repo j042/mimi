@@ -7,7 +7,7 @@
 namespace mimi::integrators {
 class Stokes : public NonlinearBase {
 protected:
-  std::shared_ptr<mimi::utils::FluidMaterialBase> material_;
+  std::shared_ptr<mimi::materials::FluidMaterialBase> material_;
   std::shared_ptr<mimi::utils::FluidPrecomputedData> precomputed_;
 
   std::unique_ptr<mfem::SparseMatrix> bilinear_matrix_;
@@ -23,7 +23,7 @@ public:
   using QuadData_ = mimi::utils::QuadData;
 
   Stokes(const std::string& name,
-         const std::shared_ptr<mimi::utils::FluidMaterialBase> mat,
+         const std::shared_ptr<mimi::materials::FluidMaterialBase> mat,
          const std::shared_ptr<mimi::utils::FluidPrecomputedData>& precomputed)
       : NonlinearBase(name, nullptr),
         material_(mat),
@@ -37,27 +37,28 @@ public:
 
     // copy sparsity
     bilinear_matrix_ =
-        std::make_unique<mfem::SparseMatrix>(precomputed_->sparsity_pattern_);
-    bilinear_matrix_ = 0.0;
+        std::make_unique<mfem::SparseMatrix>(*precomputed_->sparsity_pattern_);
+    (*bilinear_matrix_) = 0.0;
     Vector_<mfem::Vector> thread_local_As;
-    thread_local_As.resize(precomputed_->GetVelocity()->n_threads_);
+    thread_local_As.resize(precomputed_->GetVelocity().n_threads_);
     auto assemble_AB = [&](const int begin, const int end, const int i_thread) {
       mimi::utils::PrecomputedData& v_pre = precomputed_->GetVelocity();
       mimi::utils::PrecomputedData& p_pre = precomputed_->GetPressure();
-      auto& v_elem_quad_data_vec = v_pre->GetElementQuadData("domain");
-      auto& p_elem_quad_data_vec = p_pre->GetElementQuadData("domain");
+      auto& v_elem_quad_data_vec = v_pre.GetElementQuadData("domain");
+      auto& p_elem_quad_data_vec = p_pre.GetElementQuadData("domain");
 
       // list all the elements that's required for assembly.
       mfem::DenseMatrix element_A00, element_A01, element_A10, element_A00_aux;
       mfem::Vector& thread_local_A = thread_local_As[i_thread];
-      thread_local_A.SetSize(precomputed_->sparsity_pattern_.NumNonZeroElems());
+      thread_local_A.SetSize(
+          precomputed_->sparsity_pattern_->NumNonZeroElems());
       thread_local_A = 0.0;
-      const Vector_<BlockSparseEntries>& block_sparse_entries =
+      const Vector_<mimi::utils::BlockSparseEntries>& block_sparse_entries =
           precomputed_->GetBlockSparseEntries();
       // currently, we only have constant viscosity. Later, put this input quad
       // loop
-      const double mu = material_.Viscosity();
-      const int dim = v_pre->dim_;
+      const double mu = material_->Viscosity();
+      const int dim = v_pre.dim_;
       for (int i{begin}; i < end; ++i) { // element loop
         ElementQuadData_& v_eqd = v_elem_quad_data_vec[i];
         ElementQuadData_& p_eqd = p_elem_quad_data_vec[i];
@@ -65,7 +66,7 @@ public:
         ElementData_& p_ed = p_eqd.GetElementData();
         Vector_<QuadData_>& v_qd_vec = v_eqd.GetQuadData();
         Vector_<QuadData_>& p_qd_vec = p_eqd.GetQuadData();
-        const BlockSparseEntries& bse = block_sparse_entries[i];
+        const mimi::utils::BlockSparseEntries& bse = block_sparse_entries[i];
 
         // set sizes for this element and initialize
         element_A00.SetSize(v_ed.n_tdof, v_ed.n_tdof);
@@ -75,7 +76,7 @@ public:
         element_A01 = 0.0;
 
         // quad loop
-        for (int q{}; q < v_qd.size(); ++q) {
+        for (int q{}; q < v_eqd.n_quad; ++q) {
           QuadData_ v_qd = v_qd_vec[q];
           QuadData_ p_qd = p_qd_vec[q];
 
@@ -101,10 +102,10 @@ public:
         } // end quad
 
         // push to thread local A
-        thread_local_As.AddElementVector(bse.A00_ids_, element_A00.GetData());
-        thread_local_As.AddElementVector(bse.A01_ids_, element_A01.GetData());
+        thread_local_A.AddElementVector(bse.A00_ids_, element_A00.GetData());
+        thread_local_A.AddElementVector(bse.A01_ids_, element_A01.GetData());
         element_A01.Transpose(); // now this is A10;
-        thread_local_As.AddElementVector(bse.A10_ids_, element_A01.GetData());
+        thread_local_A.AddElementVector(bse.A10_ids_, element_A01.GetData());
       }
     };
 
@@ -124,7 +125,7 @@ public:
         };
     mimi::utils::NThreadExe(thread_reduce,
                             bilinear_matrix_->NumNonZeroElems(),
-                            n_threads);
+                            n_threads_);
   }
   virtual void AddDomainResidual(const mfem::BlockVector& current_sol,
                                  mfem::Vector& residual) {

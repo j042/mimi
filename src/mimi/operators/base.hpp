@@ -131,8 +131,8 @@ public:
 
   /// @brief ctor
   /// @param fe_space
-  OperatorBase(mfem::FiniteElementSpace& fe_space_1,
-               mfem::FiniteElementSpace& fe_space_2)
+  OperatorTwoBases(mfem::FiniteElementSpace& fe_space_1,
+                   mfem::FiniteElementSpace& fe_space_2)
       : fe_space_1_(fe_space_1),
         fe_space_2_(fe_space_2) {}
 
@@ -186,8 +186,8 @@ public:
   }
 
   // TODO:
-  virtual void PostTimeAdvance(const mfem::Vector& v,
-                               const mfem::Vector& protected) = 0;
+  virtual void PostTimeAdvance(const mfem::Vector& vel,
+                               const mfem::Vector& p) = 0;
 
   virtual void Setup() = 0;
 };

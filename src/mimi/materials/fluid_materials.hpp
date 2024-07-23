@@ -18,6 +18,8 @@ public:
   double CarreauA_;
   double CarreauB_;
   double CarreauC_;
+
+  virtual std::string Name() const { return "ShearThinningCarreauWLF"; }
 };
 
 class FluidMaterialBase {
@@ -27,6 +29,8 @@ protected:
 public:
   double density_;
   double viscosity_; // dynamic
+
+  virtual std::string Name() const { return "FluidBase"; }
 
   FluidMaterialBase() = default;
 
@@ -44,6 +48,7 @@ public:
   virtual double Viscosity(const double temp) const {
     mimi::utils::PrintAndThrowError(
         "FluidMaterialBase - Temperature dependent viscosity not implemented");
+    return viscosity_;
   }
 
   virtual double Density() const {
@@ -51,15 +56,24 @@ public:
     return density_;
   }
 
-  virtual double Density() const {
+  virtual double Density(const double temp) const {
     mimi::utils::PrintAndThrowError(
         "FluidMaterialBase - Temperature dependent density not implemented");
+
+    return density_;
   }
 };
 
 class ShearThinning : public FluidMaterialBase {
 public:
-  double Viscosity(const double temp) const { return {}; }
-}
+  double Viscosity(const double temp) const {
+    mimi::utils::PrintAndThrowError(
+        "Shear thinning viscosity not yet implemented!");
+
+    return viscosity_;
+  }
+
+  virtual std::string Name() const { return "ShearThinningfluid"; };
+};
 
 } // namespace mimi::materials

@@ -231,12 +231,12 @@ public:
 
     MIMI_FUNC()
 
-    oper_ = std::unique_ptr<mfem::TimeDependentOperator>(oper);
-    ode_solver_ = std::unique_ptr<mimi::solvers::OdeBase>(ode);
+    oper1_ = std::unique_ptr<mfem::TimeDependentOperator>(oper);
+    ode1_solver_ = std::unique_ptr<mimi::solvers::OdeBase>(ode);
 
     // ode solvers also wants to know dirichlet dofs
-    auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper_.get());
-    ode_solver_->SetupDirichletDofs(op_base->dirichlet_dofs_);
+    auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper1_.get());
+    ode1_solver_->SetupDirichletDofs(op_base->dirichlet_dofs_);
 
     RuntimeCommunication()->InitializeTimeStep();
   }

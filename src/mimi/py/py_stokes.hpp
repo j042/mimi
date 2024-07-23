@@ -4,6 +4,9 @@
 
 #include <mfem.hpp>
 
+#include "mimi/integrators/stokes.hpp"
+#include "mimi/materials/materials.hpp"
+#include "mimi/operators/incompressible_fluid.hpp"
 #include "mimi/py/py_solid.hpp"
 #include "mimi/utils/precomputed.hpp"
 
