@@ -238,6 +238,15 @@ public:
   /// mono sparse matrix for mixed system
   std::unique_ptr<mfem::SparseMatrix> sparsity_pattern_;
 
+  // ctor
+  FluidPrecomputedData(std::shared_ptr<PrecomputedData> velocity_precomputed,
+                       std::shared_ptr<PrecomputedData> pressure_precomputed) {
+    SetVelocity(velocity_precomputed);
+    SetPressure(pressure_precomputed);
+
+    PrepareSparsity();
+  }
+
   void SetVelocity(std::shared_ptr<PrecomputedData> vel) {
     MIMI_FUNC()
 
@@ -271,6 +280,12 @@ public:
   /// computes mono sparsity for fluid problems and update support ids for both
   /// vel and pressure data
   void PrepareSparsity();
+
+  Vector<BlockSparseEntries>& GetBlockSparseEntries() { return A_ids_; }
+
+  const Vector<BlockSparseEntries>& GetBlockSparseEntries() const {
+    return A_ids_;
+  }
 };
 
 } // namespace mimi::utils
