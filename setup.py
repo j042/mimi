@@ -56,7 +56,6 @@ class CMakeBuild(build_ext):
         # overwrite if ext.debug exists
         debug = ext.debug if hasattr(ext, "debug") else debug
         cfg = "Debug" if debug else "Release"
-        #        cfg = "Debug"
 
         # CMake lets you override the generator - we need to check this.
         # Can be set with Conda-Build, for example.
@@ -88,6 +87,20 @@ class CMakeBuild(build_ext):
             cmake_args += [
                 item for item in os.environ["CMAKE_ARGS"].split(" ") if item
             ]
+
+        dup_prefix = []
+        for i, ca in enumerate(cmake_args):
+            if ca.startswith("-DCMAKE_PREFIX_PATH"):
+                dup_prefix.append(i)
+        if len(dup_prefix) > 1:
+            prefix_path = []
+            for dp in dup_prefix[::-1]:
+                prefix_path.append(cmake_args.pop(dp))
+            prefix_path = ";".join(prefix_path).replace(
+                "-DCMAKE_PREFIX_PATH=", ""
+            )
+            prefix_path = "-DCMAKE_PREFIX_PATH=" + prefix_path
+            cmake_args.append(prefix_path)
 
         if self.compiler.compiler_type != "msvc":
             # Using Ninja-build since it a) is available as a wheel and b)
@@ -142,7 +155,8 @@ class CMakeBuild(build_ext):
 
         # Set CMAKE_BUILD_PARALLEL_LEVEL to control the parallel build level
         # across all generators.
-        if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ:
+        serial = bool(int(os.environ.get("SERIAL", 0)))
+        if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ and not serial:
             # self.parallel is a Python 3 only way to set parallel jobs by hand
             # using -j in the build_ext call,
             # not supported by pip or PyPA-build.
