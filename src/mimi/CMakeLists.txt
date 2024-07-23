@@ -15,6 +15,7 @@ set(SRCS
     py/py_material.cpp
     py/py_hardening.cpp
     py/py_nonlinear_solid.cpp
+    py/py_stokes.cpp
     py/py_ad.cpp
     py/py_runtime_communication.cpp
     py/mimi_core.cpp)
