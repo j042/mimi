@@ -40,6 +40,8 @@ public:
   /// @param fe_space
   OperatorBase(mfem::FiniteElementSpace& fe_space) : fe_space_(fe_space) {}
 
+  virtual ~OperatorBase() {}
+
   /// @brief adds linear form
   /// @param key
   /// @param lf

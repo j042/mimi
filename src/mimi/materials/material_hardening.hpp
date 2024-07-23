@@ -10,6 +10,9 @@ class HardeningBase {
 public:
   using ADScalar_ = mimi::utils::ADScalar<double, 1>;
 
+  HardeningBase() = default;
+  virtual ~HardeningBase() {}
+
   virtual std::string Name() const { return "HardeningBase"; }
 
   virtual bool IsRateDependent() const { return false; }
@@ -128,6 +131,7 @@ public:
 
   virtual std::string Name() const { return "JohnsonCookHardening"; }
 
+  using Base_::Evaluate;
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain) const {
     MIMI_FUNC()
@@ -177,6 +181,7 @@ public:
     return visco_contribution;
   }
 
+  using Base_::Evaluate;
   virtual ADScalar_
   Evaluate(const ADScalar_& accumulated_plastic_strain,
            const double& equivalent_plastic_strain_rate) const {
@@ -243,6 +248,7 @@ public:
     }
   }
 
+  using Base_::Evaluate;
   virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
                              const double& equivalent_plastic_strain_rate,
                              const double& temperature) const {
@@ -314,8 +320,7 @@ struct JohnsonCookConstantTemperatureHardening
     }
   }
 
-  double GetTemperature() { return temperature_; }
-  const double GetTemperature() const { return temperature_; }
+  double GetTemperature() const { return temperature_; }
 
   /// As for constant temperature, input is ignored. In debug mode, checks if
   /// they match
@@ -327,6 +332,7 @@ struct JohnsonCookConstantTemperatureHardening
     return temperature_contribution_;
   }
 
+  using Base_::Evaluate;
   /// Will raise as this isn't supposed to be temperature dependent
   virtual ADScalar_ Evaluate(const ADScalar_& accumulated_plastic_strain,
                              const double& equivalent_plastic_strain_rate,

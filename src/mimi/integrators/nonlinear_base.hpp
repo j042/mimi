@@ -34,8 +34,8 @@ public:
   NonlinearBase(
       const std::string& name,
       const std::shared_ptr<mimi::utils::PrecomputedData>& precomputed)
-      : name_(name),
-        precomputed_(precomputed) {}
+      : precomputed_(precomputed),
+        name_(name) {}
 
   /// Name of the integrator
   virtual std::string Name() { return name_; }
@@ -70,7 +70,7 @@ public:
                                    mfem::Vector& residual);
 
   virtual void AddBoundaryGrad(const mfem::Vector& current_x,
-                               mfem::SparseMatrix& grad);
+                               mfem::SparseMatrix& grad) const;
 
   virtual void AddBoundaryResidualAndGrad(const mfem::Vector& current_x,
                                           const double grad_factor,

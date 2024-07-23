@@ -227,7 +227,9 @@ operator/(const Scalar& a, const ADScalar<Scalar, number_of_derivatives>& b) {
   ADScalar<Scalar, number_of_derivatives> result_value{b};
   Scalar deriv = -a / (b.v_ * b.v_);
   result_value.v_ *= -deriv;
-  for (std::size_t i{}; i < result_value.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < result_value.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= deriv;
   }
 
@@ -268,7 +270,9 @@ pow(const ADScalar<Scalar, number_of_derivatives>& base, const Scalar& power) {
   }
   ADScalar<Scalar, number_of_derivatives> result_value{base};
   result_value.v_ *= tmp;
-  for (std::size_t i{}; i < base.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < base.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= power * tmp;
   }
   return result_value;
@@ -294,7 +298,9 @@ sqrt(const ADScalar<Scalar, number_of_derivatives>& radicand) {
   const Scalar& half_inverse_root = 0.5 / root;
   ADScalar<Scalar, number_of_derivatives> result_value{radicand};
   result_value.v_ = root;
-  for (std::size_t i{}; i < radicand.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < radicand.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= half_inverse_root;
   }
   return result_value;
@@ -312,7 +318,9 @@ log(const ADScalar<Scalar, number_of_derivatives>& xi) {
   } else {
     result_value.v_ = log(xi.v_);
   }
-  for (std::size_t i{}; i < xi.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < xi.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= temp;
   }
   return result_value;
@@ -330,7 +338,9 @@ log10(const ADScalar<Scalar, number_of_derivatives>& a) {
   } else {
     result_value.v_ = log10(a.v_);
   }
-  for (std::size_t i{}; i < a.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < a.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= temp;
   }
   return result_value;
@@ -352,7 +362,9 @@ cos(const ADScalar<Scalar, number_of_derivatives>& rad) {
     sin_of_angle = -sin(rad.v_);
     result_value.v_ = cos(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < rad.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= sin_of_angle;
   }
   return result_value;
@@ -371,7 +383,9 @@ sin(const ADScalar<Scalar, number_of_derivatives>& rad) {
     cos_of_angle = cos(rad.v_);
     result_value.v_ = sin(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < rad.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= cos_of_angle;
   }
   return result_value;
@@ -392,7 +406,9 @@ tan(const ADScalar<Scalar, number_of_derivatives>& rad) {
     auxiliary_value *= auxiliary_value;
     result_value.v_ = tan(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < rad.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= auxiliary_value;
   }
   return result_value;
@@ -411,7 +427,9 @@ acos(const ADScalar<Scalar, number_of_derivatives>& rad) {
     auxiliary_value = -1. / sqrt(1 - rad.v_ * rad.v_);
     result_value.v_ = cos(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < rad.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= auxiliary_value;
   }
   return result_value;
@@ -430,7 +448,9 @@ asin(const ADScalar<Scalar, number_of_derivatives>& rad) {
     auxiliary_value = 1. / std::sqrt(1 - rad.v_ * rad.v_);
     result_value.v_ = asin(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < rad.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= auxiliary_value;
   }
   return result_value;
@@ -447,7 +467,9 @@ atan(const ADScalar<Scalar, number_of_derivatives>& rad) {
   } else {
     result_value.v_ = atan(rad.v_);
   }
-  for (std::size_t i{}; i < rad.GetNumberOfDerivatives(); i++) {
+  for (typename ADScalar<Scalar, number_of_derivatives>::IndexingType_ i{};
+       i < rad.GetNumberOfDerivatives();
+       i++) {
     result_value.d_[i] *= auxiliary_value;
   }
   return result_value;
