@@ -30,7 +30,7 @@ public:
   double density_;
   double viscosity_; // dynamic
 
-  virtual std::string Name() const { return "FluidBase"; }
+  virtual std::string Name() const { return "FluidMaterialBase"; }
 
   FluidMaterialBase() = default;
 
