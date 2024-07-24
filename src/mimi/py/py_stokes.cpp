@@ -273,9 +273,14 @@ void PyStokes::Setup(const int nthreads) {
   fluid_oper->Setup();
   fluid_oper->SetNewtonSolver(newton);
 
+  const double rho_inf =
+      RuntimeCommunication()->GetReal("ode_coefficient", 1.0);
+  auto odesolver = std::make_unique<mimi::solvers::GeneralizedAlpha>(rho_inf);
+  odesolver->Init(*fluid_oper);
+
   // TODO: timestepping
   // set dynamic system -> transfer ownership of those to base
-  // Base_::SetDynamicSystem(fluid_oper.release(), odesolver.release());
+  Base_::SetDynamicSystem(fluid_oper.release(), odesolver.release());
 }
 
 } // namespace mimi::py
