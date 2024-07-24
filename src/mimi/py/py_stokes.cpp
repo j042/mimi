@@ -223,6 +223,12 @@ void PyStokes::Setup(const int nthreads) {
     // remove dirichlet nodes
     rhs->SetSubVector(velocity_fes.zero_dofs, 0.0);
     fluid_oper->AddLinearForm("rhs", rhs);
+
+    std::shared_ptr<mfem::BlockVector> b_rhs =
+        std::make_shared<mfem::BlockVector>(block_v_p_);
+    *b_rhs = 0.0;
+    b_rhs->GetBlock(0) = *rhs;
+    fluid_oper->SetRhs(b_rhs);
   }
 
   // setup solvers

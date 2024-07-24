@@ -14,13 +14,15 @@ class IncompressibleFluid : public OperatorBase,
 public:
   using MfemBase_ = mfem::TimeDependentOperator;
   using MimiBase_ = OperatorBase;
-  using LinearFormPointer_ = MimiBase_::LinearFormPointer_;
+  using VectorPointer_ = std::shared_ptr<mfem::Vector>;
+  using LinearFormPointer_ =
+      MimiBase_::LinearFormPointer_; // this inherits from Vector
   using BilinearFormPointer_ = MimiBase_::BilinearFormPointer_;
   using NonlinearFormPointer_ = MimiBase_::NonlinearFormPointer_;
 
 protected:
   // linear forms
-  LinearFormPointer_ rhs_;
+  VectorPointer_ rhs_;
 
   // nonlinear form - it may be bilinear form in reality
   NonlinearFormPointer_ stokes_;
@@ -52,21 +54,20 @@ public:
     stokes_ = MimiBase_::nonlinear_forms_.at("stokes");
   }
 
-  virtual void SetupLinearRhsForm() {
+  virtual void SetRhs(VectorPointer_ vec) {
     MIMI_FUNC()
 
     // rhs linear form
-    rhs_ = MimiBase_::linear_forms_.at("rhs");
-    if (rhs_) {
-      mimi::utils::PrintInfo(Name(), "has rhs linear form term");
-    }
+    rhs_ = vec;
   }
 
   virtual void Setup() {
     MIMI_FUNC()
 
     SetupStokesForm();
-    SetupLinearRhsForm();
+    if (rhs_) {
+      mimi::utils::PrintInfo(Name(), "has rhs linear form term");
+    }
 
     // make sure there's stokes
     assert(!stokes_);
