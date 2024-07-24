@@ -193,4 +193,16 @@ public:
   }
 };
 
+class BlockNonlinear : public mfem::BlockNonlinearForm {
+public:
+  using Base_ = mfem::BlockNonlinearForm;
+  using NFIPointer_ = std::shared_ptr<mimi::integrators::NonlinearBase>;
+
+  mimi::utils::Vector<NFIPointer_> domain_nfi_{};
+  mimi::utils::Vector<NFIPointer_> boundary_face_nfi_{};
+  mimi::utils::Vector<const mfem::Array<int>*> boundary_markers_{};
+
+  using Base_::Base_;
+};
+
 } // namespace mimi::forms
