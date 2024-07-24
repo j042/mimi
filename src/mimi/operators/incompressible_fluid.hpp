@@ -30,10 +30,6 @@ protected:
   // internal values - to set params for each implicit term
   const mfem::Vector* v_p_;
 
-  // unlike base classes, we will keep one sparse matrix and initialize
-  std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
-  mutable mfem::SparseMatrix* jacobian_ = nullptr;
-
 public:
   /// This is same as Base_'s ctor
   IncompressibleFluid(const int size) : MfemBase_(size), MimiBase_() {
@@ -112,6 +108,8 @@ public:
   virtual mfem::Operator* ResidualAndGrad(const mfem::Vector& k,
                                           const int nthread,
                                           mfem::Vector& residual) const {
+    MIMI_FUNC()
+
     // initialize
     owning_jacobian_->operator=(0.0);
     residual = 0.0;

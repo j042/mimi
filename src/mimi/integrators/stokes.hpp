@@ -127,15 +127,15 @@ public:
                             bilinear_matrix_->NumNonZeroElems(),
                             n_threads_);
   }
-  virtual void AddDomainResidual(const mfem::BlockVector& current_sol,
-                                 mfem::Vector& residual) {
+  virtual void AddDomainResidual(const mfem::Vector& current_sol,
+                                 mfem::Vector& residual) const {
     MIMI_FUNC()
     bilinear_matrix_->Mult(current_sol, residual);
   }
-  virtual void AddDomainResidualAndGrad(const mfem::BlockVector& current_sol,
+  virtual void AddDomainResidualAndGrad(const mfem::Vector& current_sol,
                                         const double grad_factor,
                                         mfem::Vector& residual,
-                                        mfem::SparseMatrix& grad) {
+                                        mfem::SparseMatrix& grad) const {
     MIMI_FUNC()
 
     bilinear_matrix_->Mult(current_sol, residual);
