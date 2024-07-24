@@ -13,6 +13,7 @@ set(SRCS
     py/py_solid.cpp
     py/py_nearest_distance.cpp
     py/py_material.cpp
+    py/py_fluid_material.cpp
     py/py_hardening.cpp
     py/py_nonlinear_solid.cpp
     py/py_stokes.cpp
