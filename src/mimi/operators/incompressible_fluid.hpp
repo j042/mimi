@@ -49,14 +49,14 @@ public:
   virtual void SetupStokesForm() {
     MIMI_FUNC()
 
-    stokes_ = MimiBase_::nonlinear_forms_["stokes"];
+    stokes_ = MimiBase_::nonlinear_forms_.at("stokes");
   }
 
   virtual void SetupLinearRhsForm() {
     MIMI_FUNC()
 
     // rhs linear form
-    rhs_ = MimiBase_::linear_forms_["rhs"];
+    rhs_ = MimiBase_::linear_forms_.at("rhs");
     if (rhs_) {
       mimi::utils::PrintInfo(Name(), "has rhs linear form term");
     }
@@ -70,8 +70,6 @@ public:
 
     // make sure there's stokes
     assert(!stokes_);
-
-    SetSparsity(*stokes_->domain_nfi_[0]->precomputed_->sparsity_pattern_);
 
     dirichlet_dofs_ = &stokes_->GetDirichletDofs();
   }

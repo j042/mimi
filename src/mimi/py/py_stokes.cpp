@@ -263,6 +263,7 @@ void PyStokes::Setup(const int nthreads) {
   Base_::boundary_conditions_->Print();
 
   // finalize operator
+  fluid_oper->SetSparsity(*fluid_precomputed_data_->sparsity_pattern_);
   fluid_oper->Setup();
   fluid_oper->SetNewtonSolver(newton);
 
