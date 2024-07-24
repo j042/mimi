@@ -70,7 +70,7 @@ public:
     }
 
     // make sure there's stokes
-    assert(!stokes_);
+    assert(stokes_);
 
     dirichlet_dofs_ = &stokes_->GetDirichletDofs();
   }

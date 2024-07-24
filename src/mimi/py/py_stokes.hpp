@@ -37,6 +37,12 @@ public:
   }
 
   virtual void Setup(const int nthreads = -1);
+
+  virtual void StaticSolve() {
+    MIMI_FUNC()
+    mfem::Vector zero;
+    Base_::newton_solvers_.at("stokes")->Mult(zero, block_v_p_);
+  }
 };
 
 } // namespace mimi::py

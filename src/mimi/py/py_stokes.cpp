@@ -56,7 +56,7 @@ void PyStokes::Setup(const int nthreads) {
         std::make_unique<mfem::FiniteElementSpace>(Base_::Mesh().get(),
                                                    nullptr,
                                                    fe_collection,
-                                                   MeshDim(),
+                                                   1,
                                                    mfem::Ordering::byVDIM);
   }
 
@@ -157,6 +157,7 @@ void PyStokes::Setup(const int nthreads) {
       std::make_shared<mimi::integrators::Stokes>(material_->Name() + "-Stokes",
                                                   material_,
                                                   fluid_precomputed_data_);
+  stokes_integ->Prepare();
   nonlinear_stokes->AddDomainIntegrator(stokes_integ);
   nonlinear_stokes->SetDirichletDofs(zero_dofs_);
 
