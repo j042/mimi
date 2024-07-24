@@ -38,6 +38,11 @@ public:
   /// @brief newton solver should be configured outside of this class
   std::shared_ptr<mimi::solvers::Newton> newton_solver_{nullptr};
 
+  // keep one sparse matrix and initialize
+  std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
+  // raw pointer form of owning_jacobian_ -> used in GetGradients()
+  mutable mfem::SparseMatrix* jacobian_ = nullptr;
+
   /// @brief ctor
   /// @param fe_space
   OperatorBase() = default;
@@ -91,6 +96,21 @@ public:
     MIMI_FUNC();
 
     newton_solver_ = newton_solver;
+  }
+
+  virtual void SetSparsity(const mfem::SparseMatrix& spmat) {
+    MIMI_FUNC();
+    owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(spmat);
+    if (!owning_jacobian_->Finalized()
+        || owning_jacobian_->ColumnsAreSorted()) {
+      mimi::utils::PrintInfo("OperatorBase::SetSparsity - sparsity not "
+                             "finalized or not sorted. Finalizing/Sorting");
+      owning_jacobian_->Finalize();
+      owning_jacobian_->ColumnsAreSorted();
+    }
+    jacobian_ = owning_jacobian_.get();
+    // and initialize values with zero
+    owning_jacobian_->operator=(0.0);
   }
 
   virtual void PostTimeAdvance(const mfem::Vector& x,
@@ -176,16 +196,16 @@ public:
     nonlinear_forms_[key] = nf;
   }
 
-  /// @brief sets newton solver for the operator
-  /// @param newton_solver
-  virtual void
-  SetNewtonSolver(std::shared_ptr<mimi::solvers::Newton> const& newton_solver) {
-    MIMI_FUNC();
+  /// In nonlinear setup with computational differentiation, it is practical to
+  /// compute them both at the same time
+  virtual mfem::Operator* ResidualAndGrad(const mfem::Vector& d2x_dt2,
+                                          const int nthread,
+                                          mfem::Vector& y) const = 0;
 
-    newton_solver_ = newton_solver;
-  }
-
-  // TODO:
+  /// @brief Called after each time step, can implement things for post process
+  /// or pre-next step
+  /// @param vel
+  /// @param p
   virtual void PostTimeAdvance(const mfem::Vector& vel,
                                const mfem::Vector& p) = 0;
 

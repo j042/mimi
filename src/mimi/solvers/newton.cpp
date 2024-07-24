@@ -52,8 +52,8 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
   }
 
   // get residual
-  if (nl_oper_) {
-    Base_::grad = nl_oper_->ResidualAndGrad(x, -1, Base_::r);
+  if (mimi_oper_) {
+    Base_::grad = mimi_oper_->ResidualAndGrad(x, -1, Base_::r);
   } else {
     Base_::oper->Mult(x, Base_::r);
     Base_::grad = &Base_::oper->GetGradient(x);
@@ -137,7 +137,6 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
 
     line_search_temp_x_.SetSize(x.Size());
 
-    // at first sight, it seems like we can
     // full step
     add(x, -1.0, Base_::c, line_search_temp_x_);
     oper->Mult(line_search_temp_x_, Base_::r);
@@ -182,11 +181,11 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
 
     // get current residual and grad - also one used for next iteration
     // the last assembled grad is wasted
-    if (nl_oper_) {
+    if (mimi_oper_) {
       if (it == max_iter - 1) {
         Base_::oper->Mult(x, Base_::r);
       } else {
-        Base_::grad = nl_oper_->ResidualAndGrad(x, -1, Base_::r);
+        Base_::grad = mimi_oper_->ResidualAndGrad(x, -1, Base_::r);
       }
     } else {
       Base_::oper->Mult(x, Base_::r);

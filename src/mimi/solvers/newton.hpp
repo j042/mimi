@@ -6,8 +6,7 @@
 #include "mimi/utils/print.hpp"
 
 namespace mimi::operators {
-class NonlinearSolid;
-class IncompressibleFluid;
+class OperatorBase;
 } // namespace mimi::operators
 
 namespace mimi::solvers {
@@ -21,10 +20,9 @@ public:
 
   using Base_::Base_;
 
-  /// pointer to nl oper to
-  mimi::operators::NonlinearSolid* nl_oper_{nullptr};
-  /// pointer to fluid oper
-  mimi::operators::IncompressibleFluid* fluid_oper_{nullptr};
+  /// pointer to mimi operator. If set, uses ResidualAndGrad() instead of
+  /// GetGradient()
+  mimi::operators::OperatorBase* mimi_oper_{nullptr};
 
   /// Mult is not thread safe, due to some mutable variables. so let's use this
   /// vector within Mult()

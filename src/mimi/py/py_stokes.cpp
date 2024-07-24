@@ -128,26 +128,37 @@ void PyStokes::Setup(const int nthreads) {
       velocity_fes.precomputed->n_v_dofs_ + pressure_fes.precomputed->n_dofs_);
 
   // let's setup the system
-  // create dummy sparse matrix - mfem just sets referencee, so no copies are
-  // made
-  mfem::SparseMatrix tmp;
-  mfem::SparseMatrix tmp_rect;
 
   // Linear and nonlinear forms
   // 1. Stokes nonlinear form
   // TODO: mimi::forms::Nonlinear is not appropriate for two vector spaces
   // BlockNonlinear takes Array of FE spaces as input
   auto nonlinear_stokes =
-      std::make_shared<mimi::forms::BlockNonlinear>(velocity_fes, pressure_fes);
+      std::make_shared<mimi::forms::Nonlinear>(velo, pressure_fes);
   fluid_oper->AddNonlinearForm("stokes", nonlinear_stokes);
-  // create integrator
-  mimi::utils::FluidPrecomputedData fluid_precomp(velocity_fes.precomputed,
-                                                  pressure_fes.precomputed);
 
+  // create precomputed
+  fluid_precomputed_data_ = std::make_shared<mimi::utils::FluidPrecomputedData>(
+      velocity_fes.precomputed,
+      pressure_fes.precomputed);
+
+  // create mono boundary tdofs
+  zero_dofs_ = velocity_fes.zero_dofs;
+  // apply offset to presure dofs
+  mfem::Array<int> offset_pressure(pressure_fes.zero_dofs);
+  const int p_offset = velocity_fes.precomputed->n_v_dofs_;
+  for (int& op : offset_pressure) {
+    op += p_offset;
+  }
+  zero_dofs_.Append(offset_pressure);
+
+  // create integrator
   auto stokes_integ =
       std::make_shared<mimi::integrators::Stokes>(material_->Name() + "-Stokes",
                                                   material_,
                                                   fluid_precomp);
+  nonlinear_stokes->AddDomainIntegrator(stokes_integ);
+  nonlinear_stokes->SetEssentialTrueDofs(zero_dofs_);
 
   // 4. linear form
   auto rhs = std::make_shared<mfem::LinearForm>(velocity_fes.fe_space.get());
@@ -232,35 +243,31 @@ void PyStokes::Setup(const int nthreads) {
   }
 
   // // setup a newton solver
-  // auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
-  // // give pointer of nl oper to control line search assembly
-  // newton->fluid_oper_ = fluid_oper.get();
-  // Base_::newton_solvers_["stokes"] = newton;
-  // // basic config. you can change this using ConfigureNewton()
-  // newton->iterative_mode = false;
-  // newton->SetOperator(*fluid_oper);
-  // newton->SetSolver(*Base_::linear_solvers_["stokes"]);
-  // newton->SetPrintLevel(mfem::IterativeSolver::PrintLevel()
-  //                           .Warnings()
-  //                           .Errors()
-  //                           .Summary()
-  //                           .FirstAndLast());
-  // newton->SetRelTol(1e-8);
-  // newton->SetAbsTol(1e-12);
-  // newton->SetMaxIter(MeshDim() * 10);
+  auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
+  // give pointer of nl oper to control line search assembly
+  newton->mimi_oper_ = fluid_oper.get();
+  Base_::newton_solvers_["stokes"] = newton;
+  // basic config. you can change this using ConfigureNewton()
+  newton->iterative_mode = false;
+  newton->SetOperator(*fluid_oper);
+  newton->SetSolver(*Base_::linear_solvers_["stokes"]);
+  newton->SetPrintLevel(mfem::IterativeSolver::PrintLevel()
+                            .Warnings()
+                            .Errors()
+                            .Summary()
+                            .FirstAndLast());
+  newton->SetRelTol(1e-8);
+  newton->SetAbsTol(1e-12);
+  newton->SetMaxIter(MeshDim() * 10);
 
-  // // finally, register newton solver to the opeartor
-  // fluid_oper->SetNewtonSolver(newton);
+  Base_::boundary_conditions_->Print();
 
-  // // TODO: timestepping
-  // Base_::boundary_conditions_->Print();
-
-  // // finalize operator
-  // fluid_oper->Setup();
+  // finalize operator
+  fluid_oper->Setup();
 
   // TODO: timestepping
   // set dynamic system -> transfer ownership of those to base
-  // Base_::SetDynamicSystem(fluid_oper.release(), odesolver.release());
+  Base_::SetDynamicSystem(fluid_oper.release(), odesolver.release());
 }
 
 } // namespace mimi::py

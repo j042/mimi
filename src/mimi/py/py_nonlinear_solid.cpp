@@ -345,7 +345,7 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   // setup a newton solver
   auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
   // give pointer of nl oper to control line search assembly
-  newton->nl_oper_ = nl_oper.get();
+  newton->mimi_oper_ = nl_oper.get();
   Base_::newton_solvers_["nonlinear_solid"] = newton;
   // basic config. you can change this using ConfigureNewton()
   newton->iterative_mode = false;
@@ -359,9 +359,6 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   newton->SetRelTol(1e-8);
   newton->SetAbsTol(1e-12);
   newton->SetMaxIter(MeshDim() * 10);
-
-  // finally, register newton solver to the opeartor
-  nl_oper->SetNewtonSolver(newton);
 
   // ode
   const double rho_inf =

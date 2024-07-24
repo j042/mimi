@@ -264,6 +264,10 @@ public:
   virtual std::shared_ptr<mimi::forms::Nonlinear>
   NonlinearForm2(const std::string& nlf_name);
 
+  virtual void StaticSolve() {
+    mimi::utils::PrintAndThrowError("StaticSolve not implemented.");
+  }
+
   virtual void StepTime2();
 
   virtual void FixedPointSolve2();

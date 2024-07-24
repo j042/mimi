@@ -112,13 +112,7 @@ void NonlinearSolid::Setup() {
   assert(!stiffness_);
 
   // copy jacobian with mass matrix to initialize sparsity pattern
-  // technically, we don't have to copy I & J;
-  // technically, it is okay to copy
-  owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(mass_->SpMat());
-  assert(owning_jacobian_->Finalized());
-  jacobian_ = owning_jacobian_.get();
-  // and initialize values with zero
-  owning_jacobian_->operator=(0.0);
+  SetSparsity(*mass_->SpMat());
 }
 
 void NonlinearSolid::Mult(const mfem::Vector& x,

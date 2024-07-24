@@ -17,7 +17,21 @@ public:
   mimi::utils::Vector<NFIPointer_> boundary_face_nfi_{};
   mimi::utils::Vector<const mfem::Array<int>*> boundary_markers_{};
 
+  /// for single fespace, we inherit ctor
   using Base_::Base_;
+
+  /// used for custom spaces - e.g., for stokes
+  NonlinearForm(FiniteElementSpace* f)
+      : Operator(f->GetTrueVSize()),
+        assembly(AssemblyLevel::LEGACY),
+        ext(NULL),
+        fes(f),
+        extern_bfs(0),
+        Grad(NULL),
+        cGrad(NULL),
+        sequence(0),
+        P(nullptr),
+        cP(nullptr){};
 
   /// time step size, in case you need them
   /// operators should set them

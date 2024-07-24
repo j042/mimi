@@ -22,7 +22,7 @@ protected:
   // linear forms
   LinearFormPointer_ rhs_;
 
-  // bilinear forms
+  // nonlinear form - it may be bilinear form in reality
   NonlinearFormPointer_ stokes_;
 
   // internal values - to set params for each implicit term
@@ -46,53 +46,11 @@ public:
     v_p_ = v_p;
   }
 
-  // TODO: Surely wrong; check if this is right
-  virtual void SetupDirichletDofsFromBilinearForms() {
-    MIMI_FUNC()
-
-    mimi::utils::PrintAndThrowError(
-        "The setup of Dirichlet Dofs is not yet implemented!");
-  }
-
-  // virtual void SetRhsVector(const std::shared_ptr<mfem::Vector>& rhs_vector)
-  // {
-  //   MIMI_FUNC()
-
-  //   rhs_vector_ = rhs_vector;
-  // }
-
   virtual void SetupStokesForm() {
     MIMI_FUNC()
 
     stokes_ = MimiBase_::nonlinear_forms_["stokes"];
   }
-
-  // TODO: Check
-  // virtual void SetupBilinearDiffusionForm() {
-  //   MIMI_FUNC()
-
-  //   // Diffusion
-  //   diffusion_ = MimiBase_::bilinear_forms_["diffusion"];
-  //   if (diffusion_) {
-  //     diffusion_->Finalize(0); // skip_zero is 0
-  //     // if this is sorted, we can just add A
-  //     diffusion_->SpMat().SortColumnIndices();
-  //     mimi::utils::PrintInfo(Name(), "has diffusion term.");
-  //   }
-  // }
-
-  // Bilinear form for the weak form of the pressure gradient and the mass
-  // conservation
-  // TODO: check if it's correct
-  // virtual void SetupBilinearConservationForm() {
-  //   MIMI_FUNC()
-
-  //   conservation_ = MimiBase_::bilinear_forms_["conservation"];
-  //   if (conservation_) {
-  //     mimi::utils::PrintAndThrowError(
-  //         "The conservation bilinear form is not yet implemented!");
-  //   }
-  // }
 
   virtual void SetupLinearRhsForm() {
     MIMI_FUNC()
@@ -107,40 +65,27 @@ public:
   virtual void Setup() {
     MIMI_FUNC()
 
-    mimi::utils::PrintAndThrowError("Setup not yet implemented!");
+    SetupStokesForm();
+    SetupLinearRhsForm();
 
-    // setup basics -> these finalizes sparse matrices for bilinear forms
-    // SetupBilinearDiffusionForm();
-    // SetupBilinearConservationForm();
-    // SetupLinearRhsForm();
+    // make sure there's stokes
+    assert(!stokes_);
 
-    // if (diffusion_) {
-    //   // same for diffusion_
-    //   assert(diffusion_->SpMat().Finalized());
-    //   assert(diffusion_->SpMat().ColumnsAreSorted());
-    // }
-    // // TODO: same for conservation
+    // copy jacobian with mass matrix to initialize sparsity pattern
+    owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(mass_->SpMat());
+    assert(owning_jacobian_->Finalized());
+    jacobian_ = owning_jacobian_.get();
+    // and initialize values with zero
+    owning_jacobian_->operator=(0.0);
 
-    // SetupDirichletDofsFromBilinearForms();
-
-    // // TODO: what does the following do?
-    // // assert(!stiffness_);
-
-    // // copy jacobian with mass matrix to initialize sparsity pattern
-    // // technically, we don't have to copy I & J;
-    // // technically, it is okay to copy
-    // owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(mass_->SpMat());
-    // assert(owning_jacobian_->Finalized());
-    // jacobian_ = owning_jacobian_.get();
-    // // and initialize values with zero
-    // owning_jacobian_->operator=(0.0);
+    dirichlet_dofs_ = &stokes_->GetEssentialTrueDofs();
   }
 
   // TODO: time dependent ODE solve
 
   // TODO
   /// @brief Implicit solver
-  virtual void ImplicitSolve(mfem::Vector& vel, mfem::Vector& p) {
+  virtual void ImplicitSolve(const mfem::Vector& v_p, mfem::Vector& p) {
     MIMI_FUNC()
 
     mimi::utils::PrintAndThrowError(
@@ -149,48 +94,20 @@ public:
 
   // Mult for solving nonlinear system
   // computes residual, which is used by Newton solver
-  // TODO: check Dirichlet Dofs
-  virtual void Mult(mfem::Vector& residual) const {
+  virtual void Mult(const mfem::Vector& k, mfem::Vector& y) const {
     MIMI_FUNC()
 
-    mimi::utils::PrintAndThrowError("Mult not yet implemented!");
+    // currently this one is only implemented for static case, so no
+    stokes_->Mult(k, y);
 
-    // temp_res_vel_.SetSize(vel_->Size());
-    // temp_res_p_.SetSize(p_->Size());
-
-    // // A v
-    // diffusion_->AddMult(vel_, temp_res_vel_);
-
-    // // should be right; otherwise just swap
-    // // div(v) q
-    // conservation_->AddMult(vel_, temp_res_vel_);
-    // // div(w) p
-    // conservation_->AddMultTranspose(p_, temp_res_p_);
-
-    // // substract rhs
-    // if (rhs_) {
-    //   residual.Add(-1.0, *rhs_);
-    // }
-
-    // // this is usually just for fsi
-    // if (rhs_vector_) {
-    //   residual.Add(-1.0, *rhs_vector_);
-    // }
-
-    // // Set residual of Dirichlet DoFs to zero
-    // for (const int i : *all_dirichlet_dofs) {
-    //   residual[i] = 0.0;
-    // }
-    // ------------
-    // TODO: declare ndofs: should be dofs vel + dofs p
-    // copy or move??? to residual vector???
+    if (rhs_) {
+      y.Add(-1.0, *rhs_);
+    }
   }
 
   // TODO: GetGradient
   virtual mfem::Operator& GetGradient() const {
     MIMI_FUNC()
-
-    // TODO nothing more?
 
     mimi::utils::PrintAndThrowError("GetGradient not yet implemented!");
 
@@ -198,38 +115,20 @@ public:
   }
 
   // TODO: ResidualAndGrad
-  virtual mfem::Operator* ResidualAndGrad(const int nthread,
+  virtual mfem::Operator* ResidualAndGrad(const mfem::Vector& k,
+                                          const int nthread,
                                           mfem::Vector& residual) const {
-    mimi::utils::PrintAndThrowError(
-        "ResidualAndGrad for fluid not yet implemented!");
+    // initialize
+    owning_jacobian_->operator=(0.0);
+    y = 0.0;
 
-    // // Residual
-    // // A v
-    // diffusion_->AddMult(vel_, residual);
+    // mult grad
+    stokes_->AddMultGrad(k, nthread, 1.0, residual, *jacobian_);
 
-    // // should be right; otherwise just swap
-    // // div(v) q
-    // conservation_->AddMult(vel_, residual);
-    // // div(w) p
-    // conservation_->AddMultTranspose(p_, residual);
-
-    // // substract rhs
-    // if (rhs_) {
-    //   residual.Add(-1.0, *rhs_);
-    // }
-
-    // // this is usually just for fsi
-    // if (rhs_vector_) {
-    //   residual.Add(-1.0, *rhs_vector_);
-    // }
-
-    // // Set residual of Dirichlet DoFs to zero
-    // for (const int i : *dirichlet_dofs_velocity_) {
-    //   residual[i] = 0.0;
-    // }
-    // for (const int i : *dirichlet_dofs_pressure_) {
-    //   residual[i] = 0.0;
-    // }
+    // substract rhs
+    if (rhs_) {
+      residual.Add(-1.0, *rhs_);
+    }
 
     return jacobian_;
   }
