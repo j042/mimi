@@ -81,7 +81,7 @@ public:
           QuadData_ p_qd = p_qd_vec[q];
 
           // A00: ∫μ ∇v dot ∇w dΩ
-          mfem::Mult_a_AAt(mu * v_qd.integration_weight * v_qd.det_dX_dxi,
+          mfem::Mult_a_AAt(-mu * v_qd.integration_weight * v_qd.det_dX_dxi,
                            v_qd.dN_dX,
                            element_A00_aux);
           for (int d{}; d < dim; ++d) {
@@ -126,6 +126,8 @@ public:
     mimi::utils::NThreadExe(thread_reduce,
                             bilinear_matrix_->NumNonZeroElems(),
                             n_threads_);
+
+    bilinear_matrix_->Print();
   }
   virtual void AddDomainResidual(const mfem::Vector& current_sol,
                                  mfem::Vector& residual) const {
@@ -137,7 +139,7 @@ public:
                                         mfem::Vector& residual,
                                         mfem::SparseMatrix& grad) const {
     MIMI_FUNC()
-
+    // currently, this does not Add, just sets
     bilinear_matrix_->Mult(current_sol, residual);
     std::copy_n(bilinear_matrix_->GetData(),
                 bilinear_matrix_->NumNonZeroElems(),
