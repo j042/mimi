@@ -5,7 +5,7 @@
 #include <mfem.hpp>
 
 #include "mimi/integrators/stokes.hpp"
-#include "mimi/materials/materials.hpp"
+#include "mimi/materials/fluid_materials.hpp"
 #include "mimi/operators/incompressible_fluid.hpp"
 #include "mimi/py/py_solid.hpp"
 #include "mimi/utils/precomputed.hpp"
@@ -15,7 +15,7 @@ namespace mimi::py {
 class PyStokes : public PySolid {
 public:
   using Base_ = PySolid;
-  using MaterialPointer_ = std::shared_ptr<mimi::materials::MaterialBase>;
+  using MaterialPointer_ = std::shared_ptr<mimi::materials::FluidMaterialBase>;
 
   MaterialPointer_ material_;
   // we create one more mesh that

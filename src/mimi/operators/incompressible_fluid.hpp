@@ -71,14 +71,9 @@ public:
     // make sure there's stokes
     assert(!stokes_);
 
-    // copy jacobian with mass matrix to initialize sparsity pattern
-    owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(mass_->SpMat());
-    assert(owning_jacobian_->Finalized());
-    jacobian_ = owning_jacobian_.get();
-    // and initialize values with zero
-    owning_jacobian_->operator=(0.0);
+    SetSparsity(*stokes_->domain_nfi_[0]->precomputed_->sparsity_pattern_);
 
-    dirichlet_dofs_ = &stokes_->GetEssentialTrueDofs();
+    dirichlet_dofs_ = &stokes_->GetDirichletDofs();
   }
 
   // TODO: time dependent ODE solve
@@ -120,7 +115,7 @@ public:
                                           mfem::Vector& residual) const {
     // initialize
     owning_jacobian_->operator=(0.0);
-    y = 0.0;
+    residual = 0.0;
 
     // mult grad
     stokes_->AddMultGrad(k, nthread, 1.0, residual, *jacobian_);
@@ -131,6 +126,12 @@ public:
     }
 
     return jacobian_;
+  }
+
+  virtual void PostTimeAdvance(const mfem::Vector& x, const mfem::Vector& v) {
+    MIMI_FUNC()
+    mimi::utils::PrintDebug(
+        "IncompressibleFluid::PostTimeAdvance - Doing nothing");
   }
 };
 

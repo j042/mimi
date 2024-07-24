@@ -112,7 +112,7 @@ void NonlinearSolid::Setup() {
   assert(!stiffness_);
 
   // copy jacobian with mass matrix to initialize sparsity pattern
-  SetSparsity(*mass_->SpMat());
+  SetSparsity(mass_->SpMat());
 }
 
 void NonlinearSolid::Mult(const mfem::Vector& x,

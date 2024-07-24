@@ -71,7 +71,7 @@ public:
   virtual void SetupDirichletDofsFromNonlinearStiffness() {
     MIMI_FUNC()
 
-    dirichlet_dofs_ = &nonlinear_stiffness_->GetEssentialTrueDofs();
+    dirichlet_dofs_ = &nonlinear_stiffness_->GetDirichletDofs();
   }
 
   virtual void SetRhsVector(const std::shared_ptr<mfem::Vector>& rhs_vector) {

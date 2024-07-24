@@ -339,7 +339,7 @@ void FluidPrecomputedData::PrepareSparsity() {
   PrecomputedData& p_precomputed = GetPressure();
   const int p_ndofs = p_precomputed.n_dofs_;
 
-  sparsity_pattern_ = std::make_shared<mfem::SparseMatrix>(v_nvdofs + p_ndofs);
+  sparsity_pattern_ = std::make_unique<mfem::SparseMatrix>(v_nvdofs + p_ndofs);
   mfem::SparseMatrix& sparse = *sparsity_pattern_;
 
   // dummy sparsity pattern creation

@@ -194,8 +194,8 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   // 3. nonlinear stiffness
   // first pre-computed
   // nlform
-  auto nonlinear_stiffness =
-      std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space.get());
+  auto nonlinear_stiffness = std::make_shared<mimi::forms::Nonlinear>(
+      disp_fes.fe_space->GetTrueVSize());
   // add it to operator
   nl_oper->AddNonlinearForm("nonlinear_stiffness", nonlinear_stiffness);
   // create integrator
@@ -215,7 +215,7 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   nonlinear_solid_integ->Prepare();
   // add integrator to nl form
   nonlinear_stiffness->AddDomainIntegrator(nonlinear_solid_integ);
-  nonlinear_stiffness->SetEssentialTrueDofs(disp_fes.zero_dofs);
+  nonlinear_stiffness->SetDirichletDofs(disp_fes.zero_dofs);
 
   // 4. linear form
   auto rhs = std::make_shared<mfem::LinearForm>(disp_fes.fe_space.get());
@@ -287,8 +287,8 @@ void PyNonlinearSolid::Setup(const int nthreads) {
           Base_::boundary_conditions_->CurrentConfiguration().contact_;
       contact.size() != 0) {
 
-    auto nl_form =
-        std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space.get());
+    auto nl_form = std::make_shared<mimi::forms::Nonlinear>(
+        disp_fes.fe_space->GetTrueVSize());
     nl_oper->AddNonlinearForm("contact", nl_form);
     for (const auto& [bid, nd_coeff] : contact) {
       // initialzie integrator with nearest distance coeff (splinepy splines)

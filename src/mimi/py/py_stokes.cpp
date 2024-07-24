@@ -133,8 +133,8 @@ void PyStokes::Setup(const int nthreads) {
   // 1. Stokes nonlinear form
   // TODO: mimi::forms::Nonlinear is not appropriate for two vector spaces
   // BlockNonlinear takes Array of FE spaces as input
-  auto nonlinear_stokes =
-      std::make_shared<mimi::forms::Nonlinear>(velo, pressure_fes);
+  auto nonlinear_stokes = std::make_shared<mimi::forms::Nonlinear>(
+      velocity_fes.precomputed->n_v_dofs_ + pressure_fes.precomputed->n_dofs_);
   fluid_oper->AddNonlinearForm("stokes", nonlinear_stokes);
 
   // create precomputed
@@ -156,9 +156,9 @@ void PyStokes::Setup(const int nthreads) {
   auto stokes_integ =
       std::make_shared<mimi::integrators::Stokes>(material_->Name() + "-Stokes",
                                                   material_,
-                                                  fluid_precomp);
+                                                  fluid_precomputed_data_);
   nonlinear_stokes->AddDomainIntegrator(stokes_integ);
-  nonlinear_stokes->SetEssentialTrueDofs(zero_dofs_);
+  nonlinear_stokes->SetDirichletDofs(zero_dofs_);
 
   // 4. linear form
   auto rhs = std::make_shared<mfem::LinearForm>(velocity_fes.fe_space.get());
@@ -267,7 +267,7 @@ void PyStokes::Setup(const int nthreads) {
 
   // TODO: timestepping
   // set dynamic system -> transfer ownership of those to base
-  Base_::SetDynamicSystem(fluid_oper.release(), odesolver.release());
+  // Base_::SetDynamicSystem(fluid_oper.release(), odesolver.release());
 }
 
 } // namespace mimi::py
