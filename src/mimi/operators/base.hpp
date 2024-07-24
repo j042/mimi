@@ -89,6 +89,15 @@ public:
     nonlinear_forms_[key] = nf;
   }
 
+  /// @brief sets newton solver for the operator
+  /// @param newton_solver
+  virtual void
+  SetNewtonSolver(std::shared_ptr<mimi::solvers::Newton> const& newton_solver) {
+    MIMI_FUNC()
+
+    newton_solver_ = newton_solver;
+  }
+
   virtual void SetSparsity(const mfem::SparseMatrix& spmat) {
     MIMI_FUNC();
     owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(spmat);

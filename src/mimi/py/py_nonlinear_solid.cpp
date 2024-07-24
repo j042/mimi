@@ -378,6 +378,8 @@ void PyNonlinearSolid::Setup(const int nthreads) {
 
   // finalize operator
   nl_oper->Setup();
+  // finally, register newton solver to the opeartor
+  nl_oper->SetNewtonSolver(newton);
 
   // set dynamic system -> transfer ownership of those to base
   Base_::SetDynamicSystem2(nl_oper.release(), odesolver.release());

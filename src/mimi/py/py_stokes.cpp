@@ -264,6 +264,7 @@ void PyStokes::Setup(const int nthreads) {
 
   // finalize operator
   fluid_oper->Setup();
+  fluid_oper->SetNewtonSolver(newton);
 
   // TODO: timestepping
   // set dynamic system -> transfer ownership of those to base

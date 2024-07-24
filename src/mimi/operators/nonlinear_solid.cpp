@@ -158,7 +158,6 @@ void NonlinearSolid::ImplicitSolve(const double fac0,
   MIMI_FUNC()
 
   SetParameters(fac0, fac1, &x, &dx_dt);
-
   mfem::Vector zero;
   MimiBase_::newton_solver_->Mult(zero, d2x_dt2);
 }
