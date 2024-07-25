@@ -84,7 +84,7 @@ void PyStokes::Setup(const int nthreads) {
   // create element data - simple domain precompute
   const int vel_order =
       *std::max_element(&VelMesh()->NURBSext->GetOrders()[0],
-                        &VelMesh()->NURBSext->GetOrders()[MeshDim()]);
+                        &VelMesh()->NURBSext->GetOrders()[0] + MeshDim());
   const int default_stokes_q =
       RuntimeCommunication()->GetInteger("stokes_quadrature_order",
                                          2 * vel_order + 3);
