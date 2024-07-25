@@ -93,10 +93,6 @@ public:
     if (rhs_) {
       y.Add(-1.0, *rhs_);
     }
-    mimi::utils::PrintInfo("G 0");
-    k.Print();
-    mimi::utils::PrintInfo("G 1");
-    y.Print();
   }
 
   // TODO: GetGradient
@@ -125,11 +121,6 @@ public:
     if (rhs_) {
       residual.Add(-1.0, *rhs_);
     }
-
-    mimi::utils::PrintInfo("RG 0");
-    k.Print();
-    mimi::utils::PrintInfo("RG 1");
-    residual.Print();
 
     return jacobian_;
   }

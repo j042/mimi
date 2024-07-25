@@ -8,7 +8,8 @@ namespace py = pybind11;
 void init_py_stokes(py::module_& m) {
   py::class_<PyStokes, std::shared_ptr<PyStokes>, PySolid> klasse(m, "Stokes");
   klasse.def(py::init<>())
-      .def("set_material", &PyStokes::SetMaterial, py::arg("material"));
+      .def("set_material", &PyStokes::SetMaterial, py::arg("material"))
+      .def("vel_nurbs", &PyStokes::GetVelocityNurbs);
 }
 
 void PyStokes::Setup(const int nthreads) {
@@ -22,8 +23,8 @@ void PyStokes::Setup(const int nthreads) {
   // get fespace - this should be owned by GridFunc
   // and grid func should own the fespace
   // first get nurbs fecollection
-  auto* fe_collection = Base_::Mesh()->GetNodes()->OwnFEC();
-  if (!fe_collection) {
+  if (!Base_::Mesh()->GetNodes()->OwnFEC()
+      || !VelMesh()->GetNodes()->OwnFEC()) {
     mimi::utils::PrintAndThrowError("FE collection does not exist in mesh");
   }
 
@@ -32,8 +33,6 @@ void PyStokes::Setup(const int nthreads) {
   auto& pressure_fes = Base_::fe_spaces_["pressure"];
 
   // copy mesh for velocity
-  vel_mesh_ = std::make_unique<mfem::Mesh>(*Base_::mesh_, true);
-  vel_mesh_->DegreeElevate(1, 50);
 
   // check if we have periodic bc. if so, we need to create everything again
   if (auto& periodic_map = Base_::boundary_conditions_->InitialConfiguration()
@@ -44,20 +43,21 @@ void PyStokes::Setup(const int nthreads) {
   } else {
     // here, if we pass NURBSext, it will steal the ownership, causing
     // segfault.
-    velocity_fes.fe_space = std::make_unique<mfem::FiniteElementSpace>(
-        vel_mesh_.get(),
+    pressure_fes.fe_space = std::make_unique<mfem::FiniteElementSpace>(
+        Base_::Mesh().get(),
         nullptr,
-        fe_collection,
+        Base_::Mesh()->GetNodes()->OwnFEC(),
+        1,
+        mfem::Ordering::byVDIM);
+
+    velocity_fes.fe_space = std::make_unique<mfem::FiniteElementSpace>(
+        VelMesh().get(),
+        nullptr,
+        VelMesh()->GetNodes()->OwnFEC(),
         MeshDim(),
         // this is how mesh provides its nodes, so solutions should match them
         // else, dofs does not match
         mfem::Ordering::byVDIM);
-    pressure_fes.fe_space =
-        std::make_unique<mfem::FiniteElementSpace>(Base_::Mesh().get(),
-                                                   nullptr,
-                                                   fe_collection,
-                                                   1,
-                                                   mfem::Ordering::byVDIM);
   }
 
   // we need to create precomputed data one for:
@@ -82,7 +82,9 @@ void PyStokes::Setup(const int nthreads) {
   Base_::FindBoundaryDofIds();
 
   // create element data - simple domain precompute
-  const int vel_order = velocity_fes.fe_space->GetMaxElementOrder();
+  const int vel_order =
+      *std::max_element(&VelMesh()->NURBSext->GetOrders()[0],
+                        &VelMesh()->NURBSext->GetOrders()[MeshDim()]);
   const int default_stokes_q =
       RuntimeCommunication()->GetInteger("stokes_quadrature_order",
                                          2 * vel_order + 3);
@@ -145,12 +147,12 @@ void PyStokes::Setup(const int nthreads) {
   // create mono boundary tdofs
   zero_dofs_ = velocity_fes.zero_dofs;
   // apply offset to presure dofs
-  mfem::Array<int> offset_pressure(pressure_fes.zero_dofs);
-  const int p_offset = velocity_fes.precomputed->n_v_dofs_;
-  for (int& op : offset_pressure) {
-    op += p_offset;
-  }
-  zero_dofs_.Append(offset_pressure);
+  // mfem::Array<int> offset_pressure(pressure_fes.zero_dofs);
+  // const int p_offset = velocity_fes.precomputed->n_v_dofs_;
+  // for (int& op : offset_pressure) {
+  //   op += p_offset;
+  // }
+  // zero_dofs_.Append(offset_pressure);
 
   // create integrator
   auto stokes_integ =

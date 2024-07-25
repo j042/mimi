@@ -4,14 +4,18 @@ import numpy as np
 from mimi import mimi_core
 
 
-def to_splinepy(pysolid):
+def to_splinepy(pysolid_or_dict):
     """
     Extracts nurbs from mimi.PySolid and creates splinepy.NURBS (or BSpline)
     """
-    if not isinstance(pysolid, mimi_core.Solid):
-        raise TypeError("Expecting mimi.PySolid types.")
 
-    dict_spline = pysolid.nurbs()
+    if isinstance(pysolid_or_dict, mimi_core.Solid):
+        dict_spline = pysolid_or_dict.nurbs()
+    elif isinstance(pysolid_or_dict, dict):
+        dict_spline = pysolid_or_dict
+    else:
+        raise TypeError("Unsupported type. Expects mimi.Solid or dict.")
+
     ws = dict_spline["weights"]
     s = None
     if all(ws == ws[0]):

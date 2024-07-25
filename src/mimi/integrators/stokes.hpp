@@ -80,8 +80,8 @@ public:
           QuadData_ v_qd = v_qd_vec[q];
           QuadData_ p_qd = p_qd_vec[q];
 
-          // A00: ∫μ ∇v dot ∇w dΩ
-          mfem::Mult_a_AAt(-mu * v_qd.integration_weight * v_qd.det_dX_dxi,
+          // A00: ∫μ ∇v ∇w dΩ
+          mfem::Mult_a_AAt(mu * v_qd.integration_weight * v_qd.det_dX_dxi,
                            v_qd.dN_dX,
                            element_A00_aux);
           for (int d{}; d < dim; ++d) {
@@ -92,10 +92,10 @@ public:
 
           // ∫μ ∇v:∇w dΩ + ∫μ (∇v)ᵀ:∇w dΩ ?
 
-          // ∫p∇⋅w dΩ
+          // ∫ -p∇ w dΩ
           mfem::Vector vel_div;
           vel_div.SetDataAndSize(v_qd.dN_dX.GetData(), v_ed.n_tdof);
-          mfem::AddMult_a_VWt(v_qd.integration_weight * v_qd.det_dX_dxi,
+          mfem::AddMult_a_VWt(-v_qd.integration_weight * v_qd.det_dX_dxi,
                               vel_div,
                               p_qd.N,
                               element_A01);
@@ -126,8 +126,6 @@ public:
     mimi::utils::NThreadExe(thread_reduce,
                             bilinear_matrix_->NumNonZeroElems(),
                             n_threads_);
-
-    bilinear_matrix_->Print();
   }
   virtual void AddDomainResidual(const mfem::Vector& current_sol,
                                  mfem::Vector& residual) const {
