@@ -131,7 +131,6 @@ void LineSearchNewton::Mult(const mfem::Vector& b, mfem::Vector& x) const {
     // solve linear system
     Base_::prec->Mult(Base_::r, c); // c = [DF(x_i)]^{-1} [F(x_i)-b]
     mimi::utils::PrintInfo("newton c");
-    Base_::c.Print();
 
     if (Base_::lin_rtol_type) {
       AdaptiveLinRtolPostSolve(c, Base_::r, it, norm);
