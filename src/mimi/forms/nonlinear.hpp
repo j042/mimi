@@ -116,8 +116,10 @@ public:
     }
 
     // set true dofs - if we have time, we could use nthread this.
-    for (const auto& tdof : GetDirichletDofs()) {
-      residual[tdof] = 0.0;
+    if (dirichlet_dofs_) {
+      for (const auto& tdof : GetDirichletDofs()) {
+        residual[tdof] = 0.0;
+      }
     }
   }
 
@@ -150,9 +152,11 @@ public:
     }
 
     // set true dofs - if we have time, we could use nthread this.
-    for (const auto& tdof : GetDirichletDofs()) {
-      residual[tdof] = 0.0;
-      grad.EliminateRowCol(tdof);
+    if (dirichlet_dofs_) {
+      for (const auto& tdof : GetDirichletDofs()) {
+        residual[tdof] = 0.0;
+        grad.EliminateRowCol(tdof);
+      }
     }
   }
 
@@ -183,8 +187,10 @@ public:
     }
 
     // set true dofs - if we have time, we could use nthread this (?)
-    for (const auto& tdof : GetDirichletDofs()) {
-      grad_->EliminateRowCol(tdof);
+    if (dirichlet_dofs_) {
+      for (const auto& tdof : GetDirichletDofs()) {
+        grad_->EliminateRowCol(tdof);
+      }
     }
 
     return *grad_;
