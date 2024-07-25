@@ -27,11 +27,11 @@ void PyStokes::Setup(const int nthreads) {
     mimi::utils::PrintAndThrowError("FE collection does not exist in mesh");
   }
 
-  // create displacement fe space
+  // create FE spaces
   auto& velocity_fes = Base_::fe_spaces_["velocity"];
   auto& pressure_fes = Base_::fe_spaces_["pressure"];
 
-  // copy mesh for velocity
+  // copy mesh for velocity; for Taylor-Hood elements
   vel_mesh_ = std::make_unique<mfem::Mesh>(*Base_::mesh_, true);
   vel_mesh_->DegreeElevate(1, 50);
 
@@ -60,17 +60,13 @@ void PyStokes::Setup(const int nthreads) {
                                                    mfem::Ordering::byVDIM);
   }
 
-  // we need to create precomputed data one for:
-  // - bilinear forms
-  // - nonlinear solid
-  // here, we only create one for bilinear. others are done below
-  // note, for bilinear, nothing is really saved. just used for thread safety
+  // prepare precomputed data for velocity and pressure
   mimi::utils::PrintDebug("Creating PrecomputedData");
   velocity_fes.precomputed = std::make_shared<mimi::utils::PrecomputedData>();
   pressure_fes.precomputed = std::make_shared<mimi::utils::PrecomputedData>();
 
   mimi::utils::PrintDebug("Setup PrecomputedData");
-  // first compute sparcity of each block
+  // first compute sparsity of each block
   velocity_fes.precomputed->PrepareThreadSafety(*velocity_fes.fe_space,
                                                 n_threads);
   velocity_fes.precomputed->PrepareElementData();
@@ -98,7 +94,7 @@ void PyStokes::Setup(const int nthreads) {
                                                       default_stokes_q,
                                                       false);
 
-  // once we have parallel bilinear form assembly we can re directly cal;
+  // once we have parallel bilinear form assembly we can re directly call
   // precompute
 
   mimi::utils::PrintInfo("Creating grid functions v");
@@ -130,9 +126,8 @@ void PyStokes::Setup(const int nthreads) {
   // let's setup the system
 
   // Linear and nonlinear forms
-  // 1. Stokes nonlinear form
-  // TODO: mimi::forms::Nonlinear is not appropriate for two vector spaces
-  // BlockNonlinear takes Array of FE spaces as input
+  // 1. Stokes nonlinear form (Stokes itself is linear, but material models make
+  // it nonlinear)
   auto nonlinear_stokes = std::make_shared<mimi::forms::Nonlinear>(
       velocity_fes.precomputed->n_v_dofs_ + pressure_fes.precomputed->n_dofs_);
   fluid_oper->AddNonlinearForm("stokes", nonlinear_stokes);
@@ -161,7 +156,7 @@ void PyStokes::Setup(const int nthreads) {
   nonlinear_stokes->AddDomainIntegrator(stokes_integ);
   nonlinear_stokes->SetDirichletDofs(zero_dofs_);
 
-  // 4. linear form
+  // 2. linear form for rhs
   auto rhs = std::make_shared<mfem::LinearForm>(velocity_fes.fe_space.get());
   bool rhs_set{false};
   // assemble body force
@@ -249,7 +244,7 @@ void PyStokes::Setup(const int nthreads) {
     Base_::linear_solvers_["stokes"] = lin_solver;
   }
 
-  // // setup a newton solver
+  // setup a newton solver
   auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
   // give pointer of nl oper to control line search assembly
   newton->mimi_oper_ = fluid_oper.get();
