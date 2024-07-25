@@ -237,15 +237,12 @@ void PyStokes::Setup(const int nthreads) {
   // setup solvers
   // setup linear solver - should try SUNDIALS::SuperLU_mt
   if (RuntimeCommunication()->GetInteger("use_iterative_solver", 0)) {
-    auto lin_solver = std::make_shared<mfem::CGSolver>();
-    auto prec = std::make_shared<mfem::DSmoother>();
+    auto lin_solver = std::make_shared<mfem::MINRESSolver>();
     lin_solver->SetRelTol(1e-8);
     lin_solver->SetAbsTol(1e-12);
-    lin_solver->SetMaxIter(300);
-    lin_solver->SetPrintLevel(-1);
-    lin_solver->SetPreconditioner(*prec);
+    lin_solver->SetMaxIter(5000);
+    lin_solver->SetPrintLevel(1);
     Base_::linear_solvers_["stokes"] = lin_solver;
-    Base_::linear_solvers_["stokes_preconditioner"] = prec;
   } else {
     auto lin_solver = std::make_shared<mfem::UMFPackSolver>();
     Base_::linear_solvers_["stokes"] = lin_solver;
@@ -260,11 +257,7 @@ void PyStokes::Setup(const int nthreads) {
   newton->iterative_mode = false;
   newton->SetOperator(*fluid_oper);
   newton->SetSolver(*Base_::linear_solvers_["stokes"]);
-  newton->SetPrintLevel(mfem::IterativeSolver::PrintLevel()
-                            .Warnings()
-                            .Errors()
-                            .Summary()
-                            .FirstAndLast());
+  newton->SetPrintLevel(mfem::IterativeSolver::PrintLevel().All());
   newton->SetRelTol(1e-8);
   newton->SetAbsTol(1e-12);
   newton->SetMaxIter(MeshDim() * 10);

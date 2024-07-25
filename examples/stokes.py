@@ -20,7 +20,9 @@ mat.viscosity = 1
 # define material properties (young's modulus, poisson's ratio)
 nl.set_material(mat)
 
-# create splinepy nurbs to show
+rc = mimi.RuntimeCommunication()
+rc.set_int("use_iterative_solver", 0)
+nl.runtime_communication = rc
 
 bc = mimi.BoundaryConditions()
 bc.initial.dirichlet(0, 0).dirichlet(0, 1).dirichlet(1, 0).dirichlet(1, 1)
@@ -29,7 +31,7 @@ bc.initial.traction(2, 0, 1)
 nl.boundary_condition = bc
 
 nl.setup(4)
-nl.configure_newton("stokes", 1e-12, 1e-8, 10, True)
+nl.configure_newton("stokes", 1e-12, 1e-8, 10, False)
 
 nl.static_solve()
 
