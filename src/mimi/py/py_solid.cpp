@@ -64,7 +64,8 @@ void init_py_solid(py::module_& m) {
            py::overload_cast<>(&PySolid::FixedPointAdvance2))
       .def("fixed_point_advanced_vector_views",
            &PySolid::FixedPointAdvancedVectorViews)
-      .def("advance_time2", &PySolid::AdvanceTime2);
+      .def("advance_time2", &PySolid::AdvanceTime2)
+      .def("static_solve", &PySolid::StaticSolve);
 }
 
 void PySolid::ReadMesh(const std::string fname) {

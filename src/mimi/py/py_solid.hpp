@@ -223,6 +223,24 @@ public:
   virtual void SetDynamicSystem2(mfem::SecondOrderTimeDependentOperator* oper2,
                                  mimi::solvers::OdeBase* ode2);
 
+  /// @brief sets first order system with given ptr and takes ownership.
+  /// @param oper
+  /// @param ode
+  virtual void SetDynamicSystem(mfem::TimeDependentOperator* oper,
+                                mimi::solvers::OdeBase* ode) {
+
+    MIMI_FUNC()
+
+    oper1_ = std::unique_ptr<mfem::TimeDependentOperator>(oper);
+    ode1_solver_ = std::unique_ptr<mimi::solvers::OdeBase>(ode);
+
+    // ode solvers also wants to know dirichlet dofs
+    auto* op_base = dynamic_cast<mimi::operators::OperatorBase*>(oper1_.get());
+    ode1_solver_->SetupDirichletDofs(op_base->dirichlet_dofs_);
+
+    RuntimeCommunication()->InitializeTimeStep();
+  }
+
   virtual double CurrentTime() const { MIMI_FUNC() return t_; }
 
   virtual double GetTimeStepSize() const { MIMI_FUNC() return dt_; }
@@ -245,6 +263,10 @@ public:
 
   virtual std::shared_ptr<mimi::forms::Nonlinear>
   NonlinearForm2(const std::string& nlf_name);
+
+  virtual void StaticSolve() {
+    mimi::utils::PrintAndThrowError("StaticSolve not implemented.");
+  }
 
   virtual void StepTime2();
 

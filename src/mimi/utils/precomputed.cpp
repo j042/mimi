@@ -328,4 +328,102 @@ void PrecomputedData::PrecomputeElementQuadData(const std::string name,
                           static_cast<int>(eq_data.size()),
                           n_threads_);
 }
+
+void FluidPrecomputedData::PrepareSparsity() {
+
+  // get velocity
+  PrecomputedData& v_precomputed = GetVelocity();
+  const int v_nvdofs = v_precomputed.n_v_dofs_;
+
+  // get pressure
+  PrecomputedData& p_precomputed = GetPressure();
+  const int p_ndofs = p_precomputed.n_dofs_;
+
+  sparsity_pattern_ = std::make_unique<mfem::SparseMatrix>(v_nvdofs + p_ndofs);
+  mfem::SparseMatrix& sparse = *sparsity_pattern_;
+
+  // dummy sparsity pattern creation
+  mfem::DenseMatrix dum;
+  // (0, 0)
+  for (const auto& el_data : v_precomputed.domain_element_data_) {
+    auto& vd = el_data->v_dofs;
+    dum.SetSize(vd.Size(), vd.Size());
+    dum = 1.0;
+    sparse.AddSubMatrix(vd, vd, dum, 0 /* (no) skip_zeros */);
+  }
+
+  // aux array to handle offsets
+  mfem::Array<int> offset_ids;
+  auto offset_array = [&offset_ids](const mfem::Array<int>& input,
+                                    const int offset) -> mfem::Array<int>& {
+    // copy and add offset
+    offset_ids = input;
+    for (int& o : offset_ids) {
+      o += offset;
+    }
+    return offset_ids;
+  };
+
+  // (0, 1) & (1, 0)
+  for (int i{}; i < v_precomputed.n_elements_; ++i) {
+    auto& v_vd = v_precomputed.domain_element_data_[i]->v_dofs;
+    auto& p_d = p_precomputed.domain_element_data_[i]->dofs;
+
+    mfem::Array<int>& off_arr = offset_array(p_d, v_nvdofs);
+
+    dum.SetSize(v_vd.Size(), p_d.Size());
+    dum = 1.0;
+    sparse.AddSubMatrix(v_vd, off_arr, dum, 0 /* don't skip_zeros */);
+    dum.SetSize(p_d.Size(), v_vd.Size());
+    dum = 1.0;
+    sparse.AddSubMatrix(off_arr, v_vd, dum, 0 /* don't skip_zeros */);
+  }
+
+  // finalize / sort -> get nice A
+  sparse.Finalize(0);
+  sparse.SortColumnIndices();
+
+  // fill in A
+  double* a = sparse.GetData();
+  const int a_size = sparse.NumNonZeroElems();
+  for (int i{}; i < a_size; ++i) {
+    a[i] = static_cast<double>(i);
+  }
+
+  auto cast_and_fill = [](const double* source, mfem::Array<int>& destination) {
+    for (int& d : destination) {
+      d = static_cast<int>(std::lround(*source++));
+    }
+  };
+
+  // get direct data access ids to A
+  A_ids_.resize(v_precomputed.n_elements_);
+  for (int i{}; i < v_precomputed.n_elements_; ++i) {
+    auto& v_vd = v_precomputed.domain_element_data_[i]->v_dofs;
+    auto& p_d = p_precomputed.domain_element_data_[i]->dofs;
+    BlockSparseEntries& a = A_ids_[i];
+    mfem::Array<int>& off_arr = offset_array(p_d, v_nvdofs);
+
+    // 00
+    dum.SetSize(v_vd.Size(), v_vd.Size());
+    a.A00_ids_.SetSize(v_vd.Size() * v_vd.Size());
+    sparse.GetSubMatrix(v_vd, v_vd, dum);
+    cast_and_fill(dum.GetData(), a.A00_ids_);
+
+    // 01
+    dum.SetSize(v_vd.Size(), p_d.Size());
+    a.A01_ids_.SetSize(v_vd.Size() * p_d.Size());
+    sparse.GetSubMatrix(v_vd, off_arr, dum);
+    cast_and_fill(dum.GetData(), a.A01_ids_);
+
+    // 10
+    dum.SetSize(p_d.Size(), v_vd.Size());
+    a.A10_ids_.SetSize(v_vd.Size() * p_d.Size());
+    sparse.GetSubMatrix(off_arr, v_vd, dum);
+    cast_and_fill(dum.GetData(), a.A10_ids_);
+  }
+
+  // For complex boundary integrals, add id extractions here.
+}
+
 } // namespace mimi::utils

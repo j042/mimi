@@ -17,9 +17,8 @@ class OperatorBase {
 public:
   using LinearFormPointer_ = std::shared_ptr<mfem::LinearForm>;
   using BilinearFormPointer_ = std::shared_ptr<mfem::BilinearForm>;
+  using MixedBilinearFormPointer_ = std::shared_ptr<mfem::MixedBilinearForm>;
   using NonlinearFormPointer_ = std::shared_ptr<mimi::forms::Nonlinear>; //
-
-  mfem::FiniteElementSpace& fe_space_;
 
   const mfem::Array<int>* dirichlet_dofs_{nullptr};
 
@@ -30,15 +29,23 @@ public:
   std::unordered_map<std::string, LinearFormPointer_> linear_forms_{};
   /// @brief container to hold any necessary / related bilinear forms
   std::unordered_map<std::string, BilinearFormPointer_> bilinear_forms_{};
+  /// @brief container to hold any necessary / related mixed bilinear forms
+  std::unordered_map<std::string, MixedBilinearFormPointer_>
+      mixed_bilinear_forms_{};
   /// @brief container to hold any necessary / related nonlinear forms
   std::unordered_map<std::string, NonlinearFormPointer_> nonlinear_forms_{};
 
   /// @brief newton solver should be configured outside of this class
   std::shared_ptr<mimi::solvers::Newton> newton_solver_{nullptr};
 
+  // keep one sparse matrix and initialize
+  std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
+  // raw pointer form of owning_jacobian_ -> used in GetGradients()
+  mutable mfem::SparseMatrix* jacobian_ = nullptr;
+
   /// @brief ctor
   /// @param fe_space
-  OperatorBase(mfem::FiniteElementSpace& fe_space) : fe_space_(fe_space) {}
+  OperatorBase() = default;
 
   virtual ~OperatorBase() {}
 
@@ -62,6 +69,16 @@ public:
     bilinear_forms_[key] = bf;
   }
 
+  /// @brief adds mixed bilinear form
+  /// @param key
+  /// @param mbf
+  virtual void AddMixedBilinearForm(std::string const& key,
+                                    const MixedBilinearFormPointer_& mbf) {
+    MIMI_FUNC();
+
+    mixed_bilinear_forms_[key] = mbf;
+  }
+
   /// @brief adds nonlinear form
   /// @param key
   /// @param nf
@@ -76,10 +93,29 @@ public:
   /// @param newton_solver
   virtual void
   SetNewtonSolver(std::shared_ptr<mimi::solvers::Newton> const& newton_solver) {
-    MIMI_FUNC();
+    MIMI_FUNC()
 
     newton_solver_ = newton_solver;
   }
+
+  virtual void SetSparsity(const mfem::SparseMatrix& spmat) {
+    MIMI_FUNC();
+    owning_jacobian_ = std::make_unique<mfem::SparseMatrix>(spmat);
+    if (!owning_jacobian_->Finalized()
+        || owning_jacobian_->ColumnsAreSorted()) {
+      mimi::utils::PrintInfo("OperatorBase::SetSparsity - sparsity not "
+                             "finalized or not sorted. Finalizing/Sorting");
+      owning_jacobian_->Finalize();
+      owning_jacobian_->ColumnsAreSorted();
+    }
+    jacobian_ = owning_jacobian_.get();
+    // and initialize values with zero
+    owning_jacobian_->operator=(0.0);
+  }
+
+  virtual mfem::Operator* ResidualAndGrad(const mfem::Vector& d2x_dt2,
+                                          const int nthread,
+                                          mfem::Vector& y) const = 0;
 
   virtual void PostTimeAdvance(const mfem::Vector& x,
                                const mfem::Vector& v) = 0;

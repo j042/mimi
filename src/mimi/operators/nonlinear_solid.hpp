@@ -47,9 +47,6 @@ protected:
   double fac0_;
   double fac1_;
 
-  // unlike base classes, we will keep one sparse matrix and initialize
-  std::unique_ptr<mfem::SparseMatrix> owning_jacobian_;
-
   /// data to mass sparse matrix - A is mfem's notation of data array
   const double* mass_A_ = nullptr;
   int mass_n_nonzeros_ = -1;
@@ -57,13 +54,10 @@ protected:
   mutable mfem::Vector temp_x_;
   mutable mfem::Vector temp_v_;
 
-  mutable mfem::SparseMatrix* jacobian_ = nullptr;
-
 public:
   /// This is same as Base_'s ctor
   NonlinearSolid(mfem::FiniteElementSpace& fe_space)
-      : MimiBase_(fe_space),
-        MfemBase_(fe_space.GetTrueVSize(), 0.0) {
+      : MfemBase_(fe_space.GetTrueVSize(), 0.0) {
     MIMI_FUNC()
   }
 
@@ -77,7 +71,7 @@ public:
   virtual void SetupDirichletDofsFromNonlinearStiffness() {
     MIMI_FUNC()
 
-    dirichlet_dofs_ = &nonlinear_stiffness_->GetEssentialTrueDofs();
+    dirichlet_dofs_ = &nonlinear_stiffness_->GetDirichletDofs();
   }
 
   virtual void SetRhsVector(const std::shared_ptr<mfem::Vector>& rhs_vector) {
