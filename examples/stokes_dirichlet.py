@@ -13,23 +13,19 @@ def apply_dirichlet_dofs(nl):
         y = points[:, 1]
         return y * (1 - y)
 
-    s, _, _ = mimi.to_splinepy(nl.vel_nurbs())
+    s, _, to_s = mimi.to_splinepy(nl.vel_nurbs())
 
     # Currently not available in main splinepy branch
     fi = sp.helpme.integrate.FieldIntegrator(s)
 
     # Get values for boundary dofs
-    velx_rhs, _ = fi.apply_dirichlet_boundary_conditions(
+    velx_rhs, boundary_dofs = fi.apply_dirichlet_boundary_conditions(
         function=parabolic_function, west=True, return_values=True
     )
 
-    # Apply parabolic inflow function to left inlet
-    boundary_dofs_m = nl.boundary_dof_ids("velocity", 2, 0)
-    # pretty hacky: reordering of boundary dof ids, probably TODO
-    import numpy as np
-
-    new_ids = np.hstack(([0], np.arange(2, len(velx_rhs)), [1]))
-    boundary_dofs_m = boundary_dofs_m[new_ids]
+    # Apply parabolic inflow function to x-velocity on left inlet
+    # For DoFs of y-velocity just add +1
+    boundary_dofs_m = 2 * to_s[boundary_dofs]
 
     nl.solution_view("velocity", "v")[boundary_dofs_m] = velx_rhs
 
