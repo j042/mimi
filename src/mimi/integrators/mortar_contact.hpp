@@ -29,13 +29,7 @@ public:
   using QuadData_ = mimi::utils::QuadData;
 
   // post process
-  std::unique_ptr<mfem::SparseMatrix> m_mat_;
-  mfem::CGSolver mass_inv_;
-  mfem::DSmoother mass_inv_prec_;
-  mfem::UMFPackSolver mass_inv_direct_;
-  mfem::Vector mass_b_; // for rhs
-  mfem::Vector mass_x_; // for answer
-  double last_area_;    // for p = forces / A
+  double last_area_; // for p = forces / A
   double last_pressure_;
   mimi::utils::Data<double> last_force_;
 
