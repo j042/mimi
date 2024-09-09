@@ -1,0 +1,33 @@
+name: Build and tests
+
+on:
+  push
+
+permissions:
+  contents: read
+
+jobs:
+  build_and_tests:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Set up  ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: dependencies
+      run: |
+        sudo apt-get install -y libsuitesparse-dev libmetis-dev zlib1g-dev
+        cd third_party/splinepy && pip install . -v --config-settings=cmake.args="-DSPLINEPY_MORE=OFF;"
+
+    - name: build
+      run: |
+        pip install setuptools wheel cmake pytest
+        python setup.py develop
+
+    - name: test
+      run: pytest tests
