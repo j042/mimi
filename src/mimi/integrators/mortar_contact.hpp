@@ -59,8 +59,15 @@ protected:
   mfem::Vector average_gap_;
   mfem::Vector average_pressure_;
   mfem::Vector area_;
+  mfem::Vector traction_residual_; // for export
 
   Vector_<MortarContactWorkData> work_data_;
+
+  /// Copies current residual so that we can extract traction residual
+  void PreviousResidual(const mfem::Vector& prev);
+  /// Subtract post residual to previous residual, due to formulation here, we
+  /// don't need Neg().
+  void SubtractPostResidual(const mfem::Vector& post);
 
 public:
   MortarContact(

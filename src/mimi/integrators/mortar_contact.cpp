@@ -6,6 +6,16 @@ static const int kDof = MortarContactWorkData::kDof;
 static const int kVDof = MortarContactWorkData::kVDof;
 static const int kXRef = MortarContactWorkData::kXRef;
 
+void MortarContact::PreviousResidual(const mfem::Vector& prev) {
+  MIMI_FUNC()
+  traction_residual_.SetSize(prev.Size());
+  traction_residual_ = prev;
+}
+void MortarContact::SubtractPostResidual(const mfem::Vector& post) {
+  MIMI_FUNC()
+  traction_residual_ -= post;
+}
+
 void MortarContact::Prepare() {
   MIMI_FUNC()
 
@@ -288,6 +298,8 @@ void MortarContact::AddBoundaryResidual(const mfem::Vector& current_u,
                                         mfem::Vector& residual) {
   MIMI_FUNC()
 
+  PreviousResidual(residual);
+
   last_area_ = 0.0;
   ComputePressure(current_u, last_area_);
   last_force_.Fill(0.0);
@@ -337,6 +349,8 @@ void MortarContact::AddBoundaryResidual(const mfem::Vector& current_u,
   mimi::utils::NThreadExe(assemble_face_residual,
                           n_marked_boundaries_,
                           n_threads_);
+
+  SubtractPostResidual(residual);
 }
 
 void MortarContact::AddBoundaryResidualAndGrad(const mfem::Vector& current_u,
@@ -344,6 +358,8 @@ void MortarContact::AddBoundaryResidualAndGrad(const mfem::Vector& current_u,
                                                mfem::Vector& residual,
                                                mfem::SparseMatrix& grad) {
   MIMI_FUNC()
+
+  PreviousResidual(residual);
 
   last_area_ = 0.0;
   ComputePressure(current_u, last_area_);
@@ -400,6 +416,8 @@ void MortarContact::AddBoundaryResidualAndGrad(const mfem::Vector& current_u,
   mimi::utils::NThreadExe(assemble_boundary_residual_and_grad_then_contribute,
                           n_marked_boundaries_,
                           n_threads_);
+
+  SubtractPostResidual(residual);
 }
 
 double MortarContact::GapNorm(const mfem::Vector& test_x, const int nthreads) {
@@ -465,6 +483,7 @@ void MortarContact::BoundaryPostTimeAdvance(const mfem::Vector& converged_u) {
     rc.SaveDynamicVector(
         "pressure_",
         average_pressure_); // with this we can always rebuild traction
+    rc.SaveDynamicVector("traction_", traction_residual_);
   }
 }
 
