@@ -67,6 +67,7 @@ void init_py_hardening(py::module_& m) {
       m,
       "JohnsonCookRateDependentHardening");
   jc_r.def(py::init<>())
+      .def_readwrite("C", &JC_R::C_)
       .def_readwrite("eps0_dot", &JC_R::effective_plastic_strain_rate_);
 
   py::class_<JC_RT, std::shared_ptr<JC_RT>, JC_R> jc_rt(
