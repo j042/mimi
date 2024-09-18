@@ -194,8 +194,8 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   // 3. nonlinear stiffness
   // first pre-computed
   // nlform
-  auto nonlinear_stiffness =
-      std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space.get());
+  auto nonlinear_stiffness = std::make_shared<mimi::forms::Nonlinear>(
+      disp_fes.fe_space->GetTrueVSize());
   // add it to operator
   nl_oper->AddNonlinearForm("nonlinear_stiffness", nonlinear_stiffness);
   // create integrator
@@ -215,7 +215,7 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   nonlinear_solid_integ->Prepare();
   // add integrator to nl form
   nonlinear_stiffness->AddDomainIntegrator(nonlinear_solid_integ);
-  nonlinear_stiffness->SetEssentialTrueDofs(disp_fes.zero_dofs);
+  nonlinear_stiffness->SetDirichletDofs(disp_fes.zero_dofs);
 
   // 4. linear form
   auto rhs = std::make_shared<mfem::LinearForm>(disp_fes.fe_space.get());
@@ -287,8 +287,8 @@ void PyNonlinearSolid::Setup(const int nthreads) {
           Base_::boundary_conditions_->CurrentConfiguration().contact_;
       contact.size() != 0) {
 
-    auto nl_form =
-        std::make_shared<mimi::forms::Nonlinear>(disp_fes.fe_space.get());
+    auto nl_form = std::make_shared<mimi::forms::Nonlinear>(
+        disp_fes.fe_space->GetTrueVSize());
     nl_oper->AddNonlinearForm("contact", nl_form);
     for (const auto& [bid, nd_coeff] : contact) {
       // initialzie integrator with nearest distance coeff (splinepy splines)
@@ -345,7 +345,7 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   // setup a newton solver
   auto newton = std::make_shared<mimi::solvers::LineSearchNewton>();
   // give pointer of nl oper to control line search assembly
-  newton->nl_oper_ = nl_oper.get();
+  newton->mimi_oper_ = nl_oper.get();
   Base_::newton_solvers_["nonlinear_solid"] = newton;
   // basic config. you can change this using ConfigureNewton()
   newton->iterative_mode = false;
@@ -359,9 +359,6 @@ void PyNonlinearSolid::Setup(const int nthreads) {
   newton->SetRelTol(1e-8);
   newton->SetAbsTol(1e-12);
   newton->SetMaxIter(MeshDim() * 10);
-
-  // finally, register newton solver to the opeartor
-  nl_oper->SetNewtonSolver(newton);
 
   // ode
   const double rho_inf =
@@ -381,6 +378,8 @@ void PyNonlinearSolid::Setup(const int nthreads) {
 
   // finalize operator
   nl_oper->Setup();
+  // finally, register newton solver to the opeartor
+  nl_oper->SetNewtonSolver(newton);
 
   // set dynamic system -> transfer ownership of those to base
   Base_::SetDynamicSystem2(nl_oper.release(), odesolver.release());

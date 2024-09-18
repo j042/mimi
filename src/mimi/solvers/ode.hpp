@@ -78,6 +78,14 @@ public:
   }
 };
 
+class GeneralizedAlpha : public mfem::GeneralizedAlphaSolver, public OdeBase {
+public:
+  using Base_ = mfem::GeneralizedAlphaSolver;
+  using Base_::Base_;
+
+  virtual std::string Name() const { return "GeneralizedAlpha"; }
+};
+
 class GeneralizedAlpha2 : public mfem::GeneralizedAlpha2Solver, public OdeBase {
 protected:
   double fac0_, fac1_, fac2_, fac3_, fac4_, fac5_, fac1_inv_, fac5_inv_;

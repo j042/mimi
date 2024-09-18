@@ -223,4 +223,65 @@ protected:
   }
 };
 
+struct BlockSparseEntries {
+  mfem::Array<int> A00_ids_;
+  mfem::Array<int> A01_ids_;
+  mfem::Array<int> A10_ids_;
+};
+
+class FluidPrecomputedData {
+protected:
+  std::unordered_map<std::string, std::shared_ptr<PrecomputedData>> data_;
+  Vector<BlockSparseEntries> A_ids_;
+
+public:
+  /// mono sparse matrix for mixed system
+  std::unique_ptr<mfem::SparseMatrix> sparsity_pattern_;
+
+  // ctor
+  FluidPrecomputedData(std::shared_ptr<PrecomputedData> velocity_precomputed,
+                       std::shared_ptr<PrecomputedData> pressure_precomputed) {
+    SetVelocity(velocity_precomputed);
+    SetPressure(pressure_precomputed);
+
+    PrepareSparsity();
+  }
+
+  void SetVelocity(std::shared_ptr<PrecomputedData> vel) {
+    MIMI_FUNC()
+
+    data_["velocity"] = vel;
+  }
+
+  PrecomputedData& GetVelocity() {
+    MIMI_FUNC()
+    std::shared_ptr<PrecomputedData> vel = data_.at("velocity");
+    if (!vel) {
+      mimi::utils::PrintAndThrowError("Precomputed velocity empty");
+    }
+    return *vel;
+  }
+
+  void SetPressure(std::shared_ptr<PrecomputedData> pres) {
+    MIMI_FUNC()
+
+    data_["pressure"] = pres;
+  }
+
+  PrecomputedData& GetPressure() {
+    MIMI_FUNC()
+    std::shared_ptr<PrecomputedData> p = data_.at("pressure");
+    if (!p) {
+      mimi::utils::PrintAndThrowError("Precomputed pressure empty");
+    }
+    return *p;
+  }
+
+  /// computes mono sparsity for fluid problems and update support ids for both
+  /// vel and pressure data
+  void PrepareSparsity();
+
+  Vector<BlockSparseEntries>& GetBlockSparseEntries() { return A_ids_; }
+};
+
 } // namespace mimi::utils

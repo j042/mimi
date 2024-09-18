@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include <mfem.hpp>
 
 #include "mimi/integrators/nonlinear_base.hpp"
@@ -8,16 +10,55 @@
 
 namespace mimi::forms {
 /* Extends Mult() to incorporate mimi::integrators::nonloinear_base */
-class Nonlinear : public mfem::NonlinearForm {
+class Nonlinear : public mfem::Operator {
+protected:
+  const mfem::Array<int>* dirichlet_dofs_;
+
+  // mutable to satisfy const-ness of GetGradient()
+  mutable std::unique_ptr<mfem::SparseMatrix> grad_;
+
+  mfem::SparseMatrix& InitializeGrad() const {
+    if (!grad_) {
+      // this is an adhoc solution to get sparsity pattern
+      // we know one of nl integrator should have precomputed, so access matrix
+      // from that
+      mfem::SparseMatrix* sparsity_pattern{};
+      if (domain_nfi_.size() > 0) {
+        sparsity_pattern =
+            domain_nfi_[0]->precomputed_->sparsity_pattern_.get();
+      } else if (boundary_face_nfi_.size() > 0) {
+        sparsity_pattern =
+            boundary_face_nfi_[0]->precomputed_->sparsity_pattern_.get();
+      } else {
+        mimi::utils::PrintAndThrowError(
+            "No sparsity pattern from precomputed.");
+      }
+      if (!sparsity_pattern) {
+        mimi::utils::PrintAndThrowError("Invalid sparsity pattern saved");
+      }
+
+      grad_ = std::make_unique<mfem::SparseMatrix>(*sparsity_pattern);
+      *grad_ = 0.0;
+    } else {
+      *grad_ = 0.0;
+    }
+
+    return *grad_;
+  }
+
 public:
-  using Base_ = mfem::NonlinearForm;
+  using Base_ = mfem::Operator;
   using NFIPointer_ = std::shared_ptr<mimi::integrators::NonlinearBase>;
 
   mimi::utils::Vector<NFIPointer_> domain_nfi_{};
   mimi::utils::Vector<NFIPointer_> boundary_face_nfi_{};
   mimi::utils::Vector<const mfem::Array<int>*> boundary_markers_{};
 
+  /// for single fespace, we inherit ctor
   using Base_::Base_;
+
+  /// used for custom spaces - e.g., for stokes
+  Nonlinear(const int true_v_size) : Base_(true_v_size) {}
 
   /// time step size, in case you need them
   /// operators should set them
@@ -75,7 +116,7 @@ public:
     }
 
     // set true dofs - if we have time, we could use nthread this.
-    for (const auto& tdof : Base_::ess_tdof_list) {
+    for (const auto& tdof : GetDirichletDofs()) {
       residual[tdof] = 0.0;
     }
   }
@@ -109,7 +150,7 @@ public:
     }
 
     // set true dofs - if we have time, we could use nthread this.
-    for (const auto& tdof : Base_::ess_tdof_list) {
+    for (const auto& tdof : GetDirichletDofs()) {
       residual[tdof] = 0.0;
       grad.EliminateRowCol(tdof);
     }
@@ -118,30 +159,7 @@ public:
   virtual mfem::Operator& GetGradient(const mfem::Vector& current_x) const {
     MIMI_FUNC();
 
-    if (Grad == NULL) {
-      // this is an adhoc solution to get sparsity pattern
-      // we know one of nl integrator should have precomputed, so access matrix
-      // from that
-      mfem::SparseMatrix* sparsity_pattern{};
-      if (domain_nfi_.size() > 0) {
-        sparsity_pattern =
-            domain_nfi_[0]->precomputed_->sparsity_pattern_.get();
-      } else if (boundary_face_nfi_.size() > 0) {
-        sparsity_pattern =
-            boundary_face_nfi_[0]->precomputed_->sparsity_pattern_.get();
-      } else {
-        mimi::utils::PrintAndThrowError(
-            "No sparsity pattern from precomputed.");
-      }
-      if (!sparsity_pattern) {
-        mimi::utils::PrintAndThrowError("Invalid sparsity pattern saved");
-      }
-
-      Base_::Grad = new mfem::SparseMatrix(*sparsity_pattern); // deep copy
-      *Base_::Grad = 0.0;
-    } else {
-      *Base_::Grad = 0.0;
-    }
+    InitializeGrad();
 
     // we assemble all first - these will call nthreadexe
     // domain
@@ -149,7 +167,7 @@ public:
       domain_integ->dt_ = dt_;
       domain_integ->first_effective_dt_ = first_effective_dt_;
       domain_integ->second_effective_dt_ = second_effective_dt_;
-      domain_integ->AddDomainGrad(current_x, *Base_::Grad);
+      domain_integ->AddDomainGrad(current_x, *grad_);
     }
 
     // boundary
@@ -157,19 +175,19 @@ public:
       boundary_integ->dt_ = dt_;
       boundary_integ->first_effective_dt_ = first_effective_dt_;
       boundary_integ->second_effective_dt_ = second_effective_dt_;
-      boundary_integ->AddBoundaryGrad(current_x, *Base_::Grad);
+      boundary_integ->AddBoundaryGrad(current_x, *grad_);
     }
 
-    if (!Base_::Grad->Finalized()) {
-      Base_::Grad->Finalize(0 /* skip_zeros */);
+    if (!grad_->Finalized()) {
+      grad_->Finalize(0 /* skip_zeros */);
     }
 
     // set true dofs - if we have time, we could use nthread this (?)
-    for (const auto& tdof : Base_::ess_tdof_list) {
-      Base_::Grad->EliminateRowCol(tdof);
+    for (const auto& tdof : GetDirichletDofs()) {
+      grad_->EliminateRowCol(tdof);
     }
 
-    return *Base_::Grad;
+    return *grad_;
   }
 
   void AddDomainIntegrator(const NFIPointer_& nlfi) {
@@ -186,10 +204,18 @@ public:
     boundary_markers_.push_back(bdr_marker);
   }
 
-  void SetEssentialTrueDofs(const mfem::Array<int>& ess_true_dof_list) {
+  void SetDirichletDofs(const mfem::Array<int>& d_dofs) {
     MIMI_FUNC()
+    dirichlet_dofs_ = &d_dofs;
+  }
 
-    Base_::SetEssentialTrueDofs(ess_true_dof_list);
+  const mfem::Array<int>& GetDirichletDofs() const {
+    MIMI_FUNC()
+    if (!dirichlet_dofs_) {
+      mimi::utils::PrintAndThrowError(
+          "mimi::forms::Nonlinear - Dirichlet dof does not exist.");
+    }
+    return *dirichlet_dofs_;
   }
 };
 
